@@ -1,6 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { type AbiType, type FunctionAbi, FunctionType, getFunctionReturnType, type StructType } from "@aztec-labs/stdlib/abi"
+import { TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
+import { MAX_DECIMALS } from "@/utils/token-amount"
 import type { TokenFnDescriptor, TokenFnKind } from "./types"
 
 /**
@@ -9,8 +11,8 @@ import type { TokenFnDescriptor, TokenFnKind } from "./types"
  * `points()` scoring, `getDefault` names, `buildArgs`, and `unpackResult` VERBATIM — pinned
  * by `token-functions.characterization.test.ts`.
  *
- * ONE deliberate divergence from the verbatim pin: struct-path matching is crate-prefix
- * tolerant (`matchesStructPath`). Noir namespaces ABI struct paths by the artifact's import
+ * Two deliberate divergences from the verbatim pin: the decimals decode refuses a value past
+ * `MAX_DECIMALS`, and struct-path matching is crate-prefix tolerant (`matchesStructPath`). Noir namespaces ABI struct paths by the artifact's import
  * chain, so the same AztecAddress param arrives as `aztec::protocol_types::...::AztecAddress`
  * from one compile and `authorization_contract::aztec::protocol_types::...::AztecAddress`
  * from another (observed in `@aztec-foundation/aztec-standards@5.0.1`). Exact matching made
@@ -213,7 +215,7 @@ export const getSymbolDescriptor: TokenFnDescriptor = metadataDescriptor({
 	unpackResult: decodeUtf8,
 })
 
-/** getDecimals — from get-decimals.ts (integer/unsigned/width 8 return, toNumber unpack). */
+/** getDecimals — from get-decimals.ts (integer/unsigned/width 8 return, at most `MAX_DECIMALS`). */
 export const getDecimalsDescriptor: TokenFnDescriptor = metadataDescriptor({
 	kind: "getDecimals",
 	invalidImplMessage: "Invalid GetDecimalsImpl",
@@ -223,7 +225,12 @@ export const getDecimalsDescriptor: TokenFnDescriptor = metadataDescriptor({
 	publicName: "public_get_decimals",
 	returnType: { kind: "integer", sign: "unsigned", width: 8 },
 	returnMatches: (actual) => actual.kind === "integer" && actual.sign === "unsigned" && actual.width === 8,
-	unpackResult: (result) => result[0].toNumber(),
+	// The ABI says u8, but the value is whatever the contract's code, or the node simulating it, returns.
+	unpackResult: (result) => {
+		const decimals = result[0].toBigInt()
+		if (decimals > BigInt(MAX_DECIMALS)) throw new TokenDecimalsOutOfRangeError()
+		return Number(decimals)
+	},
 })
 
 // ── Transfer kinds (fnType "call" — no unpackResult) ─────────────────────────────────

@@ -152,6 +152,7 @@ describe("per-path clamp forwarding — every strategy passes its build's retain
 		return {
 			op: { networkId: "n", accountAddress: "0xacc", actions: [] as Action[], ...(opFee ? { fee: opFee } : {}) },
 			feeSettings: { paymentMethod: { kind, fpcId: "f1" } },
+			fence: { profileId: "p1", epoch: 0, session: 1 },
 			gasPadding: 1,
 		} as unknown as FeeStrategyContext
 	}

@@ -12,6 +12,7 @@ const { openToast } = useToast()
 import { useAppStore } from "@/stores/app.store.ts"
 import { usePopupStore } from "@/stores/popup.store.ts"
 import { copyWithToast } from "@/utils/clipboard"
+import { toastPendingSendRefusal } from "@/utils/pending-send"
 import { trimAddress } from "@/utils/string"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
@@ -34,7 +35,7 @@ const handleSelectAccount = async (acc) => {
 	// until it settles; cancelling it also clears this.
 	const switched = await appStore.commitScopeChange(() => appStore.selectAccount(acc))
 	if (!switched) {
-		openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+		toastPendingSendRefusal(openToast)
 		return
 	}
 

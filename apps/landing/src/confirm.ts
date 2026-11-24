@@ -5,6 +5,10 @@
  * the page's script can confirm an address.
  */
 
+import { type Fetch, postSubscribe, RETRY_MESSAGE } from "./subscribe-client"
+
+export { RETRY_MESSAGE }
+
 export type ConfirmState = "ready" | "confirmed" | "invalid"
 export type ConfirmOutcome = "confirmed" | "invalid" | "retry"
 
@@ -17,16 +21,9 @@ export const CONFIRM_COPY: Record<ConfirmState, { heading: string; lead: string 
 	invalid: { heading: "This link doesn't work.", lead: "It may have expired. Links work for 24 hours. Sign up again on nulo.sh." },
 }
 
-export const RETRY_MESSAGE = "That didn't go through. Try again in a minute."
-
 /** The subscribe Worker refuses a longer token unread; this page does not even send one. */
 const MAX_TOKEN_LENGTH = 1024
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
-
-// A stalled connection would otherwise hold the button disabled with nothing said.
-const TIMEOUT_MS = 20_000
-
-type Fetch = (input: string, init: RequestInit) => Promise<Response>
 
 /** The token in a location hash, or `null` when there is none of the right shape. */
 export function tokenFrom(hash: string): string | null {
@@ -34,23 +31,10 @@ export function tokenFrom(hash: string): string | null {
 	return token.length <= MAX_TOKEN_LENGTH && TOKEN_SHAPE.test(token) ? token : null
 }
 
-/** Only `200 { "ok": true }` confirms, so a page served in the Worker's place never reads as success. */
 export async function postConfirm(token: string, fetchImpl: Fetch): Promise<ConfirmOutcome> {
-	let response: Response
-	try {
-		response = await fetchImpl("/api/confirm", {
-			method: "POST",
-			headers: { Accept: "application/json", "Content-Type": "application/json" },
-			body: JSON.stringify({ token }),
-			signal: AbortSignal.timeout(TIMEOUT_MS),
-		})
-	} catch {
-		return "retry"
-	}
-	if (response.status === 400) return "invalid"
-	if (response.status !== 200) return "retry"
-	const reply: unknown = await response.json().catch(() => null)
-	return typeof reply === "object" && reply !== null && (reply as { ok?: unknown }).ok === true ? "confirmed" : "retry"
+	const request = { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }
+	const answer = await postSubscribe("/api/confirm", request, fetchImpl)
+	return answer === "ok" ? "confirmed" : answer
 }
 
 type Attributes = Pick<Element, "getAttribute" | "setAttribute" | "removeAttribute">

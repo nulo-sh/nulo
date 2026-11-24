@@ -1468,6 +1468,22 @@ describe("send page — Same as last time, over the real amount card", () => {
 		w.unmount()
 	})
 
+	test.each([78, 1_000_000_000])(
+		"a last send of a token with %i decimals, which the wallet cannot use, is told and offered with no amount",
+		async (decimals) => {
+			const BIG = { ...OTHER, decimals }
+			mocks.getTokens.mockResolvedValue([TOKEN, BIG])
+			mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...BALANCE, id: "b8", token: BIG, privateBalance: "500000000" }])
+			mocks.getOperations.mockResolvedValue([sent({ tokenId: BIG.id, amountRaw: "123456750" })])
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+			expect(w.get('[data-testid="send-recent"]').text()).not.toContain("OTH")
+			await payRecent(w)
+			expect(w.get('[data-testid="send-payee-address"]').text()).toBe(ANA)
+			expect(again(w).exists()).toBe(false)
+			w.unmount()
+		},
+	)
+
 	describe("in USD mode", () => {
 		const PRICED = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		const PLAIN = { ...OTHER, chainId: CHAIN_IDS.TESTNET }
@@ -1688,5 +1704,69 @@ describe("send page — Same as last time, over the real amount card", () => {
 			expect(again(next.w).text()).toBe("Same as last time: 2.5 TST, publicly")
 			next.w.unmount()
 		})
+	})
+})
+
+describe("send page — a token's decimals against the wallet's bound, over the real amount card", () => {
+	const amountField = (w: W) => w.get('[data-testid="send-amount-input"]')
+	const unsendable = (w: W) => w.find('[data-testid="send-amount-unsendable"]')
+
+	/** The form for `DESTINATION`, with `token` the only one held, as the token service hands it over. */
+	async function formWith(token: typeof TOKEN, privateBalance: string, opts: { priced?: boolean } = {}) {
+		mocks.getTokens.mockResolvedValue([token])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token, privateBalance, publicBalance: "0" }])
+		const mounted = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, chainId: token.chainId })
+		if (opts.priced) {
+			for (const { value } of vi.mocked(PriceServiceClient).mock.results) {
+				value.onQuotesUpdated.invoke({
+					quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
+					pricedTokens: TEST_PRICED_TOKENS,
+					tokenIcons: {},
+					bridgeIcons: {},
+				})
+			}
+		}
+		await toForm(mounted.w)
+		return mounted
+	}
+
+	test("24 decimals: an amount, its dollar figure, the unit switch both ways, Max, Review and the exact base units sent", async () => {
+		const BIG = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC", decimals: 24 }
+		const { w } = await formWith(BIG, "12345678901234567890123456", { priced: true })
+		expect(unsendable(w).exists()).toBe(false)
+
+		await amountField(w).setValue("1.5")
+		expect(w.get('[data-testid="send-amount-fiat-label"]').text()).toBe("≈ $1.50")
+
+		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+		await w.get('[data-testid="send-amount-fiat-input"]').setValue("2")
+		await vi.advanceTimersByTimeAsync(250)
+		expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 2 USDC")
+		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+		expect((amountField(w).element as HTMLInputElement).value).toBe("2")
+
+		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		expect((amountField(w).element as HTMLInputElement).value).toBe("12.345678901234567890123456")
+		await estimateLands()
+		await submit(w).trigger("click")
+		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("12.345678901234567890123456USDC")
+		await armed()
+		await sendNow(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[6]).toBe(12_345_678_901_234_567_890_123_456n)
+		w.unmount()
+	})
+
+	test("78 decimals: the line says Nulo can't send it, Max fills nothing, typed text derives no amount, Review stays disabled", async () => {
+		const BIG = { ...TOKEN, decimals: 78 }
+		const { w } = await formWith(BIG, "5000000")
+		expect(unsendable(w).text()).toBe("Nulo can't send this token.")
+		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		expect((amountField(w).element as HTMLInputElement).value).toBe("")
+		await amountField(w).setValue("1.5")
+		expect(unsendable(w).text()).toBe("Nulo can't send this token.")
+		await estimateLands()
+		expect(submit(w).attributes("disabled")).toBeDefined()
+		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
+		w.unmount()
 	})
 })

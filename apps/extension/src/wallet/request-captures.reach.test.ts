@@ -57,8 +57,8 @@ describe("a request's capture, fed by the wired producers", () => {
 			journal.onOperationAdded.invoke(row(j, "queued", 1))
 			log.alias(id, { journalId: j })
 		}
-		const rootA = tasks.startNewTask(new StepContent("Execute operation"), undefined, undefined, A)
-		const rootB = tasks.startNewTask(new StepContent("Execute operation"), undefined, undefined, B)
+		const rootA = tasks.startNewTask("p1", new StepContent("Execute operation"), undefined, A)
+		const rootB = tasks.startNewTask("p1", new StepContent("Execute operation"), undefined, B)
 		journal.onOperationUpdated.invoke(row(JA, "simulating", 10))
 		journal.onOperationUpdated.invoke(row(JB, "simulating", 11))
 		rootA.startSubtask(new StepContent("Simulating transaction")).complete()

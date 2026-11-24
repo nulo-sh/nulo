@@ -16,9 +16,10 @@ import { managers, requireAccount, requireNetwork } from "@/utils/core"
 
 /** Utils */
 import { dashIfBlank, trimAddress } from "@/utils/string"
+import { getChainName } from "@/components/ui/utils.js"
 import { leaveFor } from "@/utils/page-back"
 import { postAuthRoute } from "@/utils/own-window"
-import { importedKey, readImportedAccounts } from "./imported-accounts"
+import { importedKey, readImportedAccounts, ResetRunningError } from "./imported-accounts"
 import { isProfileFreeRoute } from "@/popup/locked-state"
 
 /** Composables */
@@ -62,40 +63,60 @@ const showMismatch = computed(() => mismatchSettled.value && cannotBecomeName.va
  *  while the read runs or after it failed. Locked, nothing is read, so the page shows none of them. */
 const imported = ref(null)
 const importedReadFailed = ref(false)
+/** The last live read failed because a reset runs: the page says so, and the reset's end reads again. */
+const resetRunning = ref(false)
 let importedReads = 0
-/** The list as it stands; it fails once the lock or a newer read overtakes it, and since `getAccounts`
- *  answers while locked, no account read starts after that. */
+/** The list as it stands; it fails once the lock or a newer read overtakes it, and since the account
+ *  read answers while locked, none starts after that. */
 const fetchImported = (read) => {
 	const live = () => read === importedReads && appStore.isLogined
 	const reads = {
 		getNetworks: () => requireNetwork().getNetworks(),
-		getAccounts: (id, chainId, all) =>
-			live() ? requireAccount().getAccounts(id, chainId, all) : Promise.reject(new Error("read overtaken")),
+		getImportedAccounts: (id) => (live() ? requireAccount().getImportedAccounts(id) : Promise.reject(new Error("read overtaken"))),
 		getPendingReset: () => managers.networkReset.getPendingReset(),
 		getStaleNetwork: (networkId) => managers.networkReset.getStaleNetwork(networkId),
 	}
-	return readImportedAccounts(reads, appStore.profile?.id)
-		.then((result) => (live() ? result : null))
-		.catch(() => null)
+	return readImportedAccounts(reads, appStore.profile?.id).then(
+		(result) => {
+			if (!live()) return null
+			resetRunning.value = false
+			return result
+		},
+		(error) => {
+			if (live()) resetRunning.value = error instanceof ResetRunningError
+			return null
+		},
+	)
 }
 const readImported = async () => {
 	const read = ++importedReads
 	imported.value = null
 	importedReadFailed.value = false
-	if (!appStore.isLogined || !appStore.profile?.id) return
+	if (!appStore.isLogined || !appStore.profile?.id) {
+		resetRunning.value = false
+		return
+	}
 	const result = await fetchImported(read)
 	if (read !== importedReads) return
 	imported.value = result
 	importedReadFailed.value = result === null
 }
-managers.networkReset.onStaleNetworkChanged.add(readImported)
+/** A reset's own end report clears the line at once; the read it starts settles the rest. */
+const onStaleNetworkChanged = (change) => {
+	if (change?.running === false && change.profileId === appStore.profile?.id) resetRunning.value = false
+	void readImported()
+}
+managers.networkReset.onStaleNetworkChanged.add(onStaleNetworkChanged)
 const importedAccounts = computed(() => (appStore.isLogined ? (imported.value?.accounts ?? []) : []))
+const importedRowDescription = (account) => {
+	const address = trimAddress(account.address, 6, 4, "…")
+	return account.networked ? address : `${getChainName(account.chainId).toUpperCase()} · ${address}`
+}
 /** Full backup carries every imported account, but refuses while a reset is pending, whose journal-held
- *  accounts only the account export page reaches; that page takes password profiles only. */
-const exportFirstTo = computed(() => {
-	if (!imported.value?.resetPending) return "/popup/settings/security/export/full"
-	return appStore.profile?.type === "password" ? "/popup/settings/security/export/account" : null
-})
+ *  accounts only the account export page reaches. */
+const exportFirstTo = computed(() =>
+	imported.value?.resetPending ? "/popup/settings/security/export/account" : "/popup/settings/security/export/full",
+)
 /** Unlocked, a delete never runs before the list is known: a pending read holds the button, and a
  *  failed one is refused at the press. */
 const importedSettled = computed(() => !appStore.isLogined || imported.value !== null || importedReadFailed.value)
@@ -281,7 +302,7 @@ watch(
 
 onBeforeUnmount(() => {
 	isUnmounted = true
-	managers.networkReset.onStaleNetworkChanged.remove(readImported)
+	managers.networkReset.onStaleNetworkChanged.remove(onStaleNetworkChanged)
 	if (!isResetting.value) deleteService.disconnect()
 	if (slowDeleteTimer) clearTimeout(slowDeleteTimer)
 	clearTimeout(mismatchTimer)
@@ -304,6 +325,9 @@ onBeforeUnmount(() => {
 			<ItemsContainer flat>
 				<SettingItem :title="target?.name ?? ''" titleVariant="name" raw />
 			</ItemsContainer>
+			<Text v-if="resetRunning && appStore.isLogined" variant="body" color="tertiary" height="150" role="status" data-testid="reset-network-reset-running">
+				A network reset is running. Wait for it to finish.
+			</Text>
 		</div>
 
 		<div v-if="importedAccounts.length" :class="$style.section" data-testid="reset-imported" data-scroll-section>
@@ -314,14 +338,14 @@ onBeforeUnmount(() => {
 					:key="`${account.chainId}:${account.address}`"
 					:title="dashIfBlank(account.name)"
 					titleVariant="name"
-					:description="trimAddress(account.address, 6, 4, '…')"
+					:description="importedRowDescription(account)"
 					descriptionVariant="meta"
 					raw
 					data-testid="reset-imported-account"
 				/>
 			</ItemsContainer>
 			<Text variant="body" color="tertiary" height="150">Your recovery phrase can't bring these back.</Text>
-			<Button v-if="exportFirstTo" variant="primary_outline" size="compact" :link="exportFirstTo" data-testid="reset-export-first">Export first</Button>
+			<Button variant="primary_outline" size="compact" :link="exportFirstTo" data-testid="reset-export-first">Export first</Button>
 		</div>
 
 		<!-- Agreements -->

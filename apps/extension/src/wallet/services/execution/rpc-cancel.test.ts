@@ -15,6 +15,8 @@ import {
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { INVALID_PARAMS_MESSAGE, SCOPE_VIOLATION_MESSAGE, toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
+import { StepContent } from "@/wallet/services/task/service"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { classifyOperationCatch, maybeRethrowAsRpcCancel } from "./rpc-cancel"
 
 describe("maybeRethrowAsRpcCancel", () => {
@@ -95,6 +97,20 @@ describe("classifyOperationCatch", () => {
 		expect(result).toMatchObject({ status: "failed", code: "SESSION_ENDED", error: SessionEndedError.MESSAGE })
 		const failed = result as { code: string; error: string }
 		expect(walletErrorFromPayload({ code: failed.code, message: failed.error })).toBeInstanceOf(SessionEndedError)
+	})
+
+	test("a session's end on a root another profile's registry refused is classified as itself, not as a lost task", async () => {
+		const { tasks, switchToProfile } = await startedTaskService("p1")
+		const refused = tasks.startNewTask("p0", new StepContent("Execute operation"))
+		expect(classifyOperationCatch(new SessionEndedError(), refused, errorMessage)).toMatchObject({
+			status: "failed",
+			code: "SESSION_ENDED",
+		})
+
+		// Control: a root the registry held and a switch then cleared still throws, as before.
+		const cleared = tasks.startNewTask("p1", new StepContent("Execute operation"))
+		switchToProfile("p2")
+		expect(() => classifyOperationCatch(new SessionEndedError(), cleared, errorMessage)).toThrow(`Invalid task id: ${cleared.id}`)
 	})
 
 	test("a Terms refusal at the broadcast line keeps its code all the way to the dApp envelope", () => {

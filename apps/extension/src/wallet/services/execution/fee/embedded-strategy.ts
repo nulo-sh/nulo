@@ -36,7 +36,7 @@ export class EmbeddedStrategy implements FeeStrategy {
 			ctx.op.fee.embeddedFeePayment === "fjwc"
 				? AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM
 				: AccountFeePaymentMethodOptions.EXTERNAL
-		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
+		const task = startEstimateTask(this.deps.tasks, ctx)
 
 		try {
 			const built = await buildFor(this.deps.txBuilder, ctx, embeddedMethod, task)

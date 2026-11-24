@@ -145,7 +145,7 @@ export class FpcStrategy implements FeeStrategy {
 	private async buildAndEstimateSponsoredFastPath(ctx: FeeStrategyContext, fpc: Fpc): Promise<FeeEstimate> {
 		const originalActions = [...ctx.op.actions]
 		const multiplier = ctx.feeMultiplier ?? DEFAULT_FEE_MULTIPLIER
-		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
+		const task = startEstimateTask(this.deps.tasks, ctx)
 
 		try {
 			// Payload included from the start (`maxFee` inert — args: []), so the
@@ -213,7 +213,7 @@ export class FpcStrategy implements FeeStrategy {
 	private async buildAndEstimateTwoPass(ctx: FeeStrategyContext, fpc: Fpc): Promise<FeeEstimate> {
 		const originalActions = [...ctx.op.actions]
 		const multiplier = ctx.feeMultiplier ?? DEFAULT_FEE_MULTIPLIER
-		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
+		const task = startEstimateTask(this.deps.tasks, ctx)
 
 		try {
 			let built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)

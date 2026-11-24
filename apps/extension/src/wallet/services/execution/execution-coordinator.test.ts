@@ -20,7 +20,7 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import type { IPXE } from "@/wallet/services/pxe/client"
-import { StepContent, type TaskService, TaskStatus, type WrappedTask } from "@/wallet/services/task/service"
+import { StepContent, TaskStatus, type WrappedTask } from "@/wallet/services/task/service"
 import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import { DuplicateInitializationError, SessionEndedError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { IllegalTransitionError, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
@@ -36,8 +36,7 @@ const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(),
 const ACCEPTED: LegalAdmission = { assertCurrent: async () => {} }
 
 function makeCoordinator(legal: LegalAdmission = ACCEPTED) {
-	const tasks = { startNewTask: () => fakeTask } as unknown as TaskService
-	return new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), legal)
+	return new ExecutionCoordinator(new LoggerStore(new ConfigStore()), legal)
 }
 
 const ANCHOR_HASH = `0x${"ab".repeat(32)}`
@@ -430,10 +429,10 @@ describe("proveAndSend: the session checks", () => {
 describe("proveAndSend under a profile switch (real TaskService)", () => {
 	async function sendUnderTasks(sendTx: (switchToProfile: (id: string) => void) => Promise<void>) {
 		const { tasks, switchToProfile } = await startedTaskService("p1")
-		const parentTask = tasks.startNewTask(new StepContent("Transfer"))
+		const parentTask = tasks.startNewTask("p1", new StepContent("Transfer"))
 		const { ctx, calls, node } = makeHarness({ parentTask })
 		;(node.sendTx as ReturnType<typeof vi.fn>).mockImplementationOnce(() => sendTx(switchToProfile))
-		const coordinator = new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), ACCEPTED)
+		const coordinator = new ExecutionCoordinator(new LoggerStore(new ConfigStore()), ACCEPTED)
 		return { run: coordinator.proveAndSend(ctx), ctx, calls, parentTask }
 	}
 
@@ -467,7 +466,7 @@ describe("simulateTxTask", () => {
 	test("a simulation's rejection fails the task and rethrows the same object", async () => {
 		const timeout = new Error("timed out")
 		const pxe = { simulateTx: vi.fn(async () => Promise.reject(timeout)) } as unknown as IPXE
-		await expect(makeCoordinator().simulateTxTask(pxe, {} as never, {} as never)).rejects.toBe(timeout)
+		await expect(makeCoordinator().simulateTxTask(pxe, {} as never, {} as never, fakeTask)).rejects.toBe(timeout)
 		expect(fakeTask.fail).toHaveBeenCalledWith(timeout)
 	})
 })

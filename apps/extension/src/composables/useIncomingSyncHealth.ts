@@ -1,4 +1,5 @@
 import type { EventHandler } from "@nulo/wallet-core/utils"
+import { createReconnectRead } from "@/composables/reconnectRead"
 import { createRunFence } from "@/composables/runFence"
 import { type Ref, ref } from "vue"
 import type { IncomingSyncHealth, IncomingSyncHealthChanged } from "@/wallet/services/incoming-transfer/spec"
@@ -40,21 +41,19 @@ const scopeKeyOf = (scope: IncomingSyncScope | undefined) => (scope ? `${scope.p
 
 /**
  * Whether the active network's incoming scan is stalled. The health event is an invalidation, not a
- * value: every signal (event, reconnect, scope change, retry) refetches. A fetch that fails changes
- * nothing — it can neither invent a stall nor clear one.
+ * value: every signal (event, reconnect, scope change, retry) refetches, and a reconnect follows
+ * `createReconnectRead`'s rule. A fetch that fails changes nothing — it can neither invent a stall
+ * nor clear one.
  */
 export function useIncomingSyncHealth(deps: UseIncomingSyncHealthDeps): UseIncomingSyncHealth {
 	const stalled = ref(false)
 	const retrying = ref(false)
 
 	let disposed = false
-	const refreshFence = createRunFence()
 	const retryFence = createRunFence()
 	let shownScope = ""
 	let shownAt = 0
 	let hideTimer: ReturnType<typeof setTimeout> | undefined
-	// The first connect is the one the first request opened; only later ones are reconnects.
-	let connectsSeen = 0
 
 	const cancelHide = () => {
 		if (hideTimer !== undefined) clearTimeout(hideTimer)
@@ -91,23 +90,21 @@ export function useIncomingSyncHealth(deps: UseIncomingSyncHealthDeps): UseIncom
 		}, remaining)
 	}
 
-	const refresh = async () => {
-		const isCurrent = refreshFence.begin()
+	const reader = createReconnectRead(deps.client, async (isCurrent) => {
+		// The page's async mount step can still call this after its unmount disposed us.
+		if (disposed) return true
 		const scope = deps.getScope()
 		enterScope(scopeKeyOf(scope))
-		if (!scope) return
+		if (!scope) return true
 		const health = await deps.client.getIncomingSyncHealth(scope.networkId).catch(() => undefined)
-		if (disposed || !isCurrent() || !health) return
-		apply(health.stalled)
-	}
+		if (!health) return false
+		if (isCurrent()) apply(health.stalled)
+		return true
+	})
+	const refresh = reader.read
 
 	const onChanged = (changed: IncomingSyncHealthChanged) => {
 		if (scopeKeyOf(changed) === scopeKeyOf(deps.getScope())) void refresh()
-	}
-
-	const onConnected = () => {
-		connectsSeen += 1
-		if (connectsSeen > 1) void refresh()
 	}
 
 	const retry = async () => {
@@ -128,14 +125,12 @@ export function useIncomingSyncHealth(deps: UseIncomingSyncHealthDeps): UseIncom
 	}
 
 	deps.client.onIncomingSyncHealthChanged.add(onChanged)
-	deps.client.onConnected.add(onConnected)
 
 	const dispose = () => {
 		disposed = true
-		refreshFence.invalidate()
+		reader.dispose()
 		cancelHide()
 		deps.client.onIncomingSyncHealthChanged.remove(onChanged)
-		deps.client.onConnected.remove(onConnected)
 	}
 
 	return { stalled, retrying, refresh, retry, dispose }

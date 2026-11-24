@@ -177,6 +177,24 @@ describe("composite/AmountCard", () => {
 		expect(field.getAttribute("aria-labelledby")).toBe(max.parentElement?.querySelector("span")?.id)
 	})
 
+	test.each([78, 1_000_000_000])(
+		"a stored token with %i decimals derives no amount: no rate, no USD mode, Max fills nothing, the line says why, and nothing throws",
+		async (decimals) => {
+			const w = mountCard({
+				token: { symbol: "BIG", decimals },
+				liveQuote: { usd: 1, fetchedAt: Date.now() },
+				balanceRawByType: "1",
+				modelValue: "1.5",
+				"onUpdate:modelValue": () => {},
+			})
+			await w.get("[data-testid='send-amount-max']").trigger("click")
+			expect(w.find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
+			expect(w.find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)
+			expect(w.emitted("update:modelValue")).toBeUndefined()
+			expect(w.get("[data-testid='send-amount-unsendable']").text()).toBe("Nulo can't send this token.")
+		},
+	)
+
 	test("quoteless: no fiat line at all — no fake $0.00, no warning noise", () => {
 		const w = mountCard()
 		expect(w.text()).not.toContain("Price unavailable")
@@ -487,6 +505,16 @@ describe("composite/AmountCard — the amount in dollars, for the review", () =>
 		await nextTick()
 		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $43.20")
 		expect(figures(w).at(-1)).toBe("≈ $43.20")
+	})
+
+	test("a token with no decimals cuts a fraction: a bare one reads as nothing, never a throw", async () => {
+		const w = mountCard({ token: { symbol: "INT", decimals: 0 }, liveQuote: { usd: 1.5, fetchedAt: Date.now() }, modelValue: ".5" })
+		await nextTick()
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("1 INT ≈ $1.50")
+		expect(figures(w).at(-1) ?? null).toBeNull()
+		await w.setProps({ modelValue: "1.5" })
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $1.50")
+		expect(figures(w).at(-1)).toBe("≈ $1.50")
 	})
 
 	test("no price or no amount: none", async () => {
