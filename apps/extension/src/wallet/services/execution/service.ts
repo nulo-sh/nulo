@@ -115,6 +115,7 @@ import { type ArtifactLookup, decodeCallForDisplay, decodeGrantForDisplay } from
 import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
+import { RunReads } from "./run-reads"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps, OnBuilt } from "./fee/fee-strategy"
 import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
@@ -1291,6 +1292,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		if (!strategy) {
 			throw new Error("Invalid fee payment method")
 		}
+		const reads = new RunReads()
 		const ctx: FeeStrategyContext = {
 			op,
 			fence,
@@ -1303,8 +1305,13 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			observer,
 			fpc,
 			onBuilt,
+			reads,
 		}
-		return strategy.buildAndEstimate(ctx)
+		try {
+			return await strategy.buildAndEstimate(ctx)
+		} finally {
+			reads.close()
+		}
 	}
 }
 

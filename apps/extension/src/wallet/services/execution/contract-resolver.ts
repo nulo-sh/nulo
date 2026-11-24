@@ -34,6 +34,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { IPXE } from "@nulo/aztec-runtime/pxe"
 import { ContractNotRegisteredError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import type { RunReads } from "./run-reads"
 import type { Action, AddPrivateAuthwitAction, AddPublicAuthwitAction, CallAuthwitContent, EncodedCallAuthwitContent } from "./spec"
 import { EXECUTION_SERVICE_NAME } from "./spec"
 
@@ -241,8 +242,12 @@ export class ContractResolver {
 
 	/** Fetch artifacts for every UNIQUE class id referenced by `instances`.
 	 *  Deduplicates first so we don't refetch a shared artifact. Keyed by
-	 *  class-id string. */
-	public async resolveArtifacts(pxe: IPXE, instances: Map<string, ContractInstanceWithAddress>): Promise<Map<string, ContractArtifact>> {
+	 *  class-id string. With `run`, a class the run already fetched is not fetched again. */
+	public async resolveArtifacts(
+		pxe: IPXE,
+		instances: Map<string, ContractInstanceWithAddress>,
+		run?: RunReads,
+	): Promise<Map<string, ContractArtifact>> {
 		this.logger.log(LOG_SOURCE, LogLevel.Debug, "Get artifacts...")
 		const artifacts = new Map<string, ContractArtifact>()
 		// Spread into an array before `.filter` — `MapIterator.prototype.filter`
@@ -261,7 +266,8 @@ export class ContractResolver {
 		)
 		this.logger.log(LOG_SOURCE, LogLevel.Debug, `Class IDs: ${[...classIds].join(", ")}`)
 		// Same iterator-helper avoidance as above: spread the Set before `.map`.
-		const fetched = await Promise.all([...classIds].map((x) => this.resolveArtifact(pxe, x)))
+		const fetch = (classId: string) => this.resolveArtifact(pxe, classId)
+		const fetched = await Promise.all([...classIds].map((x) => (run ? run.artifact(x, () => fetch(x)) : fetch(x))))
 		this.logger.log(LOG_SOURCE, LogLevel.Debug, `${fetched.length} artifacts fetched`)
 		for (const [classId, artifact] of fetched) {
 			artifacts.set(classId, artifact)

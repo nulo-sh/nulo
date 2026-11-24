@@ -81,6 +81,7 @@ import {
 	requireArtifact,
 } from "./contract-resolver"
 import { fenceChecks } from "./execution-coordinator"
+import type { RunReads } from "./run-reads"
 import type { Action, AuthwitContent, AztecSendTxOperation } from "./spec"
 import { EXECUTION_SERVICE_NAME } from "./spec"
 
@@ -164,12 +165,13 @@ export class TxRequestBuilder {
 		feePaymentMethod: AccountFeePaymentMethodOptions,
 		parentTask?: WrappedTask,
 		gasSettings?: PartialGasSettingsRPC,
+		reads?: RunReads,
 	): Promise<BuiltStandardTx> {
 		const step = new StepContent("Processing transaction")
 		const task = parentTask ? parentTask.startSubtask(step) : this.taskService.startNewTask(step)
 
 		try {
-			const ctx = await this.resolveBuildContext(op, fence)
+			const ctx = await this.resolveBuildContext(op, fence, reads, gasSettings)
 			const { account, nodeInfo, instances, artifacts } = ctx
 			const collected = newCollectedActions()
 
@@ -269,23 +271,30 @@ export class TxRequestBuilder {
 	private async resolveBuildContext(
 		op: { networkId: string; accountAddress: string; actions: Action[] },
 		fence: ExecutionFence,
+		reads?: RunReads,
+		gasSettings?: PartialGasSettingsRPC,
 	): Promise<BuildContext> {
 		await this.profileService.assertFence(fence)
 		const network = await this.networkService.getNetwork(op.networkId)
 		const account = await this.resolveAccount(fence, network.chainId, op.accountAddress)
-		const node = await this.networkService.getNode(network.chainId)
+		const live = await this.networkService.getNode(network.chainId)
 		const pxe = this.pxeService.getPXE(networkInfoFrom(network))
 
-		const nodeInfo = await node.getNodeInfo()
+		const nodeInfo = await live.getNodeInfo()
 		assertLiveChainIdentity(network, nodeInfo)
 		const contracts = this.resolver.extractContracts(op.actions)
 		const instances = await this.resolver.resolveInstances(pxe, contracts)
-		const artifacts = await this.resolver.resolveArtifacts(pxe, instances)
+		// After the assert and the instance lookup: an endpoint this build refuses, or a request
+		// naming a contract this wallet never registered, causes none of the build's other reads.
+		// A caller's own fee cap means the build reads no minimum fee, so none is read ahead.
+		const ahead = { account, contracts: calledContracts(op.actions), minFees: !gasSettings?.maxFeesPerGas }
+		const node = reads ? reads.forBuild(live, ahead) : live
+		const artifacts = await this.resolver.resolveArtifacts(pxe, instances, reads)
 
 		await this.resolver.ensureContractsRegistered(pxe, instances, artifacts, {
 			onRegister: () => this.log("Register contract"),
 		})
-		return { network, account, node, pxe, nodeInfo, instances, artifacts }
+		return { network, account, node, live, pxe, nodeInfo, instances, artifacts }
 	}
 
 	/** Discovery stubs every scope account, and a stub runs on the account's registered contract
@@ -375,7 +384,7 @@ export class TxRequestBuilder {
 		return {
 			txRequest,
 			initializesAccount: buildMeta.initializesAccount === true,
-			node,
+			node: ctx.live,
 			pxe,
 			account,
 			network,
@@ -554,7 +563,11 @@ type ResolvedArtifacts = Awaited<ReturnType<ContractResolver["resolveArtifacts"]
 type BuildContext = {
 	network: Network
 	account: IAccountContract
+	/** The node the build itself reads through: under a run, its reads were sent ahead. */
 	node: AztecNode
+	/** The node the built request carries. Never the build's own view: what reads after the build,
+	 *  a cap's minimum fee for one, asks the node then. */
+	live: AztecNode
 	pxe: IPXE
 	nodeInfo: NodeInfo
 	instances: ResolvedInstances
@@ -625,6 +638,16 @@ async function buildSetAuthorizedCall(messageHash: Fr): Promise<{ functionCall: 
 		functionCall,
 		txCall: { contract: getAuthRegistryAddress().toString(), method: fn.name, args: [messageHash, true] },
 	}
+}
+
+/** The contracts whose current class the action loop reads (`calledClassId`), each once. */
+function calledContracts(actions: readonly Action[]): string[] {
+	const called = new Set<string>()
+	for (const action of actions) {
+		if (action.kind === "call") called.add(action.contract)
+		else if (action.kind === "encoded_call") called.add(action.to)
+	}
+	return [...called]
 }
 
 /**
