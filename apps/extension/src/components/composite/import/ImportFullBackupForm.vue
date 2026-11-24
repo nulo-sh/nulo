@@ -164,11 +164,11 @@ watch(
  * Input children already paint their own bottom borders, so the extra
  * divider stacked two 1px lines ~20px apart. */
 .section {
-	composes: section from "./import-shared.module.css";
+	composes: section from "@/components/composite/form-section.module.css";
 }
 
 .section_label {
-	composes: section_label from "./import-shared.module.css";
+	composes: label from "@/components/composite/form-section.module.css";
 }
 
 .error_tag {

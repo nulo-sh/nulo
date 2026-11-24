@@ -1,0 +1,43 @@
+/* A composer never redeclares a property set here: which one wins would depend on chunk order. */
+.tabs {
+	display: flex;
+	border: 1px solid var(--nulo-outline);
+	background: var(--nulo-surface);
+	width: fit-content;
+}
+
+.tab {
+	composes: type--segment from global;
+	background: transparent;
+	border: none;
+	color: var(--txt-secondary);
+	padding: 10px 20px;
+	cursor: pointer;
+	transition:
+		background 0.15s var(--bezier),
+		color 0.15s var(--bezier);
+}
+
+.tab:hover {
+	color: var(--txt-primary);
+}
+
+.tab_active {
+	background: var(--nulo-accent);
+	color: var(--app-bg);
+}
+
+.tab.tab_active {
+	font-weight: 700;
+}
+
+/* After `.tab:hover`, which it ties on specificity and on `color`. */
+.tab_active:hover {
+	color: var(--app-bg);
+}
+
+.passkey_info {
+	padding: 16px;
+	background: var(--nulo-surface);
+	border: 1px solid var(--nulo-border);
+}
