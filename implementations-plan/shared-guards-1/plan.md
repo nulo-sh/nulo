@@ -1,7 +1,7 @@
 ---
 plan: shared-guards-1
 tier: mid
-status: arc 1 merged (#1956); arc 2 in review
+status: arc 1 merged (#1956); arc 2 in PR
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -262,6 +262,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 - **Arc 2, Codex r1** (`gpt-6.1-sol`, high, diff `e1243ce5c..c85e69dea`): approve, one low finding, accepted: `isPlainObject`'s doc said it refuses arrays, but `Object.setPrototypeOf([], null)` passes it, as it passed both inline checks; the doc now states the prototype-only contract and the table pins that row. It reproduced the one difference in `encodeValue` (one prototype read instead of two, visible only to a stateful `Proxy`) and confirmed `structuredClone` refuses a `Proxy`, so no dApp argument reaches it as one.
 - **Arc 2, Codex r2** (resumed on `41bf3e5c6`): **approve**, no new finding.
 - **Arc 2, Opus diff review** (general-purpose, opus): approve; no set mismatch at any of the 32 sites, `isPlainObject` equal to both checks it replaced, no published entry reached (it bundled `wallet-crypto`'s entry: no `guards.ts`), `encodeValue` scores 24. One nit, accepted: four casts in `price/service.ts` and `token-list/service.ts` that the narrowing had made redundant.
+- **Arc 2, Codex r3** (resumed, targeted verification of the cast removal): **approve**; both files emit the same JavaScript before and after. The loop stops with no material finding open.
 
 ## Seeds
 

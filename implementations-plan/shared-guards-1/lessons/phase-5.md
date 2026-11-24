@@ -14,6 +14,7 @@
 - Codex r1 (`gpt-6.1-sol`, high, fresh session): approve with one low finding, verified by running it: an array given a `null` prototype passes `isPlainObject`, as it passed `emit.ts`'s old helper and `encodeValue`'s check; the doc overstated the contract. Doc fixed, row pinned.
 - Codex r2 (resumed): approve, no new finding. Converged.
 - Opus diff review (general-purpose, opus): approve, one nit accepted (four redundant casts in the price and token-list services). It found no set mismatch and confirmed by bundling that `@nulo-sh/wallet-crypto`'s entry holds no `guards.ts`.
+- Codex r3 (resumed, targeted): approve; the cast removal emits identical JavaScript.
 
 ## Gates
 
