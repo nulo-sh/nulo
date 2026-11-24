@@ -16,11 +16,14 @@
  *   window's init swallows its errors into `setError`), so a half-loaded window still rejects on
  *   close. A rejecting `init` would skip the registration.
  * - `dispose()` removes the listener last, after every disconnect.
+ * - A resolve the service refuses because the app cancelled first is the cancelled state, never an
+ *   error banner, even when the cancel broadcast never reached the window (`settleResolveError`).
  *
  * It owns no lifecycle hooks: the window calls `start` from its `onMounted` and `dispose` from its
  * unmount hook.
  */
 
+import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { raceTimeout } from "@nulo/wallet-core/utils"
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useRouter } from "vue-router"
@@ -54,6 +57,7 @@ export interface UseDappApprovalWindowOptions {
 	reject: (end: WindowEnd) => void
 	/** The window's active profile (set inside init) — the profile-change guard compares against it. */
 	profile: Ref<ProfileInfo | undefined>
+	requestId: Ref<string | undefined>
 	isInteractionCancelled: Ref<boolean>
 	isLoading: Ref<boolean>
 }
@@ -70,6 +74,12 @@ export interface UseDappApprovalWindowResult {
 	endAndClose: (send: () => Promise<unknown>) => Promise<void>
 	/** Register on the profile service's `onActiveProfileChanged` (pre-mount, as before). */
 	onActiveProfileChanged: (profile?: ProfileInfo) => void
+	/** The wrong-profile notice's OK: ends a live request as the window's close would, through the
+	 *  window's `reject` and with its wait, so the window's close cannot reach the request first;
+	 *  with no request left to end, closes the window. */
+	dismissWrongProfile: () => void
+	/** A rejected resolve: a `JobCancelledError` marks the request cancelled; anything else runs `onOther`. */
+	settleResolveError: (error: unknown, onOther: () => void) => void
 	stripStatus: ComputedRef<"ready" | "loading" | "cancelled">
 	processingError: Ref<DappWindowError | undefined>
 	setError: (title: string, tooltip?: string, type?: string) => void
@@ -138,6 +148,16 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 		else if (profile.id !== options.profile.value?.id) options.reject("switch")
 	}
 
+	const dismissWrongProfile = () => {
+		if (options.requestId.value && !options.isInteractionCancelled.value) options.reject("close")
+		else closeWindow()
+	}
+
+	const settleResolveError = (error: unknown, onOther: () => void) => {
+		if (error instanceof JobCancelledError) options.isInteractionCancelled.value = true
+		else onOther()
+	}
+
 	const start = async () => {
 		options.connectServices()
 
@@ -166,6 +186,8 @@ export function useDappApprovalWindow(options: UseDappApprovalWindowOptions): Us
 		closeWindow,
 		endAndClose,
 		onActiveProfileChanged,
+		dismissWrongProfile,
+		settleResolveError,
 		stripStatus,
 		processingError,
 		setError,

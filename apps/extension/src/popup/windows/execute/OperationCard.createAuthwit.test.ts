@@ -7,6 +7,8 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import { trimAddress } from "@/utils/string"
+import { vocabularySelector } from "@/utils/token-transfer-vocabulary"
+import type { DecodedCall } from "@/wallet/services/execution/client"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import OperationCard from "./OperationCard.vue"
 import { shownText } from "../../../../tests/helpers/shown-text"
@@ -254,5 +256,59 @@ describe("OperationCard — aztec_createAuthWit", () => {
 		expect(w.find('[data-testid="execute-authwit-opaque-warning"]').text()).toContain("Opaque authorization")
 		expect(w.find('[data-testid="execute-authwit-caller"]').exists()).toBe(false)
 		expect(w.find('[data-testid="execute-authwit-args"]').exists()).toBe(false)
+	})
+
+	test("while the call is read its block is a busy status region of one placeholder pair per field, which leaves for the rows, a failed read's notice or the raw fields", async () => {
+		const nonce = `0x${"1a7c03e5".repeat(8)}`
+		const call = {
+			to: TOKEN,
+			name: "transfer_private_to_private",
+			selector: vocabularySelector("transfer_private_to_private", 4),
+			args: [OWNER, DELEGATE, field(25_000_000n), nonce],
+		}
+		const decoded: DecodedCall = {
+			kind: "decoded",
+			contract: "Token",
+			fn: "transfer_private_to_private",
+			params: [
+				{ name: "from", value: { kind: "address", value: OWNER } },
+				{ name: "to", value: { kind: "address", value: DELEGATE } },
+				{ name: "amount", value: { kind: "integer", value: "25000000" } },
+				{ name: "_nonce", value: { kind: "field", value: nonce } },
+			],
+		}
+		const w = mountCard(createAuthWit({ caller: DELEGATE, call }), { tokens: [USDC] })
+		const pending = w.get('[data-testid="execute-authwit-args"] [data-testid="execute-authwit-args-pending"]')
+		expect([pending.attributes("role"), pending.attributes("aria-busy"), pending.text()]).toEqual([
+			"status",
+			"true",
+			"Reading arguments…",
+		])
+		expect(pending.findAll("span > span[aria-hidden='true']")).toHaveLength(8)
+
+		await w.setProps({ decodedCalls: [decoded] })
+		expect(w.find('[data-testid="execute-authwit-args-pending"]').exists()).toBe(false)
+		const rows = w.get('[data-testid="execute-authwit-structured-args"]')
+		expect(rows.get('[data-testid="execute-authwit-amount"]').text()).toBe("25 USDC")
+		expect(rows.find('[data-testid="execute-authwit-transfer-nonce"]').exists()).toBe(true)
+
+		for (const reason of ["unavailable", "unknown-contract"] as const) {
+			await w.setProps({ decodedCalls: [{ kind: "undecoded", reason }] })
+			expect(w.find('[data-testid="execute-authwit-args-pending"]').exists()).toBe(false)
+			expect(w.get('[data-testid="execute-authwit-unverified-args"]').attributes("data-reason")).toBe(reason)
+		}
+	})
+
+	test("a call with more than four fields draws four pairs; one with none draws none and still says it is being read", () => {
+		const pairs = (args: string[]) => {
+			const call = { to: CONSUMER, name: "settle", selector: "0x1a2b3c4d", args }
+			const pending = mountCard(createAuthWit({ caller: DELEGATE, call })).get('[data-testid="execute-authwit-args-pending"]')
+			return [pending.findAll("span > span[aria-hidden='true']").length / 2, pending.text()]
+		}
+		const seven = Array.from({ length: 7 }, (_, i) => field(BigInt(i)))
+		expect([pairs(seven), pairs([])]).toEqual([
+			[4, "Reading arguments…"],
+			[0, "Reading arguments…"],
+		])
 	})
 })

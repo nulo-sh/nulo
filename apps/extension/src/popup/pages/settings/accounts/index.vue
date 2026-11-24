@@ -22,6 +22,7 @@ import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { copyWithToast } from "@/utils/clipboard"
+import { toastPendingSendRefusal } from "@/utils/pending-send"
 const appStore = useAppStore()
 const popupStore = usePopupStore()
 const cacheStore = useCacheStore()
@@ -36,7 +37,7 @@ const handleSelectAccount = async (acc) => {
 	// active account as it builds, so switching now would let it finish as the
 	// wrong one. Without this, the popup's guard is just a detour.
 	if (!(await appStore.commitScopeChange(() => appStore.selectAccount(acc)))) {
-		openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+		toastPendingSendRefusal(openToast)
 	}
 }
 
@@ -56,7 +57,7 @@ const handleHideAccount = async (acc) => {
 	// Hiding ANY account reassigns the active one to the first visible account,
 	// so it changes the signing scope exactly like an explicit switch does.
 	if (!(await appStore.changeAccountVisibility(acc, false))) {
-		openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+		toastPendingSendRefusal(openToast)
 		return
 	}
 	openToast({ kind: "success", label: "Account successfully hidden" })

@@ -36,3 +36,27 @@ export const CHAIN_IDS = {
 	MAINNET: walletChainId(MAINNET_L1_CHAIN_ID, MAINNET_ROLLUP_VERSION), // 2070860441
 	SANDBOX: 0, // localhost:8080
 } as const
+
+/** A chain no live network serves any more, named for a person by its network and Aztec major line. */
+export interface RetiredChain {
+	readonly chainId: number
+	readonly l1ChainId: number
+	readonly rollupVersion: number
+	readonly network: "Testnet" | "Alpha"
+	readonly major: number
+	/** `<network> V<major>`, plus `-RC.<n>` (the release candidate the wallet pinned it under) only
+	 *  when another chain of the same network, retired or live, shares that major. */
+	readonly name: string
+}
+
+/**
+ * Append-only: stored accounts, sessions and backups keep a retired chain's id after a reset moves
+ * its network's pin, and this list is the only record of that id's pair. An entry holds literals,
+ * never the live constants above, which move with the next reset. Never equal to a live id.
+ */
+export const RETIRED_CHAINS: readonly RetiredChain[] = [
+	{ chainId: 2904119610, l1ChainId: 11155111, rollupVersion: 2914217885, network: "Testnet", major: 6, name: "Testnet V6-RC.1" },
+	{ chainId: 3415328944, l1ChainId: 11155111, rollupVersion: 3409706519, network: "Testnet", major: 6, name: "Testnet V6-RC.3" },
+	// Never pinned: the public Mainnet node served it until the V6 rollup replaced it.
+	{ chainId: 4248422646, l1ChainId: 1, rollupVersion: 4248422647, network: "Alpha", major: 5, name: "Alpha V5" },
+]

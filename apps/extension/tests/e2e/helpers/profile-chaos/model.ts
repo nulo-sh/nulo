@@ -328,7 +328,7 @@ const LOCK_DELETES_ROW = cite(SESSIONS, 428, "this.deletePersistedSession()")
 const STRICT_TOGGLE = cite(SESSIONS, 769, 'prop.key === "strictSecurityMode"')
 const STRICT_DEFAULT = cite("src/wallet/config/config.ts", 31, "strictSecurityMode: z.boolean().default(true)")
 const STRICT_ROW = cite("src/popup/pages/settings/lock.vue", 222, ':title="strictRow.title"')
-const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 70, "setLastActiveProfileId(profile.id)")
+const PICKER_PERSISTS = cite("src/popup/components/popups/SelectProfilePopup.vue", 71, "setLastActiveProfileId(profile.id)")
 const RESET_ROUTES = cite("src/popup/pages/settings/security/reset.vue", 276, "if (!appStore.profiles.length) {")
 const RESET_WHILE_LOCKED = cite("src/popup/pages/settings/security/reset.vue", 5, '"isAuthRequired": false')
 const PRF_REQUIRED = cite("src/wallet/utils/passkey-ceremony.ts", 122, "if (!ext.prf) throw new PasskeyPrfError(")
@@ -540,7 +540,7 @@ const result = (next: World, outcomes: Outcome[], writes: WriteScope[], settle: 
 
 const unchanged = (w: World, outcome: Outcome, sources: string[]): Expectation => result(clone(w), [outcome], [], "unchanged", sources)
 
-const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 150, "handleImportProfile")
+const PICKER_IMPORT = cite("src/popup/components/popups/SelectProfilePopup.vue", 151, "handleImportProfile")
 
 /** An import that does not commit: a later profile is imported from the lock screen only, so the
  *  open session, if any, was locked on the way in. */

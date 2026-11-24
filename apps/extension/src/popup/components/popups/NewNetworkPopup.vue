@@ -6,6 +6,7 @@ import { sameStoredName, storedNameKey } from "@/utils/account-name"
 import { ALREADY_EXISTS, RPC_URL_MIN_LENGTH } from "@/utils/entity-rules"
 import { managers } from "@/utils/core"
 import { activateNetworkGuarded } from "@/utils/guarded-network-activation"
+import { toastPendingSendRefusal } from "@/utils/pending-send"
 import { refusedRpcUrlLine } from "./endpoint-error-text"
 
 /** Composables */
@@ -76,7 +77,7 @@ const handleCreateNetwork = async () => {
 	// against. Checked up front to avoid creating one we then refuse to switch
 	// to, and again at the switch itself — a send can start during the create.
 	if (appStore.hasInFlightSend) {
-		openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+		toastPendingSendRefusal(openToast)
 		return
 	}
 

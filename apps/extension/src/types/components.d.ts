@@ -16,6 +16,7 @@ declare module 'vue' {
     AddressDisplay: typeof import('./../components/AddressDisplay.vue')['default']
     AddressInput: typeof import('./../components/composite/general/AddressInput.vue')['default']
     AmountCard: typeof import('./../components/composite/send/AmountCard.vue')['default']
+    ArgsPlaceholder: typeof import('./../components/composite/ArgsPlaceholder.vue')['default']
     AsyncListStatus: typeof import('./../components/composite/AsyncListStatus.vue')['default']
     AuthMethodTabs: typeof import('./../components/composite/AuthMethodTabs.vue')['default']
     Badge: typeof import('@nulo/design')['Badge']

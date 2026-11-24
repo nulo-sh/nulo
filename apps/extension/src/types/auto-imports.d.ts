@@ -85,6 +85,7 @@ declare global {
   const ONBOARDING_COMPLETED_KEY: typeof import('../stores/app.store').ONBOARDING_COMPLETED_KEY
   const OWN_WINDOW_ROUTES: typeof import('../utils/own-window').OWN_WINDOW_ROUTES
   const PASSKEY_COPY: typeof import('../utils/passkey-copy').PASSKEY_COPY
+  const PENDING_SEND_REFUSAL: typeof import('../utils/pending-send').PENDING_SEND_REFUSAL
   const PHRASE_WORD_COUNT: typeof import('../utils/recovery-phrase').PHRASE_WORD_COUNT
   const PINNED_TOKENS_MAX: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX_CHAINS
@@ -97,6 +98,7 @@ declare global {
   const RECOVERY_PHRASE_WARNINGS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_WARNINGS
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
   const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
+  const RETIRED_CHAINS: typeof import('../utils/chain-ids').RETIRED_CHAINS
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const ROW_AMOUNT_LENGTH: typeof import('../utils/snack-amount').ROW_AMOUNT_LENGTH
   const RPC_URL_MIN_LENGTH: typeof import('../utils/entity-rules').RPC_URL_MIN_LENGTH
@@ -200,6 +202,7 @@ declare global {
   const createApp: typeof import('vue').createApp
   const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
   const createFailedNotice: typeof import('../utils/profile-flow-notices').createFailedNotice
+  const createReconnectCheck: typeof import('../composables/reconnectRead').createReconnectCheck
   const createReconnectRead: typeof import('../composables/reconnectRead').createReconnectRead
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
@@ -571,6 +574,7 @@ declare global {
   const toRefs: typeof import('vue').toRefs
   const toRestoreError: typeof import('../utils/restore-error').toRestoreError
   const toValue: typeof import('vue').toValue
+  const toastPendingSendRefusal: typeof import('../utils/pending-send').toastPendingSendRefusal
   const tokenForReceipt: typeof import('../utils/received-display').tokenForReceipt
   const tokenHeroCandidates: typeof import('../utils/hero-fit').tokenHeroCandidates
   const tokenIconFor: typeof import('../utils/token-icon').tokenIconFor
@@ -889,6 +893,9 @@ declare global {
   export type { AuthRequiredGate, ActiveProfileLookup } from '../utils/auth-guard'
   import('../utils/auth-guard')
   // @ts-ignore
+  export type { RetiredChain } from '../utils/chain-ids'
+  import('../utils/chain-ids')
+  // @ts-ignore
   export type { CopyToastSpec } from '../utils/clipboard'
   import('../utils/clipboard')
   // @ts-ignore
@@ -1104,6 +1111,7 @@ declare module 'vue' {
     readonly ONBOARDING_COMPLETED_KEY: UnwrapRef<typeof import('../stores/app.store')['ONBOARDING_COMPLETED_KEY']>
     readonly OWN_WINDOW_ROUTES: UnwrapRef<typeof import('../utils/own-window')['OWN_WINDOW_ROUTES']>
     readonly PASSKEY_COPY: UnwrapRef<typeof import('../utils/passkey-copy')['PASSKEY_COPY']>
+    readonly PENDING_SEND_REFUSAL: UnwrapRef<typeof import('../utils/pending-send')['PENDING_SEND_REFUSAL']>
     readonly PHRASE_WORD_COUNT: UnwrapRef<typeof import('../utils/recovery-phrase')['PHRASE_WORD_COUNT']>
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX']>
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX_CHAINS']>
@@ -1116,6 +1124,7 @@ declare module 'vue' {
     readonly RECOVERY_PHRASE_WARNINGS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_WARNINGS']>
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
     readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
+    readonly RETIRED_CHAINS: UnwrapRef<typeof import('../utils/chain-ids')['RETIRED_CHAINS']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly ROW_AMOUNT_LENGTH: UnwrapRef<typeof import('../utils/snack-amount')['ROW_AMOUNT_LENGTH']>
     readonly RPC_URL_MIN_LENGTH: UnwrapRef<typeof import('../utils/entity-rules')['RPC_URL_MIN_LENGTH']>
@@ -1219,6 +1228,7 @@ declare module 'vue' {
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
     readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
     readonly createFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['createFailedNotice']>
+    readonly createReconnectCheck: UnwrapRef<typeof import('../composables/reconnectRead')['createReconnectCheck']>
     readonly createReconnectRead: UnwrapRef<typeof import('../composables/reconnectRead')['createReconnectRead']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
@@ -1590,6 +1600,7 @@ declare module 'vue' {
     readonly toRefs: UnwrapRef<typeof import('vue')['toRefs']>
     readonly toRestoreError: UnwrapRef<typeof import('../utils/restore-error')['toRestoreError']>
     readonly toValue: UnwrapRef<typeof import('vue')['toValue']>
+    readonly toastPendingSendRefusal: UnwrapRef<typeof import('../utils/pending-send')['toastPendingSendRefusal']>
     readonly tokenForReceipt: UnwrapRef<typeof import('../utils/received-display')['tokenForReceipt']>
     readonly tokenHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['tokenHeroCandidates']>
     readonly tokenIconFor: UnwrapRef<typeof import('../utils/token-icon')['tokenIconFor']>

@@ -52,6 +52,7 @@ import {
 	accountOutflows,
 	outflowLabel,
 	callSurface,
+	fieldCount,
 	rowTitle,
 	tokenAt,
 	wire,
@@ -665,7 +666,7 @@ const advises = computed((): boolean => {
 					</Flex>
 					<Flex data-testid="execute-authwit-args" direction="column" gap="4" :class="$style.group">
 						<Text variant="label-section" color="secondary">Arguments</Text>
-						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="advises" />
+						<CallArguments :surface="s.args" :contract="s.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-authwit" json-view :advice="advises" :fields="fieldCount(s.call.args)" />
 					</Flex>
 				</template>
 				<template v-else>
