@@ -152,6 +152,13 @@ const HAND_LISTS: Record<string, ListedStep[]> = {
 		PROOF,
 		MINE,
 	],
+	"a Send's estimate held past the wallet's estimate TTL is reaped, so the step that lands it fails it": [
+		openSend("fee_juice"),
+		PAST_WINDOW,
+		PAST_WINDOW,
+		openWindow("sponsor"),
+		LAND,
+	],
 	"three windows deep go out in press order, the later ones rebuilding behind the first": [
 		openWindow("sponsor"),
 		openWindow("fee_juice"),
@@ -317,6 +324,12 @@ describe("each oracle can fail — break fixtures", () => {
 	)
 
 	test(
+		"O2: the worker fails a default-entrypoint preview a step landed",
+		() => redOn([openWindow("no_from"), LAND], { landedRunFails: true }, "O2", /op1's estimate failed after a step landed it/),
+		RUN_MS,
+	)
+
+	test(
 		"O3: the slot grants a request ahead of an earlier one",
 		() =>
 			redOn(
@@ -382,6 +395,7 @@ describe("coverage", () => {
 		)
 		expect(seen((p) => p.timing)).toEqual(new Set(["now", "first-offer"]))
 		expect(seen((p) => p.estimate)).toEqual(new Set(["landed", "failed", "queued"]))
+		expect([...seen((p) => `${p.method}:${p.estimate}`)]).toContain("no_from:landed")
 		expect(seen((p) => (p.ahead > 0 ? "behind" : "first"))).toEqual(new Set(["behind", "first"]))
 		expect(seen((p) => p.end ?? "open")).toEqual(new Set(["sent", "rebuild", "ended"]))
 	})
