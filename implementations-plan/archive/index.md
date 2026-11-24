@@ -103,6 +103,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [deprecate-simulate-views](deprecate-simulate-views/plan.md) — completed — the internal simulate_views operation kind retired from every layer
 - [deps-audit-1](deps-audit-1/plan.md) — completed — sixteen advisories fixed, none newly acknowledged (vite 8.2.4, follow-redirects 1.16.1, storybook 10.6.2, vitest 4.1.12, fast-uri 3.1.9, zod 4.6.7 under an exact override); the same-engine test-runtime bar; the e2e Firefox pinned apart from puppeteer
 - [design-system-externalization](design-system-externalization/plan.md) — completed — `@nulo/design` becomes the single source of tokens, base styles and primitives
+- [detail-styles-home-1](detail-styles-home-1/plan.md) — completed — the detail rows' shared sheet moves below its consumers, copies compose it, a source scan bans upward page-sheet `composes`
 - [docs-1](docs-1/plan.md) — completed — the documents say what the code does (passkey boundary, authwit contract, backup contents) plus four small fixes (#665 #667 #668 #672)
 - [docs-improvement](docs-improvement/plan.md) — completed — documentation split by job, and a sweep of the code comments
 - [durable-jobs](durable-jobs/plan.md) — completed — every submission becomes a durable job in storage that the popup only observes
@@ -616,3 +617,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [service-imports-1](service-imports-1/plan.md) — completed — every service names its siblings by spec constant through `import type`, no service module value-imports a sibling implementation, and the cycle lint covers all of `wallet/services` (#1937)
 - [popup-policy-home-1](popup-policy-home-1/plan.md) — completed — fee, publish, journal, auth and pre-session route policy moved below popup to utils and the takeover folder; Biome refuses popup imports from composables, utils, stores, components and onboarding (#1935)
 - [restore-state-extract-1](restore-state-extract-1/plan.md) — completed — the restore workflow's pending in-memory state moves out of `ProfileService` into `PendingRestoreState`, same sites, same order, same lock (#1933)
+- [dapp-estimation-extract-1](dapp-estimation-extract-1/plan.md) — completed — the dApp estimate and NO_FROM preview move out of `DappSendExecutor` into `DappSendEstimation`, the only writer of the reuse entry and the preview snapshot; same sites, same order (#1934)

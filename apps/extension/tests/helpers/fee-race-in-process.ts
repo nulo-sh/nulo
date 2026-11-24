@@ -442,7 +442,7 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			authWitnesses: [],
 		},
 	}))
-	;(raw.dappSendExecutor as Record<string, unknown>).discoverNoFromAuthwits = underRun(() => [])
+	;(raw.dappSendEstimation as Record<string, unknown>).discoverNoFromAuthwits = underRun(() => [])
 
 	// Every estimate run parks at its start, holding the slot it took, until a step decides it.
 	const parked: ParkedRun[] = []
@@ -468,8 +468,8 @@ async function startRace(faults: Faults, crypto: ReturnType<typeof trackSubtleCr
 			}
 		}
 	}
-	park(raw.dappSendExecutor, "estimateOperationFee")
-	park(raw.dappSendExecutor, "previewOperationAuthwits")
+	park(raw.dappSendEstimation, "estimateOperationFee")
+	park(raw.dappSendEstimation, "previewOperationAuthwits")
 	park(raw.transferExecutor, "runEstimate")
 
 	// O3: the slot grants in arrival order.

@@ -103,7 +103,7 @@ describe("slot-for-executeSendTransaction", () => {
 		const executor = new DappSendExecutor({
 			planner: {} as never,
 			estimateWithDiscovery: {} as never,
-			txBuilder: {} as never,
+			estimation: {} as never,
 			coordinator: { proveAndSend } as never,
 			lane: {
 				deleteController: vi.fn(),
@@ -154,7 +154,6 @@ describe("slot-for-executeSendTransaction", () => {
 			getPXE: vi.fn() as never,
 			getAccountContract: vi.fn() as never,
 			getPendingForAccount: vi.fn(() => []) as never,
-			sequenceEpoch: vi.fn(() => 0) as never,
 			logDebug: () => {},
 		})
 

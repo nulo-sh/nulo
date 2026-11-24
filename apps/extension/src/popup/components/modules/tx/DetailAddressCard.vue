@@ -55,7 +55,7 @@ const hasAddress = computed(() => props.address !== undefined)
 
 <style module>
 .card {
-	composes: address_card from "../../../pages/detail-page.module.css";
+	composes: address_card from "./detail-shared.module.css";
 }
 
 /* Outranks shared card rules reintroduced by later-loaded detail chunks. */
@@ -68,6 +68,6 @@ const hasAddress = computed(() => props.address !== undefined)
 }
 
 .label {
-	composes: caption from "../../../pages/detail-page.module.css";
+	composes: caption from "./detail-shared.module.css";
 }
 </style>

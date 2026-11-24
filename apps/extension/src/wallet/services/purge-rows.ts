@@ -1,3 +1,5 @@
+import { isObjectLike } from "@nulo/wallet-core/guards"
+
 /**
  * Snapshot-iterate already-loaded `rows`, deleting each then emitting its
  * post-delete event — centralizing the delete-before-emit ORDER that every
@@ -86,7 +88,7 @@ export async function purgeMalformedRows(
 function parseObject(rawString: string): Record<string, unknown> | undefined {
 	try {
 		const raw: unknown = JSON.parse(rawString)
-		return typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : undefined
+		return isObjectLike(raw) ? raw : undefined
 	} catch {
 		return undefined
 	}

@@ -2,6 +2,7 @@ import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { ConversionLock, PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage"
 import { signDappSession, verifyDappSession } from "./integrity"
 import type { DappSession } from "./spec"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 /** Derives the per-profile MAC `CryptoKey`; throws when the profile is locked. */
 type MacKeyProvider = (profileId: string) => Promise<CryptoKey>
@@ -83,7 +84,7 @@ export class DappSessionMacStorage {
 	): Promise<{ rows: Array<{ storageId: string; row: DappSession }>; unopened: string[]; keyless: string[] }> {
 		const { rows, unopened, keyless } = await this.inner.rawRowsOf(profileId)
 		return {
-			rows: rows.filter(({ row }) => typeof row === "object" && row !== null) as Array<{ storageId: string; row: DappSession }>,
+			rows: rows.filter(({ row }) => isObjectLike(row)) as Array<{ storageId: string; row: DappSession }>,
 			unopened,
 			keyless,
 		}

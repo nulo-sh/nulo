@@ -2,7 +2,14 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { EnvelopeError, MAX_ENVELOPE_BYTES, PINNED_KEYS, readTokenList, type VerifiedTokenList } from "@nulo/token-list"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { ValueDecodeError } from "@nulo/wallet-core/storage"
-import { AlarmDispatcher, EventHandler, ResponseTooLargeError, privateFetchInit, readBodyCapped } from "@nulo/wallet-core/utils"
+import {
+	AlarmDispatcher,
+	EventHandler,
+	ResponseTooLargeError,
+	isObjectLike,
+	privateFetchInit,
+	readBodyCapped,
+} from "@nulo/wallet-core/utils"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { LegalAcceptanceService, LegalStatus } from "@/wallet/services/legal/service"
@@ -44,8 +51,8 @@ type StoredState = TokenListStoredState
 /** Storage is writable by every extension page: a malformed field reads as absent, and a deadline
  *  past {@link DEADLINE_CEILING_MS} reads as due, so a planted value cannot stop refreshes. */
 export function decodeTokenListState(raw: unknown, now: number): TokenListStoredState {
-	if (!raw || typeof raw !== "object") return { failures: 0 }
-	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
+	if (!isObjectLike(raw)) return { failures: 0 }
+	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw
 	const latest = now + DEADLINE_CEILING_MS
 	return {
 		envelope: typeof envelope === "string" ? envelope : undefined,

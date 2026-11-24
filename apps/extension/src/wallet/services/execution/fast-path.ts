@@ -47,6 +47,7 @@ import type { IPXE } from "@nulo/aztec-runtime/pxe"
 import { liveChainInfo, type SelectedNetworkChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertSelectorBinding, type ContractResolver, findFunctionBySelector, NAMED_CALL_BINDING } from "./contract-resolver"
 import { getBlockHeaderAnchor } from "./helpers/block-header-anchor"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 
 /**
  * For Nulo's `DefaultAccountEntrypoint` standard path: the flattened
@@ -93,7 +94,7 @@ export function rehydrateOptimizablePrefix(
 	// survives JSON round-trip without rehydrating the call.
 	let boundary = 0
 	for (const c of calls) {
-		if (typeof c !== "object" || c === null) break
+		if (!isObjectLike(c)) break
 		const obj = c as { type?: unknown; isStatic?: unknown; hideMsgSender?: unknown }
 		if (obj.type !== FunctionType.PUBLIC || obj.isStatic !== true || obj.hideMsgSender === true) break
 		boundary++

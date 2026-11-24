@@ -43,5 +43,6 @@ Base: `origin/dev` at `4a333b343`. Sources: an AST inventory (TypeScript compile
 | PR #1945 | `token/service.ts`, `token/seeder.ts`, `popup/pages/send*` (also `extension-messaging/src/errors.ts`, at lines 427 and 805, away from this lane's 90 and 368-379) |
 | PR #1942 | `account/service.ts`, `popup/pages/settings/security/**` |
 | PR #1948 | no file with a site |
+| lane `dapp-estimation-extract-1` (#1934), added 2026-11-24 at arc 2 | `execution/dapp-send-executor.ts`, `execution/service.ts`, `execution/transfer-executor.ts`, `execution/estimate-reuse-shared.ts` and any new file beside them; only the first holds a site, which moved to arc 3 |
 
 Closed `known-limit` issues searched ("guard", "isRecord", "hex", "duplicate", "inline"): none concerns an object guard; #372 (a token row stored in another hex spelling) concerns token-row keys, which no site here reads.

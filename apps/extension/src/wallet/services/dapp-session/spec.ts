@@ -1,4 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { isObjectLike } from "@nulo/wallet-core/guards"
 import { z } from "zod"
 import {
 	AccessLevel,
@@ -89,8 +90,6 @@ export type DappSession = {
 	mac?: string
 }
 
-const tolerantRecord = (v: unknown) => typeof v === "object" && v !== null
-
 /** Storage codec row schema. Exact on the access-gating fields (permissions,
  *  accounts, confirmationLevel, chain/profile scoping — a drifted session row
  *  is HIDDEN, so the dApp must re-request: fail-closed); tolerant on the deep
@@ -114,9 +113,9 @@ export const DappSessionSchema: z.ZodType<DappSession> = z.object({
 	 *  delete each row that carries it. */
 	trustedVerification: z.boolean().optional(),
 	accountAliases: z.record(z.string(), z.string()).optional(),
-	capabilityGrants: z.array(z.custom<GrantedCapabilityRecord>(tolerantRecord).describe("any non-null object, kept as stored")).optional(),
+	capabilityGrants: z.array(z.custom<GrantedCapabilityRecord>(isObjectLike).describe("any non-null object, kept as stored")).optional(),
 	capabilityRejections: z
-		.array(z.custom<RejectedCapabilityRecord>(tolerantRecord).describe("any non-null object, kept as stored"))
+		.array(z.custom<RejectedCapabilityRecord>(isObjectLike).describe("any non-null object, kept as stored"))
 		.optional(),
 	authorizationsWithoutAsking: z.object({ broad: z.boolean() }).strict().optional(),
 	// The per-row integrity tag. Written by `DappSessionMacStorage`, which
