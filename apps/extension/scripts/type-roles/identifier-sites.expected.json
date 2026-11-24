@@ -361,7 +361,7 @@
 		{
 			"file": "apps/extension/src/popup/components/modules/send/SendPersonStep.vue",
 			"expression": "trimAddress(r.address, 6, 4, \"…\")",
-			"branch": "recents.length && !(r.name)",
+			"branch": "recents.length",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"send-recent-address\"]",
