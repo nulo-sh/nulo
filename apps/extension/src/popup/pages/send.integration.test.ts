@@ -12,8 +12,6 @@ import { nextTick, reactive, ref } from "vue"
 
 const ACCOUNT = "0xacct"
 const DESTINATION = `0x2${"b".repeat(63)}`
-/** The amount the stubbed card's pending USD conversion lands on `convertNow`, if one is pending. */
-const converting: { amount: string | null } = { amount: null }
 /** A payee the journal has paid before, on the curve like `DESTINATION`. */
 const ANA = "0x13c29548b3340707017c5d1a457c23d8b6c29548b3340706e39bf608a5aab172"
 const TOKEN = {
@@ -237,11 +235,7 @@ const STUBS = {
 			refreezeQuote() {},
 			focusAmount() {},
 			exitFiat() {},
-			convertNow(this: { $emit: (e: string, v: string) => void }) {
-				if (converting.amount === null) return
-				this.$emit("update:modelValue", converting.amount)
-				converting.amount = null
-			},
+			convertNow() {},
 		},
 	},
 	// The card's read-only rows, and the menu chrome around the real selector's items.
@@ -1849,18 +1843,49 @@ describe("Send — when the fee estimate starts", () => {
 		w.unmount()
 	})
 
-	test("a side picked while a typed USD figure converts starts one estimate at once, for the converted amount", async () => {
-		const { w } = await mountSend(FUNDING["both Fee Juices"])
-		await toForm(w)
-		await nextTask()
-		await w.get('[data-testid="stub-amount"]').setValue("1.5")
-		await estimateLands()
-		converting.amount = "2.5"
-		await setSide(w, "to", "public")
-		await vi.advanceTimersByTimeAsync(0)
-		expect(amounts()).toEqual([1_500_000n, 2_500_000n])
-		await vi.advanceTimersByTimeAsync(1000)
-		expect(asked()).toBe(2)
-		w.unmount()
+	describe("while a typed USD figure converts", () => {
+		/** The form in USD mode on a USDC balance of 1.234567 at $0.50, with "0.3" typed 100 ms ago. */
+		async function converting() {
+			const PRICED = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+			mocks.getTokens.mockResolvedValue([PRICED])
+			mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: PRICED, privateBalance: "1234567", publicBalance: "1234567" }])
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, chainId: CHAIN_IDS.TESTNET })
+			for (const { value } of vi.mocked(PriceServiceClient).mock.results) {
+				value.onQuotesUpdated.invoke({
+					quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 0.5, fetchedAt: Date.now(), providerUpdatedAt: null } },
+					pricedTokens: TEST_PRICED_TOKENS,
+					tokenIcons: {},
+					bridgeIcons: {},
+				})
+			}
+			await toForm(w)
+			await nextTask()
+			await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+			await nextTask()
+			await w.get('[data-testid="send-amount-fiat-input"]').setValue("0.3")
+			await vi.advanceTimersByTimeAsync(100)
+			expect(asked()).toBe(0)
+			return w
+		}
+
+		test("a side picked starts one estimate at once, for the converted amount", async () => {
+			const w = await converting()
+			await setSide(w, "to", "public")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(amounts()).toEqual([600_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("Max sends the exact balance, not its rounded dollars converted back, estimated once, at once", async () => {
+			const w = await converting()
+			await w.get('[data-testid="send-amount-max"]').trigger("click")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(amounts()).toEqual([1_234_567n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
 	})
 })

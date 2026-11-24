@@ -849,7 +849,8 @@ watch(
 
 function requestEstimate() {
 	// A change during a USD conversion would start an estimate for the amount before the typed figure.
-	amountCardRef.value?.convertNow()
+	// The page's guard, not the card's: the card reads a write it made in this task only after its render.
+	if (fiatGuard.value?.converting) amountCardRef.value?.convertNow()
 	clearEstimateFailure()
 	// An estimate simulates against the node: no work for a send the wall would refuse.
 	if (!legal.isCurrent.value) {
