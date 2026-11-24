@@ -38,27 +38,23 @@ const FEATURE_FOLDERS = [
 ]
 
 type Composition = { file: string; target: string; name: string }
-type Reviewed = { file: string; target: string; names: readonly string[]; why: string }
+type Reviewed = { file: string; target: string; names: readonly string[] }
 
-const DETAIL_PAGE_WHY = "a detail page renders the tx rows, and their sheet sits at its lowest consumer (#1966)"
 const REVIEWED: readonly Reviewed[] = [
 	{
 		file: `${SRC}/popup/windows/execute/OperationCard.vue`,
 		target: `${SRC}/popup/components/modules/send/fee-shared.module.css`,
 		names: ["fee_label"],
-		why: "the execute window's fee label is the send fee sheet's",
 	},
 	{
 		file: `${SRC}/popup/pages/settings/developer/account-state/notes/index.vue`,
 		target: `${SRC}/popup/components/modules/settings/record-card.module.css`,
 		names: ["card", "header", "type", "kv_grid", "kv_key", "kv_val", "kv_val_wrap"],
-		why: "the developer notes page lays its notes out as settings record cards",
 	},
 	{
 		file: `${SRC}/popup/components/popups/IncomingTrustPopup.vue`,
 		target: SHARED_SHEET,
 		names: ["hero_link"],
-		why: "the trust popup's contract link is the detail hero's link",
 	},
 	{
 		file: `${PAGES}tx/[id].vue`,
@@ -80,7 +76,6 @@ const REVIEWED: readonly Reviewed[] = [
 			"empty_headline",
 			"empty_sub",
 		],
-		why: DETAIL_PAGE_WHY,
 	},
 	{
 		file: `${PAGES}received/[id].vue`,
@@ -101,7 +96,6 @@ const REVIEWED: readonly Reviewed[] = [
 			"empty_headline",
 			"empty_sub",
 		],
-		why: DETAIL_PAGE_WHY,
 	},
 	{
 		file: `${PAGES}journal/[id].vue`,
@@ -122,7 +116,6 @@ const REVIEWED: readonly Reviewed[] = [
 			"empty_headline",
 			"empty_sub",
 		],
-		why: DETAIL_PAGE_WHY,
 	},
 ]
 
@@ -142,14 +135,19 @@ function ownerOf(sheet: string): string | undefined {
 	return folder === undefined ? `${posix.dirname(sheet)}/` : `${SRC}/${folder}`
 }
 
+/** One clause of a `composes` value, in postcss-modules' own grammar: `names from "sheet"`. */
+function clauseCompositions(file: string, clause: string): Composition[] {
+	const match = clause.trim().match(/^(.+?)\s+from\s+(?:"([^"]+)"|'([^']+)')$/)
+	const target = match === null ? undefined : resolveSheet(file, match[2] ?? match[3])
+	if (match === null || target === undefined) return []
+	return match[1].split(/\s+/).map((name) => ({ file, target, name }))
+}
+
 function compositions(file: string, source: string): Composition[] {
 	return parseSource(file, source).styles.flatMap(({ root }) => {
 		const found: Composition[] = []
 		root.walkDecls(/^composes$/i, (decl) => {
-			const match = decl.value.match(/^(.+?)\s+from\s+(["'])(.+)\2\s*$/)
-			const target = match === null ? undefined : resolveSheet(file, match[3])
-			if (match === null || target === undefined) return
-			for (const name of match[1].trim().split(/\s+/)) found.push({ file, target, name })
+			for (const clause of decl.value.split(",")) found.push(...clauseCompositions(file, clause))
 		})
 		return found
 	})
@@ -207,6 +205,12 @@ describe("no stylesheet outside a feature's folder composes that feature's sheet
 			"the src alias, from a plain sheet",
 			`${SRC}/components/shared.module.scss`,
 			'.a { composes: x from "src/popup/pages/x.module.css"; }',
+			1,
+		],
+		[
+			"a comma's second clause, on its own line",
+			MODULE,
+			style('composes: x from "./detail-shared.module.css",\n\t\ty from "../send/fee-shared.module.css";'),
 			1,
 		],
 		["a page from a page's sheet", `${PAGES}tx/[id].vue`, style('composes: x from "../empty-state.module.css";'), 0],

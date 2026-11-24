@@ -1,4 +1,4 @@
-/* Compose it alone: a composer's own declaration of a property set here wins or loses on chunk order. */
+/* A composer never redeclares a property set here: which one wins would depend on chunk order. */
 .accent {
 	composes: type--label-section from global;
 	line-height: inherit;
