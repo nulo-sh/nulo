@@ -11,6 +11,11 @@
  * A backup carries no networks (the built-ins reseed on import), so the seed is the only public
  * network an import can restore into.
  *
+ * The Testnet copy holds its token and 31 more instances of the token's class, each at its own
+ * address, so the Retry carries 32 contracts of one class: a Retry that sent each contract with its
+ * own code would pass the account-state part's size cap, and its log would hold a size row beside
+ * the deadline row.
+ *
  * Only a restore or the Senders page registers a sender, and no balance read does, so the sender
  * read back before Continue is what proves the local network restored while Testnet hung. The
  * balance read after Continue shows the wallet works there, nothing more.
@@ -59,14 +64,37 @@ const SENDERS_HASH = "#/popup/settings/developer/account-state/senders"
 const FUNDED_PUBLIC_RAW = (1000n * 10n ** 18n).toString()
 
 type ErrorRow = { networkId?: unknown; restoreError?: unknown }
+type BackupContract = { address?: string; instance?: Record<string, unknown> }
 
-/** The funded chain's item with `sender` added, preceded by its copy relabelled to Testnet. */
-function stalledTestnetBackup(backup: PlainBackup, funded: string, tokenAddress: string, sender: string): string {
+const TESTNET_INSTANCES = 32
+
+/** `contract` and `count - 1` more instances of its class, each with its own salt and address. */
+async function instancesOfOneClass(contract: BackupContract, count: number): Promise<BackupContract[]> {
+	const { Fr } = await import("@aztec-labs/aztec.js/fields")
+	const { computeContractAddressFromInstance, ContractInstanceWithAddressSchema } = await import("@aztec-labs/stdlib/contract")
+	const copies = [contract]
+	for (let i = 1; i < count; i++) {
+		const salt = Fr.random().toString()
+		const address = (
+			await computeContractAddressFromInstance(await ContractInstanceWithAddressSchema.parseAsync({ ...contract.instance, salt }))
+		).toString()
+		copies.push({ address, instance: { ...contract.instance, salt, address } })
+	}
+	return copies
+}
+
+/** The funded chain's item with `sender` added, preceded by its copy relabelled to Testnet, which
+ *  holds {@link TESTNET_INSTANCES} instances of the token's class. */
+async function stalledTestnetBackup(backup: PlainBackup, funded: string, tokenAddress: string, sender: string): Promise<string> {
 	keepChainAccountState(backup.data, accountChainId(backup, funded), tokenAddress)
 	const [local, ...rest] = accountStateItems(backup.data)
 	expect(rest, "one account-state item on the funded chain").toEqual([])
 	local.senders = [...(local.senders ?? []), { address: sender }]
-	setAccountStateItems(backup.data, [{ ...structuredClone(local), networkId: "testnet", chainId: CHAIN_IDS.TESTNET }, local])
+	const token = (local.contracts as BackupContract[]).find((c) => c.address?.toLowerCase() === tokenAddress.toLowerCase())
+	if (!token) throw new Error("the funded chain's item lists no token contract")
+	const testnet = { ...structuredClone(local), networkId: "testnet", chainId: CHAIN_IDS.TESTNET }
+	testnet.contracts = await instancesOfOneClass(structuredClone(token), TESTNET_INSTANCES)
+	setAccountStateItems(backup.data, [testnet, local])
 	backup["active-chain-id"] = CHAIN_IDS.TESTNET
 	return writeBackupToTemp(sealPlainBackup(backup))
 }
@@ -166,7 +194,7 @@ test.skipIf(!hasConfig)(
 		const sender = (await AztecAddress.random()).toString()
 		const funded = tokenReadyExtension.accountAddress
 		const tokenAddress = aztecConfig!.tokenAddress
-		const filePath = stalledTestnetBackup(await exportBackupContent(tokenReadyExtension), funded, tokenAddress, sender)
+		const filePath = await stalledTestnetBackup(await exportBackupContent(tokenReadyExtension), funded, tokenAddress, sender)
 
 		const stub = await startStub((method) => {
 			if (method === "aztec_getNodeInfo") return nodeInfoResult(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION)
@@ -192,7 +220,8 @@ test.skipIf(!hasConfig)(
 			expectOnlyStalledDeadline(firstLog, testnetId)
 			await bringToFront(page)
 
-			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row.
+			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row; its 32
+			// contracts of one class stay under the size cap, or a size row would join it.
 			// Refuse the first pass's held calls before it, or its identity probe can queue behind them.
 			stub.refuseUnanswered()
 			expect(await retryOnce(page)).toEqual({ label: "Retrying…", continueDisabled: true, viewErrorsDisabled: true })
