@@ -1,0 +1,225 @@
+name: Trial / runner sizes
+
+# Times the quality work, one Chrome smoke shard and one proverless network shard per browser on
+# GitHub's standard runner and on boat's sizes, three repetitions each. A throwaway measurement:
+# it gates nothing, never merges, and is deleted with its branch.
+#
+# Off unless the repository variable RUNNER_TRIAL is `on` (ubuntu-latest, boat, boat-large) or
+# `xlarge` (those plus boat-xlarge, which boat runs only on its $100 plan); any other value skips
+# the whole matrix before a runner is requested, so nothing queues for a runner that is absent.
+# A push to the trial branch starts a run, so only a writer of the repository can start one, and
+# boat runs a job only for the users on its own list. The file is not on the default branch, so it
+# has no dispatch; a fork's push runs in the fork, where the variable is unset.
+
+on:
+  push:
+    branches: [chore/runner-size-trial]
+
+permissions:
+  contents: read
+
+# One run at a time: a run's 27 boat starts (36 with xlarge) fit the $20 plan's 60 an hour.
+concurrency:
+  group: trial-runner-sizes
+  cancel-in-progress: false
+
+jobs:
+  time:
+    name: ${{ matrix.workload }} on ${{ matrix.runner }} (rep ${{ matrix.rep }})
+    if: vars.RUNNER_TRIAL == 'on' || vars.RUNNER_TRIAL == 'xlarge'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # Nine jobs at once keeps a normal run under the $20 plan's 12 starts a minute; boat holds a
+      # start above that limit until the minute frees, it does not refuse it.
+      max-parallel: 9
+      matrix:
+        rep: [1, 2, 3]
+        workload: [quality, smoke-chrome, network-chrome, network-firefox]
+        runner: ${{ fromJSON(vars.RUNNER_TRIAL == 'xlarge' && '["ubuntu-latest","boat","boat-large","boat-xlarge"]' || '["ubuntu-latest","boat","boat-large"]') }}
+    env:
+      # boat's image defaults to en_US.UTF-8; one locale on every leg keeps the legs comparable.
+      LC_ALL: C.UTF-8
+    steps:
+      # Each phase appends "<phase> seconds exit cpu-seconds busy-cores steal-seconds" to the table and
+      # never stops the job, so a failing phase still leaves every later phase timed; the Report step
+      # fails the job on any red phase. CPU figures come from /proc/stat, so they cover every process.
+      - name: Start the clock
+        run: |
+          cat > "$RUNNER_TEMP/clock" <<'EOF'
+          #!/usr/bin/env bash
+          table="$RUNNER_TEMP/timings.tsv"
+          last="$RUNNER_TEMP/clock.last"
+          snap() { echo "$(date +%s.%N) $(awk '$1 == "cpu" { print $2 + $3 + $4 + $7 + $8, $9 }' /proc/stat)"; }
+          record() {
+            read -r t0 b0 s0 <<< "$2"; read -r t1 b1 s1 <<< "$3"
+            awk -v p="$1" -v c="$4" -v t0="$t0" -v t1="$t1" -v b="$((b1 - b0))" -v s="$((s1 - s0))" -v hz="$(getconf CLK_TCK)" \
+              'BEGIN { e = t1 - t0; printf "%s\t%.1f\t%s\t%.0f\t%.1f\t%.0f\n", p, e, c, b / hz, (e > 0 ? b / hz / e : 0), s / hz }' >> "$table"
+          }
+          case "$1" in
+            start)
+              snap > "$last"
+              # Lowest MemAvailable seen, sampled every 2 s until the runner reaps the job's processes.
+              nohup bash -c 'while :; do awk "/^MemAvailable:/ { print \$2 }" /proc/meminfo; sleep 2; done' > "$RUNNER_TEMP/mem.log" 2>/dev/null &
+              ;;
+            mark) now=$(snap); record "$2" "$(cat "$last")" "$now" 0; echo "$now" > "$last" ;;
+            run)
+              phase=$2; shift 2
+              start=$(snap); "$@"; code=$?; end=$(snap)
+              record "$phase" "$start" "$end" "$code"; echo "$end" > "$last" ;;
+          esac
+          exit 0
+          EOF
+          chmod +x "$RUNNER_TEMP/clock"
+          "$RUNNER_TEMP/clock" start
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No Actions cache is restored or saved: every leg installs from the registry, so the legs
+      # compare the machines and no leg reads or writes state another job shares.
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+          install: "false"
+
+      - name: Mark checkout and Bun
+        run: '"$RUNNER_TEMP/clock" mark "checkout + bun"'
+
+      - name: Install dependencies
+        run: '"$RUNNER_TEMP/clock" run install bun install --frozen-lockfile'
+
+      # The release-script tests import the staged packages under Node 24, and the Aztec CLI runs on it.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.workload != 'smoke-chrome'
+        with:
+          node-version: 24
+
+      # pr-quick's lint-and-typecheck and unit-tests jobs, one after the other, then its two builds.
+      - name: Quality (typecheck, lint, unit and component tests, builds)
+        if: matrix.workload == 'quality'
+        run: |
+          "$RUNNER_TEMP/clock" run typecheck bun run typecheck:all
+          "$RUNNER_TEMP/clock" run lint bun run lint
+          "$RUNNER_TEMP/clock" run unit bun run test:all
+          "$RUNNER_TEMP/clock" run test-release bun run test:release
+          "$RUNNER_TEMP/clock" run test-ci-gating bun run test:ci-gating
+          "$RUNNER_TEMP/clock" run build-chrome bun run --cwd apps/extension build:chrome
+          "$RUNNER_TEMP/clock" run build-firefox bun run --cwd apps/extension build:firefox
+
+      # The smoke lane's source build and shard 2/3, its slowest Chrome shard; the token-seed source
+      # is armed with no key so no profile reaches a remote node.
+      - name: Smoke e2e (Chrome, shard 2/3)
+        if: matrix.workload == 'smoke-chrome'
+        env:
+          NULO_E2E_BROWSER: chrome
+          NULO_E2E_MIGRATION_FIXTURE: "1"
+          NULO_E2E_CSP_REPORT: "1"
+          NULO_E2E_EXECUTE_FIXTURE: "1"
+          NULO_E2E_INTERCEPT_LOG: "1"
+        run: |
+          VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
+            VITE_NULO_E2E_CSP_REPORT=1 VITE_NULO_E2E_EXECUTE_FIXTURE=1 \
+            "$RUNNER_TEMP/clock" run smoke-build bun run --cwd apps/extension build:chrome
+          "$RUNNER_TEMP/clock" run smoke-tests bun run --cwd apps/extension test:e2e --shard=2/3
+
+      # setup-aztec's steps without its cache: the pinned installer, then the toolchain checks.
+      - name: Install the Aztec toolchain
+        if: startsWith(matrix.workload, 'network-')
+        run: |
+          AZTEC_VERSION=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('apps/extension/package.json','utf8')).dependencies['@aztec-labs/aztec.js'])")
+          export AZTEC_VERSION
+          "$RUNNER_TEMP/clock" run aztec-install bash .github/actions/setup-aztec/install.sh
+          BIN="$HOME/.aztec/versions/$AZTEC_VERSION/internal-bin"
+          "$BIN/forge" --version
+          "$BIN/anvil" --version
+          echo "$HOME/.aztec/versions/$AZTEC_VERSION/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.aztec/versions/$AZTEC_VERSION/node_modules/.bin" >> "$GITHUB_PATH"
+          ln -sfn "$HOME/.aztec/versions/$AZTEC_VERSION" "$HOME/.aztec/current"
+
+      # setup-geckodriver's checks without its cache, at its pins: the tarball's SHA-256, a single
+      # regular member, then the binary's SHA-256. The suite's pinned Firefox, as setup-puppeteer
+      # installs it.
+      - name: Install geckodriver and Firefox
+        if: matrix.workload == 'network-firefox'
+        env:
+          VER: "0.37.1"
+          TARBALL_SHA256: e815130ea95983e162ae91843b48d3a3ce991735635fce83a647afde21e09f7e
+          BINARY_SHA256: f831b7e61454804e8a307edd951bf8a5f373efe3f718e75454a6485a51f6e39f
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/geckodriver-bin"
+          tarball="$RUNNER_TEMP/geckodriver.tar.gz"
+          mkdir -p "$dir"
+          curl -sSfL "https://github.com/mozilla/geckodriver/releases/download/v${VER}/geckodriver-v${VER}-linux64.tar.gz" -o "$tarball"
+          echo "$TARBALL_SHA256  $tarball" | sha256sum -c -
+          if [ "$(tar -tvf "$tarball" | wc -l)" -ne 1 ] || [ "$(tar -tvf "$tarball" | cut -c1)" != "-" ] || [ "$(tar -tzf "$tarball")" != geckodriver ]; then
+            echo "::error::the geckodriver tarball must hold exactly one regular file named geckodriver"
+            exit 1
+          fi
+          tar -xzf "$tarball" -C "$dir" geckodriver
+          echo "$BINARY_SHA256  $dir/geckodriver" | sha256sum -c -
+          chmod +x "$dir/geckodriver"
+          echo "GECKODRIVER=$dir/geckodriver" >> "$GITHUB_ENV"
+          echo "$dir" >> "$GITHUB_PATH"
+          (cd apps/extension && "$RUNNER_TEMP/clock" run firefox-install bun scripts/e2e/install-firefox.ts)
+
+      # The network lane's pool shard 2/5, its slowest on both browsers, on the proverless build with
+      # no Presto and no secret: anvil, the Aztec node and the playground run on the runner's loopback.
+      - name: Network e2e (proverless pool shard 2/5)
+        if: startsWith(matrix.workload, 'network-')
+        env:
+          NULO_E2E_BROWSER: ${{ matrix.workload == 'network-firefox' && 'firefox' || 'chrome' }}
+          NULO_E2E_PROVERLESS: "1"
+          NULO_E2E_RETRY: "0"
+          VITE_NULO_FEE_MULTIPLIER: "10"
+          # The lane's dedicated jobs' files, which its pool excludes.
+          EXCLUDES: >-
+            fee-methods selfpay-phase concurrent-sendtx-confirm transfers tx-sendTx-default
+            frozen-account-canary passkey-execution-canary delete-after-prove
+            same-token-concurrent-sends send-chaos snack-placement failed-send-check
+        run: |
+          args=()
+          for f in $EXCLUDES; do args+=(--exclude "tests/e2e/network/$f.test.ts"); done
+          "$RUNNER_TEMP/clock" run network-agent bun run e2e:agent --shard=2/5 "${args[@]}" > >(tee "$RUNNER_TEMP/agent.log") 2>&1
+          wait "$!"
+          vitest=$(sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/agent.log" | awk '$1 == "Duration" { sub(/s$/, "", $2); print $2 }' | tail -1)
+          if [ -n "$vitest" ]; then printf 'network-tests (vitest, inside the agent)\t%s\t-\t\t\t\n' "$vitest" >> "$RUNNER_TEMP/timings.tsv"; fi
+
+      - name: Report
+        if: always()
+        env:
+          RUNNER_LABEL: ${{ matrix.runner }}
+          WORKLOAD: ${{ matrix.workload }}
+          REP: ${{ matrix.rep }}
+        run: |
+          table="$RUNNER_TEMP/timings.tsv"
+          touch "$table"
+          total_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+          min_kb=$(sort -n "$RUNNER_TEMP/mem.log" 2>/dev/null | head -1)
+          peak_gb=$(awk -v t="$total_kb" -v m="${min_kb:-$total_kb}" 'BEGIN { printf "%.1f", (t - m) / 1048576 }')
+          machine="nproc $(nproc) · $(lscpu | sed -n 's/^Model name: *//p' | head -1) · RAM $(free -g | awk '/^Mem:/ { print $2 }') GB · swap $(free -g | awk '/^Swap:/ { print $2 }') GB · peak memory in use ${peak_gb} GB"
+          {
+            echo "### $WORKLOAD on $RUNNER_LABEL (rep $REP)"
+            echo
+            echo "$machine"
+            echo
+            echo "| phase | seconds | exit | CPU seconds | busy cores | steal seconds |"
+            echo "|---|---:|---:|---:|---:|---:|"
+            awk -F'\t' '{ printf "| %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6 }' "$table"
+          } >> "$GITHUB_STEP_SUMMARY"
+          { printf 'runner\t%s\nworkload\t%s\nrep\t%s\nmachine\t%s\n' "$RUNNER_LABEL" "$WORKLOAD" "$REP" "$machine"; cat "$table"; } > "$RUNNER_TEMP/timings-out.tsv"
+          if awk -F'\t' '$3 != "0" && $3 != "-" { bad = 1 } END { exit !bad }' "$table"; then
+            echo "::error::a timed phase failed; its exit code is in the table above"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: timings-${{ matrix.workload }}-${{ matrix.runner }}-${{ matrix.rep }}
+          path: ${{ runner.temp }}/timings-out.tsv
+          retention-days: 14
+          if-no-files-found: ignore
