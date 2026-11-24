@@ -172,14 +172,17 @@ No trust boundary, data, permission, dependency or wire format changes: styleshe
    - The execute window (execute fixture) with its send summary.
    - An endpoint list; the import-contacts popup with a changed contact; the authwits page and its revoke and registry popups (both render `FeeSettingsCard`), with `FeeMethodSelector`'s menu open while its rows are checking (`FeeMethodSelector.vue:76`), by holding the method check. Its trigger's pending branch (`:48-51`) renders on no screen (Arc 1 review).
    - Controls with no changed rule: Holdings, a received detail, the lock screen.
+
+   As run: smoke cannot open the review, since its estimate never lands on the stand-in node. The review's failed and slow lines, the form's and the fee sheet's slow lines, the fee sheet's checking payers, the authwit menus' checking rows and Home's awaiting card are read in the network run (step 4). [lessons/phase-1.md](lessons/phase-1.md) says how each state is reached.
 4. Seed and open, in one scratch network proof run per browser and build, reusing the specs' own setups:
    - the verify window (`connect-check-window`'s connect);
    - the fee window's raised card (`tx-sendTx-default`'s approval ceiling);
-   - the execute window's failed authorization preview (`execute-op-authwits-preview-retry`): the private sponsored NO_FROM request of `tx-sendTx-noFrom` (proverless). Let setup and admission finish, then fail the preview's node request, recorded by method. Capture only when the retry node is present and the refusal surface is absent.
+   - the execute window's failed authorization preview (`execute-op-authwits-preview-retry`): the private sponsored NO_FROM request of `tx-sendTx-noFrom` (proverless). Let setup and admission finish, then fail the preview's node request, recorded by method. Capture only when the retry node is present and the refusal surface is absent. As run, refusing the witness read alone did not fail it, so every node call is refused from the gate's release.
+   - As run, the states step 3 could not reach: Send's fee sheet with its payers checking; a queued send's review, waiting, slow, then failed; the form's and the fee sheet's slow lines; Home's awaiting card; the authwit popups' menu rows checking.
    - Keep the scratch spec outside the repo except for the run; never stage it.
 5. On each state, dump every element's full computed style, `::before` and `::after` included, in light and dark, at 360 and 320 px. Hover every pointer element and tab through every focus stop. Screenshot the screen. Visit the screens in two orders on fresh popups.
 6. A state none of steps 3-4 reaches stops the arc: name it and return it to the panel. A probe is diagnostic only.
-7. Compare base to head per browser: identical sorted declarations and zero unexplained pixels. A glyph-fringe pixel passes only with its location and channel delta matching a same-build rerun's. Write frames and `manifest.json` under `~/.cache/nulo-backlog/css-recipes-home-1/frames/`.
+7. Compare base to head per browser: identical sorted declarations and zero unexplained pixels. A glyph-fringe pixel passes only with its location and channel delta matching a same-build rerun's. As run, the reruns are the same state in either visit order on any run of that build. Write frames and `manifest.json` under `~/.cache/nulo-backlog/css-recipes-home-1/frames/`.
 8. Run the affected e2e at retry 0 on Chrome and on Firefox:
    - smoke: `send-keyboard`, `send-fee-privacy`, `send-outcome-rows`, `type-roles`, `execute-steps`, `home-links`, `rows`, `navigation`, `endpoints`, `contacts-import`;
    - network, one `e2e:agent` run per browser: `fee-methods`, `fiat-send`, `snack-placement`, `home-cap`, `endpoint-order`, `connect-check-window`, `tx-sendTx-default`, `authwit-lifecycle`, `type-roles-windows`.
