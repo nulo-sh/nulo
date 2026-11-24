@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 import type { Token } from "@/wallet/services/token/spec"
 import { getTokenInfo } from "@/wallet/services/token/utils"
-import { isValidDecimals, knownDecimals, parseRawBalance, safeFiatOf } from "./token-amount"
+import { MAX_DECIMALS, isValidDecimals, knownDecimals, parseRawBalance, safeFiatOf } from "./token-amount"
 
 describe("parseRawBalance", () => {
 	test("sums both sides; an absent side is zero", () => {
@@ -20,10 +20,13 @@ describe("parseRawBalance", () => {
 })
 
 describe("isValidDecimals", () => {
-	test("integers 0..18 only, the bound a token is added under", () => {
+	test("integers 0..MAX_DECIMALS only, the bound a token is added and read under", () => {
+		expect(MAX_DECIMALS).toBe(77)
 		expect(isValidDecimals(0)).toBe(true)
 		expect(isValidDecimals(18)).toBe(true)
-		expect(isValidDecimals(19)).toBe(false)
+		expect(isValidDecimals(24)).toBe(true)
+		expect(isValidDecimals(77)).toBe(true)
+		expect(isValidDecimals(78)).toBe(false)
 		expect(isValidDecimals(-1)).toBe(false)
 		expect(isValidDecimals(1.5)).toBe(false)
 		expect(isValidDecimals("18")).toBe(false)

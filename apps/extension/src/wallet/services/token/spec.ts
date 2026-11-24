@@ -6,15 +6,6 @@ import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const TOKEN_SERVICE_NAME = "token"
 
-/** The most decimals a token may have, as the signed token list allows: every amount the wallet pads,
- *  exponentiates or prints for a token stays cheap under it. A token outside it is one the wallet
- *  cannot use. */
-export const DECIMALS_MAX = 18
-
-export function isValidDecimals(d: unknown): d is number {
-	return typeof d === "number" && Number.isInteger(d) && d >= 0 && d <= DECIMALS_MAX
-}
-
 /** EntityStorage root for token rows (keyed by `String(token.id)`). Frozen:
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const TOKEN_STORAGE_ROOT = "nulo:core:tokens"

@@ -4,16 +4,16 @@ import { isAmountAboveDustThreshold, usdThresholdToMicro } from "./incoming-dust
 describe("isAmountAboveDustThreshold hardening", () => {
 	const threshold = usdThresholdToMicro(0.01)
 
-	test("invalid decimals (negative, fractional, above 18) → fail OPEN without computing", () => {
-		for (const decimals of [-1, 1.5, 19, 10_000, Number.NaN]) {
+	test("invalid decimals (negative, fractional, above 77) → fail OPEN without computing", () => {
+		for (const decimals of [-1, 1.5, 78, 10_000, Number.NaN]) {
 			expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals, usdRate: 2, thresholdMicro: threshold }), String(decimals)).toBe(
 				true,
 			)
 		}
 	})
 
-	test("decimals 18 (the bound) still evaluates", () => {
-		expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals: 18, usdRate: 2, thresholdMicro: threshold })).toBe(false)
+	test("decimals 77 (the ceiling) still evaluates", () => {
+		expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals: 77, usdRate: 2, thresholdMicro: threshold })).toBe(false)
 	})
 
 	test("a huge threshold from a bounded config still converts without overflow", () => {

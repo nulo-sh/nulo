@@ -75,6 +75,7 @@ declare global {
   const MAX_BACKUP_FILE_BYTES: typeof import('../utils/full-backup-helpers').MAX_BACKUP_FILE_BYTES
   const MAX_CONTACT_IMPORT_BYTES: typeof import('../utils/contacts-export-format').MAX_CONTACT_IMPORT_BYTES
   const MAX_CONTACT_IMPORT_ROWS: typeof import('../utils/contacts-export-format').MAX_CONTACT_IMPORT_ROWS
+  const MAX_DECIMALS: typeof import('../utils/token-amount').MAX_DECIMALS
   const MAX_PASSWORD_LENGTH: typeof import('../utils/password').MAX_PASSWORD_LENGTH
   const MINT_SIGNATURES: typeof import('../utils/token-transfer-vocabulary').MINT_SIGNATURES
   const MIN_NEW_PASSWORD_LENGTH: typeof import('../utils/password').MIN_NEW_PASSWORD_LENGTH
@@ -1093,6 +1094,7 @@ declare module 'vue' {
     readonly MAX_BACKUP_FILE_BYTES: UnwrapRef<typeof import('../utils/full-backup-helpers')['MAX_BACKUP_FILE_BYTES']>
     readonly MAX_CONTACT_IMPORT_BYTES: UnwrapRef<typeof import('../utils/contacts-export-format')['MAX_CONTACT_IMPORT_BYTES']>
     readonly MAX_CONTACT_IMPORT_ROWS: UnwrapRef<typeof import('../utils/contacts-export-format')['MAX_CONTACT_IMPORT_ROWS']>
+    readonly MAX_DECIMALS: UnwrapRef<typeof import('../utils/token-amount')['MAX_DECIMALS']>
     readonly MAX_PASSWORD_LENGTH: UnwrapRef<typeof import('../utils/password')['MAX_PASSWORD_LENGTH']>
     readonly MINT_SIGNATURES: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['MINT_SIGNATURES']>
     readonly MIN_NEW_PASSWORD_LENGTH: UnwrapRef<typeof import('../utils/password')['MIN_NEW_PASSWORD_LENGTH']>

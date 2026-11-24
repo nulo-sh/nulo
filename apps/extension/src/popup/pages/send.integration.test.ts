@@ -1468,7 +1468,7 @@ describe("send page — Same as last time, over the real amount card", () => {
 		w.unmount()
 	})
 
-	test.each([19, 1_000_000_000])(
+	test.each([78, 1_000_000_000])(
 		"a last send of a token with %i decimals, which the wallet cannot use, is told and offered with no amount",
 		async (decimals) => {
 			const BIG = { ...OTHER, decimals }

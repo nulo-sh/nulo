@@ -223,7 +223,7 @@ describe("rawRows, tokenAt, amountLabel, valueText, valueTitle", () => {
 		expect(amountLabel([USDC], 2, TOKEN, "5000000")).toEqual({ text: "5000000" })
 		expect(amountLabel(undefined, 1, TOKEN, "7")).toEqual({ text: "7" })
 		expect(amountLabel([{ ...USDC, symbol: BEL }], 1, TOKEN, "5000000")).toEqual({ text: "5000000" })
-		expect(amountLabel([{ ...USDC, decimals: 19 }], 1, TOKEN, "5000000")).toEqual({ text: "5000000" })
+		expect(amountLabel([{ ...USDC, decimals: 78 }], 1, TOKEN, "5000000")).toEqual({ text: "5000000" })
 	})
 
 	test("a scalar reads on one row, trimmed, and whole in the title when trimmed", () => {

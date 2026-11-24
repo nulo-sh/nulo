@@ -76,7 +76,7 @@ describe("send-amount/validateSendAmount", () => {
 		})
 	})
 
-	test.each([19, 1_000_000_000, -1, 1.5])("returns decimalsUnknown for decimals the wallet cannot use (%s)", (decimals) => {
+	test.each([78, 1_000_000_000, -1, 1.5])("returns decimalsUnknown for decimals the wallet cannot use (%s)", (decimals) => {
 		expect(validateSendAmount({ input: "1.5", tokenDecimals: decimals, balanceRaw: balance() })).toEqual({
 			valid: false,
 			reason: "decimalsUnknown",
@@ -84,9 +84,9 @@ describe("send-amount/validateSendAmount", () => {
 	})
 
 	test("takes an amount at the decimals bound", () => {
-		expect(validateSendAmount({ input: "1.5", tokenDecimals: 18, balanceRaw: 10n ** 19n })).toEqual({
+		expect(validateSendAmount({ input: "1.5", tokenDecimals: 77, balanceRaw: 10n ** 78n })).toEqual({
 			valid: true,
-			integerized: 1_500_000_000_000_000_000n,
+			integerized: 15n * 10n ** 76n,
 		})
 	})
 

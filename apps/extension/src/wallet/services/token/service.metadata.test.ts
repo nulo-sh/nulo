@@ -182,12 +182,12 @@ describe("TokenService metadata read", () => {
 
 	test("decimals past the bound fail the read before anything uses them; the bound itself is read", async () => {
 		const fetch = await makeFetch()
-		for (const decimals of [19n, 1_000_000_000n, 2n ** 60n]) {
+		for (const decimals of [78n, 1_000_000_000n, 2n ** 60n]) {
 			batched.mockResolvedValueOnce({ encoded: [compressed("Big"), compressed("BIG"), [new Fr(decimals)]], decoded: [] })
 			await expect(fetch("p1", NETWORK.id, ACCOUNT.address, ti(PUBLIC))).rejects.toBeInstanceOf(TokenDecimalsOutOfRangeError)
 		}
-		batched.mockResolvedValueOnce({ encoded: [compressed("Big"), compressed("BIG"), [new Fr(18n)]], decoded: [] })
-		expect(await fetch("p1", NETWORK.id, ACCOUNT.address, ti(PUBLIC))).toEqual(["Big", "BIG", 18])
+		batched.mockResolvedValueOnce({ encoded: [compressed("Big"), compressed("BIG"), [new Fr(77n)]], decoded: [] })
+		expect(await fetch("p1", NETWORK.id, ACCOUNT.address, ti(PUBLIC))).toEqual(["Big", "BIG", 77])
 	})
 
 	test("a failed read propagates — no partial metadata", async () => {

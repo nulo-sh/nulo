@@ -6,7 +6,8 @@ import { createSerialQueue, isRecord } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
 import type { DefaultTokenSeed } from "./default-tokens"
 import type { SeedScope, SeedStatus, SeedStatusEntry, SeedStatusSnapshot, TokenInterface } from "./spec"
-import { DECIMALS_MAX, TOKEN_SERVICE_NAME } from "./spec"
+import { TOKEN_SERVICE_NAME } from "./spec"
+import { isValidDecimals } from "@/utils/token-amount"
 
 const LOG_SOURCE = TOKEN_SERVICE_NAME
 
@@ -675,7 +676,7 @@ export class TokenSeeder {
 		if (preview.decimals !== seed.expectedDecimals) return false
 		if (preview.name.length === 0 || preview.name.length > NAME_MAX_LENGTH) return false
 		if (preview.symbol.length > SYMBOL_MAX_LENGTH) return false
-		if (!Number.isInteger(preview.decimals) || preview.decimals < 0 || preview.decimals > DECIMALS_MAX) return false
+		if (!isValidDecimals(preview.decimals)) return false
 		return true
 	}
 

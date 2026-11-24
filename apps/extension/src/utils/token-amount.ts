@@ -5,12 +5,17 @@
  * aggregation, the row itself) reads through these helpers.
  */
 
-import { isValidDecimals } from "@/wallet/services/token/spec"
-
-export { isValidDecimals }
+/** The most decimals a token may have, wherever a token arrives or a number is derived from it:
+ *  `10n ** BigInt(decimals)` and every pad stay cheap under it. A token past it is one the wallet
+ *  cannot use. */
+export const MAX_DECIMALS = 77
 
 type BalanceLike = { publicBalance?: string; privateBalance?: string }
 type TokenLike = { token?: { decimals?: unknown } }
+
+export function isValidDecimals(d: unknown): d is number {
+	return typeof d === "number" && Number.isInteger(d) && d >= 0 && d <= MAX_DECIMALS
+}
 
 /**
  * A token's decimals when the wallet knows them, else null. A token without a decimals getter is
@@ -35,7 +40,7 @@ export function parseRawBalance(tb: BalanceLike): bigint | undefined {
 	return pub + priv
 }
 
-/** A row whose numbers cannot be trusted: a malformed side or a `decimals` outside 0..`DECIMALS_MAX`. */
+/** A row whose numbers cannot be trusted: a malformed side or a `decimals` outside 0..`MAX_DECIMALS`. */
 export function isUnknownRow(tb: BalanceLike & TokenLike): boolean {
 	return isUnknownParsedRow(parseRawBalance(tb), tb)
 }

@@ -376,7 +376,7 @@ describe("TransactionCard fiat (D2 activity rows)", () => {
 
 	test.each([
 		["unknown decimals: no figure and no fiat", 0, false, { amount: "", fiat: false }],
-		["decimals past the bound: no figure and no fiat", 19, true, { amount: "", fiat: false }],
+		["decimals past the bound: no figure and no fiat", 78, true, { amount: "", fiat: false }],
 		["known decimals (control): the figure and its fiat", 6, true, { amount: "125", fiat: true }],
 	])("a priced transfer of a listed token with %s; the title keeps the symbol", async (_label, decimals, hasDecimals, want) => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }

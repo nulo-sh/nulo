@@ -4,6 +4,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { ContractNotFoundError, TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
+import { isValidDecimals } from "@/utils/token-amount"
 import { normalizeError } from "@nulo/wallet-core/jobs"
 import type { ILogger } from "@/wallet/logger"
 import type { NetworkService } from "@/wallet/services/network/service"
@@ -53,7 +54,6 @@ import {
 	TOKEN_SERVICE_NAME,
 	TokenSchema,
 	decodeTokenIdHighWater,
-	isValidDecimals,
 	type TokenInterface,
 	type Methods,
 	type Events,

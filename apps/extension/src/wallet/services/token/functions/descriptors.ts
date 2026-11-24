@@ -2,7 +2,7 @@
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { type AbiType, type FunctionAbi, FunctionType, getFunctionReturnType, type StructType } from "@aztec-labs/stdlib/abi"
 import { TokenDecimalsOutOfRangeError } from "@nulo/extension-messaging/errors"
-import { DECIMALS_MAX } from "../spec"
+import { MAX_DECIMALS } from "@/utils/token-amount"
 import type { TokenFnDescriptor, TokenFnKind } from "./types"
 
 /**
@@ -12,7 +12,7 @@ import type { TokenFnDescriptor, TokenFnKind } from "./types"
  * by `token-functions.characterization.test.ts`.
  *
  * Two deliberate divergences from the verbatim pin: the decimals decode refuses a value past
- * `DECIMALS_MAX`, and struct-path matching is crate-prefix tolerant (`matchesStructPath`). Noir namespaces ABI struct paths by the artifact's import
+ * `MAX_DECIMALS`, and struct-path matching is crate-prefix tolerant (`matchesStructPath`). Noir namespaces ABI struct paths by the artifact's import
  * chain, so the same AztecAddress param arrives as `aztec::protocol_types::...::AztecAddress`
  * from one compile and `authorization_contract::aztec::protocol_types::...::AztecAddress`
  * from another (observed in `@aztec-foundation/aztec-standards@5.0.1`). Exact matching made
@@ -215,7 +215,7 @@ export const getSymbolDescriptor: TokenFnDescriptor = metadataDescriptor({
 	unpackResult: decodeUtf8,
 })
 
-/** getDecimals — from get-decimals.ts (integer/unsigned/width 8 return, at most `DECIMALS_MAX`). */
+/** getDecimals — from get-decimals.ts (integer/unsigned/width 8 return, at most `MAX_DECIMALS`). */
 export const getDecimalsDescriptor: TokenFnDescriptor = metadataDescriptor({
 	kind: "getDecimals",
 	invalidImplMessage: "Invalid GetDecimalsImpl",
@@ -228,7 +228,7 @@ export const getDecimalsDescriptor: TokenFnDescriptor = metadataDescriptor({
 	// The ABI says u8, but the value is whatever the contract's code, or the node simulating it, returns.
 	unpackResult: (result) => {
 		const decimals = result[0].toBigInt()
-		if (decimals > BigInt(DECIMALS_MAX)) throw new TokenDecimalsOutOfRangeError()
+		if (decimals > BigInt(MAX_DECIMALS)) throw new TokenDecimalsOutOfRangeError()
 		return Number(decimals)
 	},
 })

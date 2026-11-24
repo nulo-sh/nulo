@@ -164,7 +164,7 @@ describe("TokenSeeder — trust boundary (hard skips)", () => {
 
 	test("metadata bounds: out-of-range decimals and empty name are rejected", async () => {
 		for (const bad of [
-			{ ...goodPreview(), decimals: 19 },
+			{ ...goodPreview(), decimals: 78 },
 			{ ...goodPreview(), decimals: -1 },
 			{ ...goodPreview(), name: "" },
 		]) {

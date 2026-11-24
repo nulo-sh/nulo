@@ -133,7 +133,7 @@ describe("useTokenImport", () => {
 		tokenService.addToken.mockRejectedValueOnce(new TokenDecimalsOutOfRangeError())
 		expect(await importer.importToken(CONTRACT)).toEqual({
 			kind: "refused",
-			message: "This token has more than 18 decimals. Nulo supports up to 18.",
+			message: "This token has more than 77 decimals. Nulo supports up to 77.",
 			inScope: true,
 		})
 		expect(openToast).not.toHaveBeenCalled()

@@ -374,7 +374,7 @@ describe("TokenService.restore — per-row allocation", () => {
 			decimals,
 		})
 
-		const restored = await tokenService.restore([mk("0xaaa", 19), mk("0xbbb", 1_000_000_000), mk("0xccc", 18)])
+		const restored = await tokenService.restore([mk("0xaaa", 78), mk("0xbbb", 1_000_000_000), mk("0xccc", 77)])
 
 		expect(restored.map((r) => r.restoreError)).toEqual([
 			"token decimals outside the supported range",

@@ -177,7 +177,7 @@ describe("composite/AmountCard", () => {
 		expect(field.getAttribute("aria-labelledby")).toBe(max.parentElement?.querySelector("span")?.id)
 	})
 
-	test.each([19, 1_000_000_000])(
+	test.each([78, 1_000_000_000])(
 		"a stored token with %i decimals derives no amount: no rate, no USD mode, Max fills nothing, and nothing throws",
 		async (decimals) => {
 			const w = mountCard({
