@@ -2,6 +2,7 @@
 <script setup>
 /** Utils */
 import { onMounted } from "vue"
+import { isAddressShapedName } from "@/utils/contact-name"
 import { managers } from "@/utils/core"
 import { endsSelection } from "@/utils/selection"
 import { trimAddress } from "@/utils/string"
@@ -67,7 +68,8 @@ const handleClick = (e) => {
 onMounted(async () => {
 	if (props.address) {
 		const contact = await managers.contact.getContactByAddress(props.address)
-		if (contact?.name) {
+		// A contact name that reads as an address is never printed for one.
+		if (contact?.name && !isAddressShapedName(contact.name)) {
 			contactName.value = `@${contact.name}`
 			showName.value = true
 		} else {

@@ -11,6 +11,7 @@ declare global {
   const ACCOUNT_FILE_NOT_BACKUP: typeof import('../composables/full-backup-selection').ACCOUNT_FILE_NOT_BACKUP
   const ACTIVITY_FEED_KINDS: typeof import('../utils/journal-state').ACTIVITY_FEED_KINDS
   const ADDED_COALESCE: typeof import('../utils/coalesce').ADDED_COALESCE
+  const ADDRESS_LIKE_NAME: typeof import('../utils/contact-rules').ADDRESS_LIKE_NAME
   const ALREADY_ADDED: typeof import('../utils/entity-rules').ALREADY_ADDED
   const ALREADY_EXISTS: typeof import('../utils/entity-rules').ALREADY_EXISTS
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
@@ -299,6 +300,7 @@ declare global {
   const isActivating: typeof import('../composables/useProfileBootstrap').isActivating
   const isActivatingOtherThan: typeof import('../composables/useProfileBootstrap').isActivatingOtherThan
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
+  const isAddressShapedName: typeof import('../utils/contact-name').isAddressShapedName
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isAnyActivating: typeof import('../composables/useProfileBootstrap').isAnyActivating
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
@@ -1037,6 +1039,7 @@ declare module 'vue' {
     readonly ACCOUNT_FILE_NOT_BACKUP: UnwrapRef<typeof import('../composables/full-backup-selection')['ACCOUNT_FILE_NOT_BACKUP']>
     readonly ACTIVITY_FEED_KINDS: UnwrapRef<typeof import('../utils/journal-state')['ACTIVITY_FEED_KINDS']>
     readonly ADDED_COALESCE: UnwrapRef<typeof import('../utils/coalesce')['ADDED_COALESCE']>
+    readonly ADDRESS_LIKE_NAME: UnwrapRef<typeof import('../utils/contact-rules')['ADDRESS_LIKE_NAME']>
     readonly ALREADY_ADDED: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_ADDED']>
     readonly ALREADY_EXISTS: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_EXISTS']>
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
@@ -1325,6 +1328,7 @@ declare module 'vue' {
     readonly isActivating: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivating']>
     readonly isActivatingOtherThan: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivatingOtherThan']>
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
+    readonly isAddressShapedName: UnwrapRef<typeof import('../utils/contact-name')['isAddressShapedName']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isAnyActivating: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isAnyActivating']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>

@@ -8,13 +8,16 @@ type RecipientCandidate = { name?: string; address?: string; abbr?: string }
  * push one past the suggestions' cap; initials stay in place, since distinct contacts share them.
  * Each group keeps the given order. Names and initials compare by `contactNameKey`, so case,
  * spacing, compatibility forms and invisible characters never hide one; a query whose key is empty
- * suggests no one by name. Addresses ignore hex case only: contacts are stored lowercase, but a user
- * may re-paste the mixed-case string they first typed.
+ * suggests no one by name. A query written like an address (its key starts `0x` and a hex digit)
+ * matches only an address equal to it: no name or initials answer the characters of an address.
+ * Addresses ignore hex case only: contacts are stored lowercase, but a user may re-paste the
+ * mixed-case string they first typed.
  */
 export function matchRecipients<T extends RecipientCandidate>(candidates: readonly T[], term: string): T[] {
 	if (!term) return []
 	const address = term.toLowerCase()
-	const key = contactNameKey(term)
+	const typedKey = contactNameKey(term)
+	const key = /^0x[0-9a-f]/.test(typedKey) ? "" : typedKey
 	const whole: T[] = []
 	const rest: T[] = []
 	for (const c of candidates) {

@@ -1,7 +1,7 @@
 /**
  * The one definition of a contact name, for the contact form, contacts import, backup restore and
- * the contact service alike: how a name is stored, when two names are the same, and when a name
- * holds nothing to store.
+ * the contact service alike: how a name is stored, when two names are the same, when a name holds
+ * nothing to store, and when it reads as an address.
  */
 import { sanitizeString } from "@/utils/string"
 
@@ -61,6 +61,44 @@ function foldCase(s: string): string {
  */
 export function contactNameKey(name: string): string {
 	return foldCase(name.replace(INVISIBLE, "").normalize("NFKC")).replace(WHITESPACE_RUN, " ").trim()
+}
+
+/** Letters drawn like `0`, `x` or a hex letter, lower case: Latin `o`, then Cyrillic and Greek. */
+const HEX_LOOKALIKE: Readonly<Record<string, string>> = {
+	o: "0",
+	а: "a",
+	в: "b",
+	с: "c",
+	ԁ: "d",
+	е: "e",
+	о: "0",
+	х: "x",
+	α: "a",
+	β: "b",
+	ϲ: "c",
+	ε: "e",
+	ο: "0",
+	χ: "x",
+}
+const COMBINING_MARK = /\p{M}/gu
+const unlookalike = (s: string): string => Array.from(s, (c) => HEX_LOOKALIKE[c] ?? c).join("")
+
+/** Both passes are needed: NFKD turns `ϲ` into `ς` and a mathematical capital into a Latin one, so
+ *  the table runs before it, and case and the table again after it. */
+function foldToHexForm(name: string): string {
+	return unlookalike(unlookalike(name.toLowerCase()).normalize("NFKD").replace(COMBINING_MARK, "").toLowerCase())
+}
+
+/**
+ * Whether a stored name reads as an address: once look-alike letters, compatibility forms and marks
+ * are folded, it holds `0x` and four hex digits, or two hex runs joined by two or more dots, a run
+ * being three hex digits or `0x` and one to three. Such a name is never stored from a person or a
+ * contacts file, and one already stored is never printed in place of its address. Fixed-width runs keep the
+ * match linear on any input.
+ */
+export function isAddressShapedName(name: string): boolean {
+	const folded = foldToHexForm(name)
+	return /0x[0-9a-f]{4}/.test(folded) || /(?:[0-9a-f]{3}|0x[0-9a-f]{1,3})\.{2,}[0-9a-f]{3}/.test(folded)
 }
 
 /** Whether two names are the same contact name: the equality every duplicate check uses. */

@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest"
-import { canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError, sameContactAddress } from "./contact-rules"
+import {
+	ADDRESS_LIKE_NAME,
+	canSubmitContact,
+	canonicalContactAddress,
+	contactAddressError,
+	contactNameError,
+	sameContactAddress,
+} from "./contact-rules"
 import { ALREADY_EXISTS } from "./entity-rules"
 
 const A = `0x${"ab".repeat(32)}`
@@ -34,6 +41,16 @@ describe("the contact form's admission", () => {
 
 	test("a saved name in another case and spacing is a duplicate", () => {
 		expect(contactNameError("  alice   SMITH ", saved)).toBe(ALREADY_EXISTS)
+	})
+
+	test("a name that reads as an address is refused before any duplicate check, and the form cannot save it", () => {
+		expect(ADDRESS_LIKE_NAME).toBe("A name can't look like an address. Use a word, like Ana.")
+		expect(contactNameError("0x0c2b7e..4b5c", saved)).toBe(ADDRESS_LIKE_NAME)
+		// The edited row's own stored name is judged too: an address-only edit keeps it.
+		const legacy = { value: [{ id: "c1", name: "0x0c2b..4b5c", address: VALID }] }
+		expect(contactNameError("0x0c2b..4b5c", legacy, isC1)).toBe(ADDRESS_LIKE_NAME)
+		expect(canSubmitContact(form({ name: "0x0c2b7e..4b5c", nameError: ADDRESS_LIKE_NAME }))).toBe(false)
+		expect(contactNameError("Ana", saved)).toBeNull()
 	})
 
 	test("an address that is not an Aztec address is invalid", () => {

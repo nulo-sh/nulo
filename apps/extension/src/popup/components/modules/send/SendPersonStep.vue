@@ -56,7 +56,7 @@ function onEnter(e: KeyboardEvent) {
 					<AccountAvatar :name="r.name ?? undefined" :address="r.address" :size="28" aria-hidden="true" />
 					<span :class="$style.who">
 						<span v-if="r.name" :class="$style.name">{{ r.name }}</span>
-						<span v-else :class="$style.address" data-testid="send-recent-address">{{ trimAddress(r.address, 6, 4, "…") }}</span>
+						<span :class="$style.address" data-testid="send-recent-address">{{ trimAddress(r.address, 6, 4, "…") }}</span>
 						<span :class="$style.meta">Last: {{ r.words }}</span>
 					</span>
 					<span :class="$style.when">{{ r.ago }}</span>

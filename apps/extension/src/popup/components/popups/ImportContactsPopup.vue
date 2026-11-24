@@ -45,10 +45,14 @@ const SECTIONS = [
 	{ key: "name", label: "Name changes", kinds: ["name-change"], warn: true },
 	{ key: "new", label: "New", kinds: ["new"], warn: false },
 	{ key: "saved", label: "Already saved", kinds: ["unchanged"], warn: false },
-	{ key: "skipped", label: "Can't be imported", kinds: ["invalid", "conflict"], warn: false },
+	{ key: "skipped", label: "Can't be imported", kinds: ["invalid", "name", "conflict"], warn: false },
 ]
-const REASONS = { invalid: INVALID_ADDRESS, conflict: "Matches two saved contacts" }
-const REFUSALS = { invalid: "To select, correct the address first", conflict: "This contact matches two saved contacts" }
+const REASONS = { invalid: INVALID_ADDRESS, name: "Name looks like an address", conflict: "Matches two saved contacts" }
+const REFUSALS = {
+	invalid: "To select, correct the address first",
+	name: "To select, change the name first",
+	conflict: "This contact matches two saved contacts",
+}
 
 const uid = useId()
 const importContacts = ref([])
