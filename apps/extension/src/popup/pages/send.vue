@@ -37,7 +37,6 @@ import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { isAddressShapedName } from "@/utils/contact-name"
-import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { feeJuiceBridgeUrl, feePayerOf } from "@/utils/fee/fee-helpers"
 import { formatBaseUnits } from "@/utils/amount"
@@ -63,6 +62,7 @@ import { useFeeEstimation } from "@/composables/useFeeEstimation"
 import { useLegalAcceptance } from "@/composables/useLegalAcceptance"
 import { usePrices } from "@/composables/usePrices"
 import { vSnackFooter } from "@/composables/snackInset"
+import { useSendData } from "@/composables/useSendData"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
@@ -125,32 +125,49 @@ const openFeeJuiceBridge = () => {
 const awaitingNewToken = ref(false)
 
 const tokenService = new TokenServiceClient()
+const tokenBalances = ref([])
+/** `loaded` once the snapshot has landed a read since the identity fetch began. */
+const balancesState = ref("loading")
+const tokenBalanceService = new TokenBalanceServiceClient()
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows: tokenBalances,
+	state: balancesState,
+})
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
+tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
+const contactService = new ContactServiceClient()
+const {
+	tokens,
+	tokensLoading,
+	tokensFailed,
+	contacts,
+	contactEvents,
+	journalOps,
+	onTokensChanged,
+	onReadFailed,
+	reloadTokens,
+	refetch,
+	retry: retryTokens,
+	dispose: disposeSendData,
+} = useSendData({
+	tokenService,
+	contactService,
+	balances,
+	tokenBalances,
+	balancesState,
+	live: appStore,
+	readPastSends,
+	onLoaded: onIdentityLoaded,
+})
 tokenService.onTokenAdded.add(onTokensChanged)
 tokenService.onTokenUpdated.add(onTokensChanged)
 tokenService.onTokenDeleted.add(onTokenDeleted)
-let tokensChangedDuringLoad = false
-/** Fires for any profile's or chain's add or update, so it re-reads the current identity's tokens
- *  rather than patching one: an amount integerizes with the decimals the list holds. A change during
- *  an identity fetch makes that fetch read them again, and one after a refused fetch retries it,
- *  since its balances and contacts are missing too. */
-function onTokensChanged() {
-	if (tokensLoading.value) {
-		tokensChangedDuringLoad = true
-		return
-	}
-	if (tokensFailed.value) return retryTokens()
-	reloadTokens().catch(onReadFailed)
-}
-/** Bumped by each token re-read and identity fetch; a re-read lands only if none began after it. */
-let tokenReadSeq = 0
-async function reloadTokens() {
-	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) return
-	const myRead = ++tokenReadSeq
-	const list = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
-	if (myRead !== tokenReadSeq) return
-	tokens.value = list
-}
-const onReadFailed = (error) => console.debug("send page read failed", { error })
+contactService.onContactAdded.add(contactEvents.onAdded)
+contactService.onContactUpdated.add(contactEvents.onUpdated)
+contactService.onContactDeleted.add(contactEvents.onDeleted)
 function onTokenDeleted(token) {
 	const idx = tokens.value.findIndex((t) => t.id === token.id)
 	if (idx === -1) return
@@ -168,27 +185,9 @@ function onTokenDeleted(token) {
 	leaveSend()
 }
 
-const tokens = ref([])
-/** True while the current identity's tokens are being read; the token card waits on it. */
-const tokensLoading = ref(true)
-/** The current identity's fetch was refused; the token card offers a Retry. */
-const tokensFailed = ref(false)
 const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore.activeTokenIdx))
 const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
 
-const tokenBalances = ref([])
-/** `loaded` once the hook has landed a read since the identity fetch began. */
-const balancesState = ref("loading")
-const tokenBalanceService = new TokenBalanceServiceClient()
-const balances = useTokenBalanceSnapshot({
-	client: tokenBalanceService,
-	live: appStore,
-	rows: tokenBalances,
-	state: balancesState,
-})
-tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
-tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
-tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 const tokenBalance = computed(() => {
 	return tokenBalances.value?.find((b) => b?.token.id === cacheStore.activeTokenIdx)
 })
@@ -221,13 +220,6 @@ const initReceiverType = (keepSide = false) => {
 	if (forced) selectedReceiverType.value = forced
 }
 
-const contacts = ref([])
-const contactService = new ContactServiceClient()
-const contactList = entityListReducers(contacts)
-contactService.onContactAdded.add(contactList.onAdded)
-contactService.onContactUpdated.add(contactList.onUpdated)
-contactService.onContactDeleted.add(contactList.onDeleted)
-
 const selectedContact = ref()
 const searchTerm = ref("")
 /** Contacts whose names may stand for their addresses: one that reads as an address names nothing
@@ -237,8 +229,6 @@ const recipientCandidates = computed(() => [...namedContacts.value, ...appStore.
 /** Who is paid is asked first, as page state: a history entry would sit behind the review's Send now. */
 const personChosen = ref(false)
 
-/** This account's journal, read with each identity load and parsed against the token list. */
-const journalOps = shallowRef([])
 const sendScope = computed(() => ({
 	profileId: appStore.profile?.id,
 	networkId: appStore.network?.id,
@@ -926,80 +916,19 @@ function applyQueryContact() {
 	else searchTerm.value = preselected.address
 }
 
-// A newer identity fetch supersedes an older one, and only the current fetch ends `tokensLoading`
-// or marks the fetch failed.
 // `activeTokenIdx` is global (cache store): a new token set without it moves it to the first token,
 // or `activeToken` resolves to nothing. The send and receiver types are then re-validated for it.
-let identityFetchSeq = 0
-async function refetchIdentityScopedState() {
-	const mySeq = ++identityFetchSeq
-	const isCurrent = () => mySeq === identityFetchSeq
-	// A reconnect's re-read or retry begun for the previous identity must not land after this.
-	balances.invalidate()
-	balancesState.value = "loading"
-	tokenReadSeq++
-	tokensFailed.value = false
-	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) {
-		if (isCurrent()) {
-			tokens.value = []
-			tokenBalances.value = []
-			contacts.value = []
-			journalOps.value = []
-			tokensLoading.value = false
-		}
-		return
+function onIdentityLoaded(t) {
+	// The tokens watch makes the first token added to an empty list the active one. A refused
+	// load must not arm it, or the Retry's list would lose the active or requested token.
+	awaitingNewToken.value = t.length === 0
+	applyQueryContact()
+	if (!t.some((tok) => tok.id === cacheStore.activeTokenIdx)) {
+		cacheStore.activeTokenIdx = t[0]?.id ?? undefined
 	}
-	const profileId = appStore.profile.id
-	const chainId = appStore.network.chainId
-	// Cleared before the read, so a switch never shows the previous identity's token or balance.
-	tokens.value = []
-	tokenBalances.value = []
-	journalOps.value = []
-	tokensLoading.value = true
-	tokensChangedDuringLoad = false
-	try {
-		const [first, , c, ops] = await Promise.all([
-			tokenService.getTokens(profileId, chainId),
-			readBalances(),
-			contactService.getContacts(),
-			readPastSends(profileId, appStore.account.address),
-		])
-		let t = first
-		while (tokensChangedDuringLoad && isCurrent()) {
-			tokensChangedDuringLoad = false
-			t = await tokenService.getTokens(profileId, chainId)
-		}
-		if (!isCurrent()) return
-		tokens.value = t
-		contacts.value = c
-		journalOps.value = ops
-		// The tokens watch makes the first token added to an empty list the active one. A refused
-		// load must not arm it, or the Retry's list would lose the active or requested token.
-		awaitingNewToken.value = t.length === 0
-		applyQueryContact()
-		if (!t.some((tok) => tok.id === cacheStore.activeTokenIdx)) {
-			cacheStore.activeTokenIdx = t[0]?.id ?? undefined
-		}
-		applyQueryToken()
-		initSendType()
-		initReceiverType()
-	} catch (error) {
-		if (isCurrent()) tokensFailed.value = true
-		throw error
-	} finally {
-		if (isCurrent()) tokensLoading.value = false
-	}
-}
-
-/** Through the snapshot, so an event that outlives the read is never overwritten by it. A refused
- *  read fails the identity fetch at once, as a refused token or contact read does. */
-async function readBalances() {
-	if (!(await balances.fetchTokenBalances())) throw new Error("token balance read refused")
-}
-
-/** The token card's Retry: all three reads again, since the page cannot send without any of them. */
-function retryTokens() {
-	refetchIdentityScopedState().catch(onReadFailed)
+	applyQueryToken()
+	initSendType()
+	initReceiverType()
 }
 
 // `?tokenId=` survives the unmount of tokens/[id], which clears `activeTokenIdx`. It is consumed by
@@ -1017,7 +946,7 @@ watch(
 	() => [appStore.profile?.id, appStore.network?.id, appStore.account?.address],
 	() => {
 		closeSheets()
-		refetchIdentityScopedState().catch(onReadFailed)
+		refetch().catch(onReadFailed)
 	},
 	{ immediate: false },
 )
@@ -1028,14 +957,14 @@ onMounted(async () => {
 	// Route mount fetch through the shared refetch so it inherits the
 	// sequence guard AND the null-triple defense AND the
 	// activeTokenIdx-rebind logic.
-	await refetchIdentityScopedState().catch(onReadFailed)
+	await refetch().catch(onReadFailed)
 })
 
 onBeforeUnmount(() => {
 	console.debug(`[send:${sendInstanceId}] unmounting`)
 	cancelled = true
 	// A load still out ends here: its late reads must not write the shared token selection.
-	identityFetchSeq++
+	disposeSendData()
 	closeSheets()
 
 	contactService.disconnect()
