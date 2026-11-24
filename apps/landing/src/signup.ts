@@ -3,36 +3,19 @@
  * this module the form still posts, and the subscribe Worker redirects to `/subscribed`.
  */
 
+import { type Fetch, postSubscribe, RETRY_MESSAGE } from "./subscribe-client"
+
 export type SignupOutcome = "requested" | "invalid" | "retry"
 
 export const SIGNUP_MESSAGES: Record<SignupOutcome, string> = {
 	requested: "Check your inbox to confirm.",
 	invalid: "Enter a valid email address.",
-	retry: "That didn't go through. Try again in a minute.",
+	retry: RETRY_MESSAGE,
 }
 
-type Fetch = (input: string, init: RequestInit) => Promise<Response>
-
-// A stalled connection would otherwise hold the button disabled with nothing said.
-const TIMEOUT_MS = 20_000
-
-/** Only the contract's `200 { "ok": true }` counts as accepted, so a page served in the Worker's place never reads as success. */
 export async function postSignup(action: string, body: URLSearchParams, fetchImpl: Fetch): Promise<SignupOutcome> {
-	let response: Response
-	try {
-		response = await fetchImpl(action, {
-			method: "POST",
-			headers: { Accept: "application/json" },
-			body,
-			signal: AbortSignal.timeout(TIMEOUT_MS),
-		})
-	} catch {
-		return "retry"
-	}
-	if (response.status === 400) return "invalid"
-	if (response.status !== 200) return "retry"
-	const reply: unknown = await response.json().catch(() => null)
-	return typeof reply === "object" && reply !== null && (reply as { ok?: unknown }).ok === true ? "requested" : "retry"
+	const answer = await postSubscribe(action, { body }, fetchImpl)
+	return answer === "ok" ? "requested" : answer
 }
 
 type Attributes = Pick<Element, "getAttribute" | "setAttribute" | "removeAttribute">
