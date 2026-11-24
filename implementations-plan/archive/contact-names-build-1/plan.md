@@ -33,7 +33,7 @@ The owner's picks of 2026-11-24, built as signed and nothing beside them. One ar
 
 1. **A.** "Refuse it at entry, edit and file import, and never print a stored one. The name field turns red and says "A name can't look like an address. Use a word, like Ana." Add contact and Save stay off. A contacts file lists such a row under Can't be imported with "Name looks like an address"; renaming it there makes it importable. A full backup restores its rows as they are: a name already stored stays in Contacts, where you can rename it, and is never shown in place of its address anywhere else. The rule: the name contains 0x and four hex digits, or two hex runs joined by dots, after folding look-alike letters. It passes Ana, Oxford and J.R. Smith. It wrongly refuses Abe...Dad."
 2. **C.** "Leave it as it is: @Ana, with the address behind a press." Nothing is built: the windows' chip, `AddressDisplay`'s press and every testid stay.
-3. **A.** "Text typed like an address matches only a contact whose whole address equals it; typing An still finds Ana. Each Recent row shows its short address under the name. "You have not paid this address before. Review it carefully before you send." now also shows for a saved contact you have never paid."
+3. **A.** "Text typed like an address matches only a contact whose whole address equals it; typing An still finds Ana. Each Recent row shows its short address under the name. "You have not paid this address before. Review it carefully before you send." […] shows for a saved contact you have never paid."
 4. **C, on the address book** (OA-1, answered 2026-11-24). The question: "A stored name that reads as an address, sent to an app you gave your address book: sent as stored (A), left out (B), or sent with the contact's own address as its name (C)". The pick: "Send such a contact with its own full address as the name. The app shows the true address where it would have shown the name."
 
 ## Outcome & Quality Bar
@@ -115,6 +115,8 @@ Mockups: the signed frames, light and dark, in the PR's Frames table, named by s
 | D9 | An import row is judged on the name it would write | the file's spelling only | a row matched by name writes the saved spelling, and keys fold `ϲ` and `σ` together while the rule does not (diff review, reproduced) |
 
 ## Review verdicts
+
+**Address-book delta and wording, Codex (`gpt-6.1-sol`, high, read-only; session `01a20e33`, round 3).** Changes required, two wording points: a transition inside pick 3's quote (a marked elision `[…]` replaces it) and one in the PR body; both accepted. The code holds: no other path hands a contact's name to an app (batch legs reach the same executor, `registerSender` answers an address, capability aliases come from accounts); rows, order and the item's spelling stay; the wallet API's answer schema and the playground take a 66-character alias.
 
 **Diff, Codex (`gpt-6.1-sol`, high, read-only; session `01a20e33`).** Round 1: changes required. F1 material, the import judged the file's spelling and could write a saved spelling of the same key that reads as an address (`0x0ϲ2b` saved, `0x0σ2b` in the file); with `isSender` the sender registration ran before the service refused the write: accepted, reproduced, fixed (D9) with its regression. F2 nit, four comments: accepted. Round 2: approve. Frames: every ordinary-name frame equals its signed frame to the pixel; the address-shaped name differs only where the picks combined say it must (Send's committed row and Recent, step details, history detail).
 
