@@ -34,6 +34,7 @@ const isLoading = ref(false)
 const interactionService = new DappInteractionServiceClient()
 
 const {
+	requestId,
 	dapp,
 	isCancelled: isInteractionCancelled,
 	load: loadInteractionPayload,
@@ -54,6 +55,7 @@ const {
 	stripStatus,
 } = useDappApprovalWindow({
 	profile,
+	requestId,
 	isInteractionCancelled,
 	isLoading,
 	connectServices: () => {

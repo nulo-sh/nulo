@@ -21,7 +21,6 @@ import AccountSelectRow from "./AccountSelectRow.vue"
 import PermissionGroup from "./PermissionGroup.vue"
 
 /** Utils */
-import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { formatCaipAccount } from "@/wallet/utils/caip"
 import { requireNetwork } from "@/utils/core"
 import { copyWithToast } from "@/utils/clipboard"
@@ -124,12 +123,14 @@ const {
 	closeWindow,
 	endAndClose,
 	onActiveProfileChanged,
+	settleResolveError,
 	stripStatus,
 	processingError,
 	setError,
 	clearError,
 } = useDappApprovalWindow({
 	profile,
+	requestId,
 	isInteractionCancelled,
 	isLoading,
 	connectServices: () => {
@@ -322,14 +323,10 @@ const approve = async () => {
 		})
 		closeWindow(true)
 	} catch (error) {
-		if (error instanceof JobCancelledError) {
-			// A raced approve refused service-side (the dApp cancelled first):
-			// the refusal IS the cancelled state — overlay, not an error banner.
-			isInteractionCancelled.value = true
-		} else {
+		settleResolveError(error, () => {
 			console.error("Capabilities approve failed", { error })
 			setError("Something went wrong")
-		}
+		})
 	} finally {
 		isLoading.value = false
 	}
