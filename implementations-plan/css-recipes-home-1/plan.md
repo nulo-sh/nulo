@@ -48,7 +48,7 @@ Two arcs, one PR each against `dev`, no stack. Paths are under `apps/extension/s
 8. `ImportSecretForm.vue:111-118` documents that a composed rule plus a local override of the same property wins or loses on bundle order.
 
 **Inferences** (the proof settles them, not this reading)
-1. Removing `.retry` and `.visually_hidden` from `fee-shared` and `.visually_hidden` from `activity-card` only drops rules from each composer's prepended copy. A dropped rule matches no element of a composer that never named it, so those composers can change only by name.
+1. Removing `.retry` and `.visually_hidden` from `fee-shared` and `.visually_hidden` from `activity-card` drops those rules from each composer's prepended copy. Four composers named nothing else there and lose the whole copy: `RecipientField`, `SendTxSummary` and `verify/index.vue` no longer carry `fee-shared`'s `.detail_row`, `.whole`, `.fee_figure`, `.fee_label` and `.failed`, nor `TransactionIncomingCard` `activity-card`'s `.title_sep`, `.chip` and `.app_chip`. A dropped rule changes a screen only where another element on it relied on that chunk's copy; the proof opens each screen these four render on.
 2. Moving a recipe's declarations from a composer's own rule to the home's prepended copy moves them earlier in that composer's CSS, and copies of the home in other chunks match the element too. This is safe only while no declaration left beside a `composes` sets a property the home sets, and Fact 3 leaves no equal-specificity rival on the element.
 
 **Asks:** none. Anything visible goes to `OWNER-ASKS.md` and out of the PR.
@@ -152,7 +152,7 @@ No trust boundary, data, permission, dependency or wire format changes: styleshe
 2. Edit only the `<style>` blocks and sheets the arc-1 site table names. Keep at least one unchanged line between this edit and #1945's hunks in `send.vue`.
 3. Do D4. Update no other test; list every edited expectation in the PR.
 4. Check each composer: no declaration left beside its `composes` sets a property the home sets (Inference 2).
-5. Build Chrome at base and head. Normalise scoped names and compare every CSS file. Pass: the only differences are the removed rules, the changed `composes` targets and the homes' prepended copies.
+5. Build Chrome at base and head. Normalise scoped names and compare every CSS file. Pass: the only differences are the removed rules, the four whole copies Inference 1 names, the changed `composes` targets and the homes' prepended copies.
 
 **Validation gate.** Run `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run audit:vue`, `bun run test:ci-gating`, `bun run check:plans` and `bun run --cwd apps/extension build-storybook`, one at a time. Pass: each exits 0 at retry 0, and the scan test reds on a mutation that adds a cross-feature `composes` (reverted). Layers: lint, typecheck, unit, build.
 
@@ -169,7 +169,7 @@ No trust boundary, data, permission, dependency or wire format changes: styleshe
    - The Activity page; a token's detail page.
    - Send: the person step (`send-destination-more-live`); the form with its fee line; the fee sheet while its methods are "Checking", then settled, with the sponsored and the unvouched sentences; the failed estimate with "Try again" (`fee-estimate-retry`, by refusing the route as `snack-placement` does); the review sheet, also failed (`send-review-fee-retry`); both slow branches (`fee-estimate-slow`, `send-review-fee-slow`), by holding the estimate past `ESTIMATE_SLOW_MS`; fiat mode after the seeded price moves (`send-fiat-requote`).
    - The execute window (execute fixture) with its send summary.
-   - An endpoint list; the import-contacts popup with a changed contact; the authwits page and its revoke and registry popups (both render `FeeSettingsCard`), with `FeeMethodSelector`'s trigger pending and its menu open while methods are checking (`FeeMethodSelector.vue:50,76`), by holding the method check.
+   - An endpoint list; the import-contacts popup with a changed contact; the authwits page and its revoke and registry popups (both render `FeeSettingsCard`), with `FeeMethodSelector`'s menu open while its rows are checking (`FeeMethodSelector.vue:76`), by holding the method check. Its trigger's pending branch (`:48-51`) renders on no screen (Arc 1 review).
    - Controls with no changed rule: Holdings, a received detail, the lock screen.
 4. Seed and open, in one scratch network proof run per browser and build, reusing the specs' own setups:
    - the verify window (`connect-check-window`'s connect);
@@ -217,6 +217,20 @@ Codex plan pass (`gpt-6.1-sol` high) and the Opus Plan lens, both over this plan
 | O7 | Dropping the composer's own role stated for D1 only | plausible | accepted: D2, D5, D6 |
 | O8 | `OVERRIDES` is not the baseline; `.tab:hover` must precede `.tab_active:hover` | demonstrated | accepted: D6 |
 
+### Arc 1 review
+
+Codex loop (`gpt-6.1-sol` high, read-only) over `4d18591bd..HEAD` and this plan, and one Opus diff review beside round 1. Detail in [lessons/phase-1.md](lessons/phase-1.md).
+
+| # | Finding | Label | Disposition |
+|---|---|---|---|
+| A1 | The built-CSS comparison keyed chunks by basename: six `_id_` and three `import` files overwrote each other, so it read 121 of 128 files | demonstrated | accepted: same-named files paired one to one by shared rules, every file paired once; 13 of 128 differ |
+| A2 | `REVIEWED` carried a `why` no assertion read, one ending in an issue reference | demonstrated | accepted: field removed |
+| A3 | The homes' comment told a composer how to compose, not what it must not do | plausible | accepted: reworded |
+| A4 | Inference 1 missed the four composers that lose a whole prepended copy | demonstrated | accepted: Inference 1 and Phase 1 step 5 name them |
+| A5 | The scan read a `composes` value as one clause; postcss-modules splits it on commas | demonstrated | accepted: per-clause parse by that grammar, with a case that reds without the split |
+
+Round 1: **findings** (A1; A2-A5 are Opus's). Round 2, resumed over `cef64b7cd`: **clean**. It also confirmed, high confidence, that `FeeMethodSelector`'s trigger "Checking" renders on no screen: its only consumer passes `pending` as `onSend && …` and mounts it only off Send. That branch is dead code, not an unreached state, so step 6 does not stop the arc.
+
 ## Decision ledger
 
 | # | Question | Codex | Opus | Decided, and why |
@@ -228,9 +242,9 @@ Codex plan pass (`gpt-6.1-sol` high) and the Opus Plan lens, both over this plan
 | D5 | Module beside the globals | yes | yes, two homes as a known limit | yes, with the cross comments and the known limit |
 | D6 | Move `.tab.tab_active`, merge overrides; `.passkey_info` in the skin | yes, yes | yes, yes | yes; file named `auth-method-choice` (Codex) |
 | D8 | Probe as acceptance | never | under four conditions | never: a `v-if` parent cannot be reached by a probe, so its conditions fail where it would be needed |
+| B | Outline B | reject | reject | reject |
 
 Fresh final Codex pass (`gpt-6.1-sol` high, new session) over the consolidated plan and this ledger: **conditional approve**. Its three conditions, all accepted into Phase 2: the copied harness reads hover and focus at 360 px only, skips off-screen targets and caps the Tab walk (demonstrated in `detail-styles.proof.ts`); the slow branches and `FeeMethodSelector`'s open checking menu were not named (demonstrated: `ESTIMATE_SLOW_MS`, `FeeMethodSelector.vue:76`); the failed preview needs the NO_FROM setup and an exact interception, or an account-paid request never reaches the preview and a refusal hides the retry (plausible). Resumed over the revision: **approve**, no new material defect.
-| B | Outline B | reject | reject | reject |
 
 ## Delivery
 
