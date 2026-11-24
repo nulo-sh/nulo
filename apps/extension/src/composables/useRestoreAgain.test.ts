@@ -494,7 +494,7 @@ describe("useRestoreAgain: scope", () => {
 
 		expect(accountStateClient.restore).toHaveBeenCalledOnce()
 		const [slice, networks, fence] = accountStateClient.restore.mock.calls[0]
-		expect(slice).toEqual({ format: 2, classes: [], items: [{ networkId: "N1", senders: [SENDER], contracts: [] }] })
+		expect(slice).toEqual([{ networkId: "N1", senders: [SENDER], contracts: [] }])
 		expect(networks).toEqual([TESTNET])
 		expect(isProxy(networks[0]), "a proxy cannot cross Firefox's port").toBe(false)
 		expect(fence).toEqual(FENCE)

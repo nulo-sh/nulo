@@ -10,7 +10,7 @@ import { fromBase64 } from "@/wallet/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
 import { CONFIG_SERVICE_NAME, type ConfigKey, RESTORABLE_CONFIG_KEYS } from "@/wallet/services/config/spec"
 import { ACCOUNT_SERVICE_NAME, IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
-import { isAccountStateV2 } from "@/wallet/services/account-state/spec"
+import { ACCOUNT_STATE_SERVICE_NAME, isAccountStateV2 } from "@/wallet/services/account-state/spec"
 import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_SERVICE_NAME } from "@/wallet/services/contact/spec"
 import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
@@ -410,7 +410,7 @@ function projectRestoreErrorField(field: RestoreErrorField, value: unknown, serv
  * The addresses here are registered contracts and tagging senders — the service's own code calls
  * the set of contracts a wallet has registered a privacy signal, and senders are address-book
  * data behind a capability gate. The ordinal says which child failed without naming it; the
- * `instance`/`artifact` blobs beside it are dropped as the bulk.
+ * address beside it is dropped.
  */
 function projectAccountStateChild(child: Record<string, unknown>, index: number): Record<string, unknown> {
 	return { child: index, restoreError: describeRestoreError(child.restoreError) }
@@ -569,7 +569,7 @@ export function remapNetworkIdByChain(
 	const dropped: Record<string, number[]> = {}
 	for (const key of slices) {
 		const slice = data[key]
-		const v2 = isAccountStateV2(slice)
+		const v2 = key === ACCOUNT_STATE_SERVICE_NAME && isAccountStateV2(slice)
 		const rows = v2 ? slice.items : slice
 		if (!Array.isArray(rows)) continue
 		const kept: unknown[] = []

@@ -1,9 +1,6 @@
 /**
- * How a restore treats contract code: each contract is checked on its own, an artifact object is
- * hashed once per call, a network's first successful registration of an artifact carries it, an
- * entry with no code takes the wallet's own copy or fails, and no result carries code. The hashing
- * and the instance schema are faked at the stdlib boundary (a fake artifact names the class id it
- * hashes to); the decoder, the memo and the class-id comparison run for real.
+ * The hashing and the instance schema are faked at the stdlib boundary (a fake artifact names the
+ * class id it hashes to); the decoder, the memo and the class-id comparison run for real.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 

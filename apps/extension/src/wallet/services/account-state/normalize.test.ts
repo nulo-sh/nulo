@@ -11,6 +11,7 @@ import {
 	isConnectivityErrorMessage,
 	normalizeAccountStateSlice,
 	registrableNetworkIds,
+	restorePayload,
 	skippedNetworkRecord,
 	truncateErrorMessage,
 } from "./normalize"
@@ -301,6 +302,45 @@ describe("encodeAccountState", () => {
 		const encoded = encodeAccountState(items)
 		expect(encoded).toEqual(items)
 		expect(Array.isArray(encoded)).toBe(true)
+	})
+})
+
+describe("restorePayload", () => {
+	test("a format-1 part at the cap goes back as its own array, so its one network is never over the cap", () => {
+		const item = {
+			networkId: "n1",
+			chainId: 1,
+			senders: [],
+			contracts: [{ ...entry(addr("01"), CLASS_A), artifact: { name: "A", padding: "" } }],
+		}
+		const pad = ACCOUNT_STATE_CAPS.maxSliceCodeUnits - JSON.stringify([item]).length
+		item.contracts[0].artifact.padding = "a".repeat(pad)
+		expect(JSON.stringify([item]).length).toBe(ACCOUNT_STATE_CAPS.maxSliceCodeUnits)
+		const { items, violations } = normalizeAccountStateSlice(JSON.parse(JSON.stringify([item])))
+		expect(violations).toEqual([])
+		expect(JSON.stringify(encodeAccountState(items)).length).toBeGreaterThan(ACCOUNT_STATE_CAPS.maxSliceCodeUnits)
+
+		const payload = restorePayload(items)
+		expect(Array.isArray(payload)).toBe(true)
+		expect(normalizeAccountStateSlice(payload).violations).toEqual([])
+	})
+
+	test("items sharing a class's artifact object, or holding an entry without code, are encoded", () => {
+		const shared = normalizeAccountStateSlice({
+			format: 2,
+			classes: [{ classId: CLASS_A, artifact: { name: "A" } }],
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A), entry(addr("02"), CLASS_A)] }],
+		}).items
+		expect(isAccountStateV2(restorePayload(shared))).toBe(true)
+
+		const withoutCode = normalizeAccountStateSlice({
+			format: 2,
+			classes: [{ classId: CLASS_A, artifact: { name: "A" } }],
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A), entry(addr("02"), CLASS_B)] }],
+		}).items
+		const payload = restorePayload(withoutCode)
+		expect(isAccountStateV2(payload)).toBe(true)
+		expect(normalizeAccountStateSlice(payload).items[0].contracts.map((c) => c.address)).toEqual([addr("01"), addr("02")])
 	})
 })
 

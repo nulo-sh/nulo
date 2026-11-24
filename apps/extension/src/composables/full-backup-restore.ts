@@ -27,10 +27,10 @@ import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
 import {
-	encodeAccountState,
 	type NormalizedAccountStateItem,
 	normalizeAccountStateSlice,
 	registrableNetworkIds,
+	restorePayload,
 } from "@/wallet/services/account-state/normalize"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
@@ -888,8 +888,8 @@ export async function retryAccountStateStage(
 		if (!(await runFenceLive(profileService, ctx.restoreRun.fence))) return { restored: [] }
 		const admitted = await admitReminder(ctx.restoreRun)
 		const retryable = await runImportChainSync({
-			// Encoded, so the items' shared artifacts travel once per class instead of once per contract.
-			slice: encodeAccountState(ctx.retryable),
+			// Decoded items share one artifact object per class; sent raw, each contract would carry a copy.
+			slice: restorePayload(ctx.retryable),
 			deadlineAt: Date.now() + IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS,
 			...chainSyncClients(accountStateService, networkService, ctx.networks, ctx.restoreRun.fence),
 			// Items the normalizer already bounded yield no violations: only outcomes arrive.

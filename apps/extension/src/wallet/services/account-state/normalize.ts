@@ -194,7 +194,8 @@ type EncodableItem = { networkId: string; chainId?: number; senders: BackupSende
  * class maps to more than one distinct artifact object anywhere in `items`, or a contract carrying
  * an artifact names no class id, it returns `items` whole as format 1, so every copy travels with
  * its own contract and is checked on its own. Items a format-2 part decoded into share one object
- * per class and stay compact.
+ * per class and stay compact. The format-1 return drops an entry without code, so it is reached only
+ * by items whose every contract carries code: a format-2 decode never maps one class to two objects.
  */
 export function encodeAccountState<T extends EncodableItem>(items: readonly T[]): AccountStateSliceV2 | T[] {
 	const table = new Map<string, ContractArtifact>()
@@ -215,6 +216,17 @@ export function encodeAccountState<T extends EncodableItem>(items: readonly T[])
 			contracts: contracts.map(({ address, instance }) => ({ address, instance })),
 		})),
 	}
+}
+
+/**
+ * The part an import sends for decoded `items`: an array when every contract holds its own artifact
+ * object, as a format-1 part decodes, since a class table would only add bytes; otherwise encoded.
+ * Either way it is no larger than the part the items were read from, so it stays under the cap.
+ */
+export function restorePayload<T extends EncodableItem>(items: readonly T[]): AccountStateSliceV2 | T[] {
+	const artifacts = items.flatMap((item) => item.contracts.map((c) => c.artifact))
+	const ownCopies = artifacts.every((a) => a !== undefined) && new Set(artifacts).size === artifacts.length
+	return ownCopies ? [...items] : encodeAccountState(items)
 }
 
 /** Duplicate-networkId merge over the capped input, collapsing malformed

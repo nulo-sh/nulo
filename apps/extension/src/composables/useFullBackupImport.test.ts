@@ -1206,13 +1206,13 @@ describe("useFullBackupImport — rows bind to the seeded network of their chain
 
 		expect(accountStateClient.restore).toHaveBeenCalledTimes(2)
 		expect(accountStateClient.restore).toHaveBeenCalledWith(
-			{ format: 2, classes: [], items: [{ networkId: "M1", contracts: [], senders: [AS_SENDER] }] },
+			[{ networkId: "M1", contracts: [], senders: [AS_SENDER] }],
 			seeds,
 			FENCE,
 			expect.anything(),
 		)
 		expect(accountStateClient.restore).toHaveBeenCalledWith(
-			{ format: 2, classes: [], items: [{ networkId: "M2", contracts: [], senders: [AS_SENDER] }] },
+			[{ networkId: "M2", contracts: [], senders: [AS_SENDER] }],
 			seeds,
 			FENCE,
 			expect.anything(),
@@ -1334,12 +1334,7 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 		await c.retryAccountState()
 
 		expect(accountStateClient.restore).toHaveBeenCalledOnce()
-		expect(accountStateClient.restore).toHaveBeenCalledWith(
-			{ format: 2, classes: [], items: [item("M2")] },
-			seeds,
-			FENCE,
-			expect.anything(),
-		)
+		expect(accountStateClient.restore).toHaveBeenCalledWith([item("M2")], seeds, FENCE, expect.anything())
 		expect(accountStateRows(c)).toEqual([{ row: 2, restoreError: DROPPED }])
 		expect(c.restoreErrorLog.value.transaction).toEqual([{ row: 0, restoreError: DROPPED }])
 		expect(c.canRetryAccountState.value).toBe(false)
@@ -1394,19 +1389,9 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 		await c.retryAccountState()
 
 		const sent = (accountStateClient.restore.mock.calls as unknown as unknown[][]).map(([slice]) => slice)
-		const { artifact: _genuine, ...entry1 } = contract(1, "genuine")
-		const { artifact: _other, ...entry2 } = contract(2, "other")
 		expect(sent).toHaveLength(2)
-		expect(sent).toContainEqual({
-			format: 2,
-			classes: [{ classId, artifact: { name: "genuine" } }],
-			items: [{ ...item("M1"), contracts: [entry1] }],
-		})
-		expect(sent).toContainEqual({
-			format: 2,
-			classes: [{ classId, artifact: { name: "other" } }],
-			items: [{ ...item("M2"), contracts: [entry2] }],
-		})
+		expect(sent).toContainEqual([{ ...item("M1"), contracts: [contract(1, "genuine")] }])
+		expect(sent).toContainEqual([{ ...item("M2"), contracts: [contract(2, "other")] }])
 	})
 
 	it("names the networks a Retry replays by their seeded names, in seed order", async () => {
@@ -1635,12 +1620,7 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 
 		expect(reminder.admit).toHaveBeenCalledExactlyOnceWith("new-id", "run-1")
 		expect(reminder.finish).toHaveBeenCalledExactlyOnceWith("new-id", "run-1", ["M2"])
-		expect(accountStateClient.restore).toHaveBeenLastCalledWith(
-			{ format: 2, classes: [], items: [item("M2")] },
-			seeds,
-			FENCE,
-			expect.anything(),
-		)
+		expect(accountStateClient.restore).toHaveBeenLastCalledWith([item("M2")], seeds, FENCE, expect.anything())
 	})
 
 	it("a Retry whose session ended registers nothing and drops Retry, leaving the reminder's lease alone", async () => {

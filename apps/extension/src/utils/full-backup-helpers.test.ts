@@ -710,11 +710,13 @@ describe("remapNetworkIdByChain — rows bind to the seeded network of their cha
 		expect((data["account-state"] as { classes: unknown }).classes).toBe(classes)
 		expect(part.items).toHaveLength(2)
 	})
-	it("leaves an account-state object of any other format as it is, for the normalizer to refuse", () => {
+	it("leaves an account-state object of any other format, and a format-2 object under another slice, as they are", () => {
 		const part = { format: 3, items: [{ networkId: "x", chainId: 0 }] }
-		const data: Record<string, unknown> = { "account-state": part }
-		expect(remapNetworkIdByChain(data, seeded, ["account-state"])).toEqual({})
+		const rows = { format: 2, items: [{ networkId: "x", chainId: 99 }] }
+		const data: Record<string, unknown> = { "account-state": part, transaction: rows }
+		expect(remapNetworkIdByChain(data, seeded, ["account-state", "transaction"])).toEqual({})
 		expect(data["account-state"]).toBe(part)
+		expect(data.transaction).toBe(rows)
 	})
 	it("leaves slices it was not asked about, and non-array slices, untouched", () => {
 		const data: Record<string, unknown> = { token: [{ chainId: 0, networkId: "keep" }], transaction: "nope" }

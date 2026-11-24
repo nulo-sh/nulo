@@ -17,11 +17,11 @@ import {
 	ACCOUNT_STATE_SKIP_DEADLINE,
 	ACCOUNT_STATE_SKIP_UNREACHABLE,
 	ACCOUNT_STATE_SKIP_WRONG_NETWORK,
-	encodeAccountState,
 	isConnectivityErrorMessage,
 	type NormalizedAccountStateItem,
 	normalizeAccountStateSlice,
 	registrableNetworkIds,
+	restorePayload,
 	skippedNetworkRecord,
 } from "@/wallet/services/account-state/normalize"
 import type { NodeStatus } from "@/wallet/services/network/spec"
@@ -119,7 +119,7 @@ async function registerOneNetwork(
 	// Raced at the EXACT remainder: the deadline is absolute (the service enforces its own copy per
 	// launch, so nothing useful runs past it). A rejection's message never reaches a record.
 	const result = await raceTimeout(
-		deps.restore(encodeAccountState([item]), remaining).catch(() => undefined),
+		deps.restore(restorePayload([item]), remaining).catch(() => undefined),
 		remaining,
 		() => undefined,
 	)

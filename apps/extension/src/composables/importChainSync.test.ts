@@ -373,7 +373,7 @@ describe("runImportChainSync, contract code in the per-network payload", () => {
 	const entry = (n: number, classId: string) => ({ address: address(n), instance: { currentContractClassId: classId } })
 	const classesOf = (slice: unknown) => (slice as { classes: Array<{ classId: string; artifact: unknown }> }).classes
 
-	test("each network's call is a part holding its item and only the classes it uses; a shared class goes to each", async () => {
+	test("each network's call holds only its own item: a class two of its contracts share is stored once, a class used once rides with its contract", async () => {
 		const [artifactA, artifactB] = [{ name: "A" }, { name: "B" }]
 		const { deps, harness } = makeDeps({
 			slice: {
@@ -393,11 +393,17 @@ describe("runImportChainSync, contract code in the per-network payload", () => {
 		const n1 = callFor(harness, "n1")?.slice
 		const n2 = callFor(harness, "n2")?.slice
 		expect(classesOf(n1)).toEqual([{ classId: CLASS_A, artifact: artifactA }])
-		expect(classesOf(n2)).toEqual([
-			{ classId: CLASS_A, artifact: artifactA },
-			{ classId: CLASS_B, artifact: artifactB },
-		])
 		expect(itemsOf(n1)).toEqual([{ networkId: "n1", senders: [], contracts: [entry(1, CLASS_A), entry(2, CLASS_A)] }])
+		expect(n2).toEqual([
+			{
+				networkId: "n2",
+				senders: [],
+				contracts: [
+					{ ...entry(3, CLASS_A), artifact: artifactA },
+					{ ...entry(4, CLASS_B), artifact: artifactB },
+				],
+			},
+		])
 	})
 
 	test.each([
