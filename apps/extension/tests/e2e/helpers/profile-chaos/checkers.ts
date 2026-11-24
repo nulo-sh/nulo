@@ -605,7 +605,7 @@ export const GUARDED_NODE_REFUSAL: AllowedError = {
 }
 
 /** A route of more than one endpoint that admits none throws its own text, which carries none of
- *  the stand-in's. A lone route never throws it: it surfaces its endpoint's own failure, so a run
+ *  the stand-in's. A lone route given any time surfaces its endpoint's own failure instead, so a run
  *  whose every seeded route of more than one endpoint is all stand-ins (`startRun` checks) can meet
  *  this text from a stand-in only. Its transaction twin a lone route does throw, so it stays out. */
 export const ROUTED_STAND_IN_REFUSAL: AllowedError = {
