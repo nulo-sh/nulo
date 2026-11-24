@@ -98,13 +98,15 @@ Closed known limits searched (`delete profile imported`, `decimals`, `reset runn
 | D9 | Send's Recent row reads its token's decimals through the bound (`sendText`) | n/a | a local guard and a test, red without it |
 | D10 | `MAX_DECIMALS` lives in `utils/token-amount.ts`; wallet services, the seeder and the seed preflight import it | a constant in `token/spec.ts` re-exported by the utils | decision 4 names that bound; the utils module imports nothing, so a script and every layer read one definition |
 | D11 | The Send line is a refusal of `AmountCard`'s existing line, first of its refusals, shown for a loaded token whose decimals fail the bound | a line in `send.vue` under the card; showing it while the token loads | the card already owns the one `txt-danger` line under the field and its `role="alert"`; a loading token is no refusal |
-| D12 | Max stays enabled for such a token and fills nothing, as built | disabling Max | decision 6 signs the first build's behaviour plus the line; accessibility call under the 2026-10-19 delegation: Max's press is inert and announced by the line |
+| D12 | The field and Max stay enabled for such a token, as built: typed text derives nothing, Max fills nothing | disabling the field and Max (Codex arc 2b F1) | decision 6 signs the first build's behaviour, whose frame shows text typed, plus the line; a disabled field is a change a person sees. Accessibility call under the 2026-10-19 delegation: the line, `role="alert"`, says why nothing derives |
 
 ## Audit verdicts
 
 **Arc 1, Codex (`gpt-6.1-sol`, high, read-only; session `01a209a9`).** F1 material, pre-existing: D4, #1938. F2 material, pre-existing, damaged storage only: D3, #1940. F3 minor, pre-existing: D5, #1939. F4 nit, two comments: accepted. Verdict: "#1925's fix is sound"; no profile-isolation, keyboard or focus regression found.
 
 **Arc 2, first build, Codex (same session, resumed).** F1 material: Send's Recent row caption formatted unguarded decimals on first render: fixed, D9, red with the guard reverted. F2 minor: the refusal wording: became OA-2. F3 nit, two comments: fixed.
+
+**Arc 2 rebuilt for 77, Codex (`gpt-6.1-sol`, high, read-only; session `01a20dd5`).** F1 material: for a 78-decimal token the field stays enabled and takes typed text, and `send.vue`'s `tokenBalanceByType` divides by `10 ** decimals` unbounded: rejected for the field (D12); the division is Number math read only as "has a balance", never shown, instant at any value (`Infinity` at worst), and bounding it would disable the field against the signed frame. F2 minor: the 78-decimal Send test's name claimed the field takes no amount: renamed, and it now asserts Max fills nothing and the line holds after typing. F3 nit: the refusal comment enumerated its cascade: cut to one line. Verdict: "the safety bounds otherwise look sound"; both signed sentences match; no other unguarded decimals exponent or padding path; 177 round trips across 19-77 passed.
 
 ## Post-implementation
 

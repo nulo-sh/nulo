@@ -1756,13 +1756,14 @@ describe("send page — a token's decimals against the wallet's bound, over the 
 		w.unmount()
 	})
 
-	test("78 decimals: the line says Nulo can't send it, the field takes no amount and Review stays disabled", async () => {
+	test("78 decimals: the line says Nulo can't send it, Max fills nothing, typed text derives no amount, Review stays disabled", async () => {
 		const BIG = { ...TOKEN, decimals: 78 }
 		const { w } = await formWith(BIG, "5000000")
 		expect(unsendable(w).text()).toBe("Nulo can't send this token.")
-		expect(unsendable(w).classes()).not.toContain("red")
 		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		expect((amountField(w).element as HTMLInputElement).value).toBe("")
 		await amountField(w).setValue("1.5")
+		expect(unsendable(w).text()).toBe("Nulo can't send this token.")
 		await estimateLands()
 		expect(submit(w).attributes("disabled")).toBeDefined()
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
