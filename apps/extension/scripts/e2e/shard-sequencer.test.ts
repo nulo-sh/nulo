@@ -10,7 +10,8 @@ import smokeConfig from "../../vitest.e2e.config.ts"
 import networkConfig from "../../vitest.e2e.network.config.ts"
 
 const EXTENSION = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
-const LANE = path.resolve(EXTENSION, "../../.github/workflows/_extension-network-e2e-lane.yml")
+const WORKFLOWS = path.resolve(EXTENSION, "../../.github/workflows")
+const LANE = path.join(WORKFLOWS, "_extension-network-e2e-lane.yml")
 const BROWSERS = ["chrome", "firefox"] as const
 
 type Config = typeof smokeConfig
@@ -33,6 +34,14 @@ function pool(files: string[]): string[] {
 	return files.filter((file) => !dedicated.has(file))
 }
 
+/** The shard count a lane's matrix runs (`{ id: "i/N", … }` rows), so the proof below follows the workflow. */
+function shardCount(workflow: string): number {
+	const rows = [...readFileSync(path.join(WORKFLOWS, workflow), "utf8").matchAll(/^\s*- \{ id: "\d+\/(\d+)", label:/gm)]
+	if (rows.length === 0 || rows.some((row) => Number(row[1]) !== rows.length)) throw new Error(`${workflow}: no i/N matrix of N rows`)
+	return rows.length
+}
+const COUNTS = { smoke: shardCount("pr-extension-smoke-e2e.yml"), network: shardCount("_extension-network-e2e-lane.yml") } as const
+
 const spec = (root: string) => (file: string) => ({ moduleId: path.join(root, file) }) as TestSpecification
 
 async function shardsOf(config: Config, specs: TestSpecification[], count: number, root = EXTENSION): Promise<TestSpecification[][]> {
@@ -51,9 +60,9 @@ afterEach(() => {
 })
 
 describe.each([
-	{ suite: "smoke", config: smokeConfig, count: 3 },
-	{ suite: "network", config: networkConfig, count: 5 },
-] as const)("the $suite config's sequencer", ({ suite, config, count }) => {
+	{ suite: "smoke", config: smokeConfig, count: COUNTS.smoke },
+	{ suite: "network", config: networkConfig, count: COUNTS.network },
+] as const)("the $suite config's sequencer at its lane's $count shards", ({ suite, config, count }) => {
 	const files = selection(config)
 	const lists: string[][] = suite === "network" ? [files, pool(files)] : [files]
 
@@ -107,8 +116,8 @@ describe("assignShards", () => {
 	})
 
 	test.each([
-		["smoke", 3],
-		["network", 5],
+		["smoke", COUNTS.smoke],
+		["network", COUNTS.network],
 	] as const)("on the committed %s record, no shard runs longer than another by more than its longest file", (suite, count) => {
 		for (const browser of BROWSERS) {
 			const costs: Record<string, number> = timings[suite][browser]

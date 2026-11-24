@@ -263,13 +263,13 @@ runtime env var can never arm a build-time flag.
 
 - **Smoke** — `pr-extension-smoke-e2e.yml` → `_extension-smoke-e2e.yml`. Runs when the diff trips its paths filters
   (the extension's build inputs or its own `smoke-surface`, a PR into `main` included), on the `e2e:extension-smoke`
-  label, or on dispatch; 3 vitest shards
-  (`--shard=N/3`), each a 30-minute job with its own in-job armed build; nightly/release run an artifact
+  label, or on dispatch; 4 vitest shards
+  (`--shard=N/4`), each a 30-minute job with its own in-job armed build; nightly/release run an artifact
   (`artifact_name` / `extension_path`) whole, in one 45-minute job.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e-lane.yml` → `_extension-network-e2e.yml`.
   Filters: the extension's build inputs and its own `extension-network`; label `e2e:extension-network`. The lane file is the partition every caller runs (both
-  PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 5 vitest shards (`--shard=N/5`, split by the timings record, proverless, retry 0,
+  PR lanes, the nightly, release's opt-in run); a file moves between the pool and a dedicated job there alone. Lanes: 7 vitest shards (`--shard=N/7`, split by the timings record, proverless, retry 0,
   the 12 dedicated files excluded); three heavy lanes (`fee-methods` + `selfpay-phase`,
   `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, and `snack-placement` + `failed-send-check`,
   proverless); the **canary** lane prover-ON with the SHA-256-pinned
@@ -1036,7 +1036,8 @@ worker that refused to die.
 - `gh run view --log` echoes the step's SOURCE script with near-identical timestamps before runtime
   output; grepping for `exit 86` or `retrying` matches the source and fabricates an event (such a
   misread has confirmed a boot retry that never happened). Use
-  `gh api repos/{owner}/{repo}/actions/jobs/<id>/logs`, match on timestamps advancing, count real
+  `gh api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/<id>/logs` (gh 2.103 refuses a
+  log holding the reporter's colour codes without the flag), match on timestamps advancing, count real
   invocation markers, and mine at attempt level for reruns that cleared a first-attempt red.
 - `[aztec-node] Address already in use (os error 98)` at boot is cosmetic (the wrapper's inner anvil
   loses a bind the setup already holds). The fatal boot signature is

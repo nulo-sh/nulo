@@ -83,9 +83,10 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { id: "1/3", label: "1-of-3" }
-          - { id: "2/3", label: "2-of-3" }
-          - { id: "3/3", label: "3-of-3" }
+          - { id: "1/4", label: "1-of-4" }
+          - { id: "2/4", label: "2-of-4" }
+          - { id: "3/4", label: "3-of-4" }
+          - { id: "4/4", label: "4-of-4" }
     uses: ./.github/workflows/_extension-smoke-e2e.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.ref }}

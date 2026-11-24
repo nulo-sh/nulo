@@ -9,10 +9,10 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 | Workflow | Required check-run | Required on | Runs when | What it checks |
 |---|---|---|---|---|
 | `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build, landing build, Storybook build, launch legal check (PRs into `main`) |
-| `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | `e2e:extension-smoke` label, OR the extension's build inputs ([`path-filters/extension-build.yml`](path-filters/extension-build.yml)) or the lane's own `smoke-surface` paths filter (on `dev` and `main` alike) | chrome build + puppeteer smoke, 3 shards |
+| `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | `e2e:extension-smoke` label, OR the extension's build inputs ([`path-filters/extension-build.yml`](path-filters/extension-build.yml)) or the lane's own `smoke-surface` paths filter (on `dev` and `main` alike) | chrome build + puppeteer smoke, 4 shards |
 | `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | `e2e:extension-network` label, OR the extension's build inputs or the lane's own `extension-network` paths filter (on `dev` and `main` alike); `workflow_dispatch` runs the whole lane at retry 0 on any ref | full network e2e (anvil + Aztec sandbox + playground), plus two fixed send-chaos seeds |
-| `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` | dev + main | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter), drafts included | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 3 shards |
-| `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` | dev + main | same gate as the Chrome twin, drafts included; `workflow_dispatch` likewise | the network suite on Firefox: the same lane as on Chrome (5 proverless shards + 3 heavy jobs + the real-proving canary + the two chaos seeds) |
+| `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` | dev + main | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter), drafts included | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 4 shards |
+| `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` | dev + main | same gate as the Chrome twin, drafts included; `workflow_dispatch` likewise | the network suite on Firefox: the same lane as on Chrome (7 proverless shards + 3 heavy jobs + the real-proving canary + the two chaos seeds) |
 | `pr-supersede.yml` | — | — | a push to an open same-repository PR (`synchronize`) | cancels the PR workflows' runs on heads the PR has moved past; one job with `actions: write`, no action, no checkout |
 | `pr-retarget.yml` | — | — | a base change of an open same-repository PR (`edited`; a title or body edit skips the job) | re-runs all jobs of each e2e lane's latest run of the head, cancelling and waiting for a run in flight; one job with `actions: write`, no action, no checkout |
 | `actionlint.yml` | `Status` (not required) | — | when `.github/workflows/**` or shell scripts change | actionlint + shellcheck |
@@ -34,7 +34,7 @@ Reusables live as `.github/workflows/_*.yml` and are called from top-level workf
 | Reusable | Callers |
 |---|---|
 | `_lint-and-typecheck.yml` | `pr-quick`, `release`, `nightly` |
-| `_unit-tests.yml` | `pr-quick`, `release`, `nightly` |
+| `_unit-tests.yml` | `pr-quick`, `release`, `nightly`: three legs, each a third of the extension's suite (`--shard`) and one of the other workspaces, `test:release` or `test:ci-gating` |
 | `_build-extension.yml` | `pr-quick`, `release`, `nightly`, `source-rebuild` |
 | `_release-pr-lockfile.yml` | `release`, `release-prerelease` |
 | `_extension-smoke-e2e.yml` | `pr-extension-smoke-e2e`, `pr-extension-smoke-e2e-firefox`, `release`, `nightly` |

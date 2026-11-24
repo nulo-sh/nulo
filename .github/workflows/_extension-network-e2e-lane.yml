@@ -47,11 +47,13 @@ jobs:
         # Files go to shards by their recorded time (apps/extension/tests/e2e/shard-sequencer.ts).
         # `label` is `id` without the `/` that actions/upload-artifact refuses in a name.
         shard:
-          - { id: "1/5", label: "1-of-5" }
-          - { id: "2/5", label: "2-of-5" }
-          - { id: "3/5", label: "3-of-5" }
-          - { id: "4/5", label: "4-of-5" }
-          - { id: "5/5", label: "5-of-5" }
+          - { id: "1/7", label: "1-of-7" }
+          - { id: "2/7", label: "2-of-7" }
+          - { id: "3/7", label: "3-of-7" }
+          - { id: "4/7", label: "4-of-7" }
+          - { id: "5/7", label: "5-of-7" }
+          - { id: "6/7", label: "6-of-7" }
+          - { id: "7/7", label: "7-of-7" }
     uses: ./.github/workflows/_extension-network-e2e.yml
     with:
       ref: ${{ inputs.ref }}
@@ -91,8 +93,8 @@ jobs:
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
 
-  # Dedicated for wall time alone: folded into the five-shard pool, these two files made the lane end
-  # later on both browsers when measured.
+  # Dedicated for wall time alone: folded into the pool when it had five shards, these two files made
+  # the lane end later on both browsers when measured.
   network-e2e-heavy-long:
     name: heavy / snack-placement + failed-send-check
     uses: ./.github/workflows/_extension-network-e2e.yml
