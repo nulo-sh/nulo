@@ -149,63 +149,118 @@ describe("isAddressShapedName, on the name as it is stored", () => {
 	const reads = (name: string) => isAddressShapedName(sanitizeContactName(name))
 
 	test("`0x` and four hex digits, in any case and anywhere in the name", () => {
-		for (const name of ["0x0c2b7e..4b5c", "0x0c2b", "Wallet 0xdeadbeef", "0X0C2B"]) expect(reads(name), name).toBe(true)
+		for (const name of ["0xabcd", "0x0c2b", "Wallet 0xdeadbeef", "0X0C2B"]) expect(reads(name), name).toBe(true)
+		for (const name of ["0xabc", "0x", "Oxford"]) expect(reads(name), name).toBe(false)
 	})
 
-	test("two hex runs of three joined by two or more dots", () => {
-		for (const name of ["c2b7e..4b5c", "0c2b...4b5c"]) expect(reads(name), name).toBe(true)
-		// The owner's accepted over-refusal: a word of hex letters on each side of the dots.
-		expect(reads("Abe...Dad")).toBe(true)
+	test("two dots in a row, anywhere, also once spaces, hyphens and underscores are taken out", () => {
+		for (const name of ["0x..4b5c", "Abe...Dad", "Mom...", "0x 0c2b7e. .4b5c", "A.-.B", "A._.B"]) expect(reads(name), name).toBe(true)
+		for (const name of ["J.R. Smith", "A. B. C.", "Dr. No", "tom.eth", "v1.2.3"]) expect(reads(name), name).toBe(false)
 	})
 
-	test("a `0x` run shorter than four before the dots", () => {
-		expect(reads("0x0c..4b5c")).toBe(true)
-		expect(reads("0x..4b5c")).toBe(false)
+	test("the digit 0, an x and four or more letters or digits with a digit among them, also once spaces, hyphens and underscores are taken out", () => {
+		const refused = ["0xSif1", "0x0c2l7e4b5c6d7e8f9a0b1c2", "Team 10 x 4 all", "0x-sam1", "0xford.0xzz1z", "1000 x 2000"]
+		for (const name of refused) expect(reads(name), name).toBe(true)
+		// Four is the shortest run.
+		for (const name of ["0xa1c", "Vault 0x12", "0xmaki", "Box 0xford", "Roxanne1985", "Xbox360", "0x"])
+			expect(reads(name), name).toBe(false)
 	})
 
 	test.each([
-		["Latin o", "Ox0c2b"],
-		["Cyrillic а", "0x0\u04302b"],
-		["Cyrillic в", "0x0c2\u0432"],
-		["Cyrillic с", "0x0\u04412b"],
-		["Cyrillic ԁ", "0x0\u05012b"],
-		["Cyrillic е", "0x0\u04352b"],
-		["Cyrillic О", "\u041Ex0c2b"],
-		["Cyrillic х", "0\u04450c2b"],
-		["Greek α", "0x0\u03B12b"],
-		["Greek β", "0x0c2\u03B2"],
-		["Greek ϲ", "0x0\u03F22b"],
-		["Greek Ϲ", "0x0\u03F92b"],
-		["Greek ε", "0x0\u03B52b"],
-		["Greek ο", "\u03BFx0c2b"],
-		["Greek χ", "0\u03C70c2b"],
+		["Cyrillic х", "0хSifu1"],
+		["Greek χ", "0χSifu1"],
+		["capital X", "0XSIFU1"],
+		["fullwidth x", "0ｘSifu1"],
+		["a mathematical x", "0\u{1D431}Sifu1"],
+	])("the x of a `0x` run is any letter case and compatibility forms fold to x: %s", (_x, name) => {
+		expect(reads(name)).toBe(true)
+	})
+
+	// No digit follows the x, so only the hex fold refuses these.
+	test.each([
+		["Latin o", "Oxabcd"],
+		["Cyrillic а", "0xаbcd"],
+		["Cyrillic в", "0xabcв"],
+		["Cyrillic с", "0xaсbd"],
+		["Cyrillic ԁ", "0xabԁe"],
+		["Cyrillic е", "0xabеc"],
+		["Cyrillic О", "Оxabcd"],
+		["Cyrillic х", "0хabcd"],
+		["Greek α", "0xαbcd"],
+		["Greek β", "0xabcβ"],
+		["Greek ϲ", "0xaϲbd"],
+		["Greek Ϲ", "0xaϹbd"],
+		["Greek ε", "0xabεc"],
+		["Greek ο", "οxabcd"],
+		["Greek χ", "0χabcd"],
 	])("a look-alike letter reads as the hex it is drawn like: %s", (_letter, name) => {
 		expect(reads(name)).toBe(true)
 	})
 
 	test("compatibility forms and marks fold first: fullwidth letters, a mathematical capital, a marked x or Cyrillic е", () => {
-		for (const name of ["0\uFF58\uFF41\uFF42\uFF43\uFF44", "0x0\u{1D402}2b", "0\u1E8B0c2b", "0x0\u04512b"])
-			expect(reads(name), name).toBe(true)
+		for (const name of ["0ｘａｂｃｄ", "0xab\u{1D402}d", "0ẋabcd", "0xabёc"]) expect(reads(name), name).toBe(true)
 	})
 
 	test("an address cut to the name's 25 characters", () => {
 		expect(reads(`0x${"0c2b7e41".repeat(8)}`)).toBe(true)
 	})
 
-	test("ordinary names, dotted initials and words with hex letters pass", () => {
+	test("a short address is refused whatever letters fill it", () => {
 		const names = [
-			"Ana",
-			"Oxford",
-			"Box 0xford",
-			"J.R. Smith",
-			"J.R.. Smith",
-			"A..B",
-			"Ed..Bob",
+			"0x0c2b7e..4b5c",
+			"0x0c2l7e..4b5c",
+			"0x0c2I7e..4b5c",
+			"0x0c2S7e..4b5c",
+			"0x0c2ø7e..4b5c",
+			"0xøc2b7ø..4b5c",
+			"0x0c2ɑ7e..4b5c",
+			"Ox0c2l7e..4b5c",
+			"0x0c..4b",
+			"0x0c2l7e4b5c",
+		]
+		for (const name of names) expect(reads(name), name).toBe(true)
+	})
+
+	// The owner's pick of 2026-11-24 named these two lists: the names that pass, and the seven it refuses.
+	test.each(["Ana", "Oxford", "J.R. Smith", "Box 0xford", "Roxanne1985", "Xbox360", "0xmaki", "tom.eth", "R2-D2"])(
+		"%j passes",
+		(name) => {
+			expect(reads(name)).toBe(false)
+		},
+	)
+
+	test.each(["J.R.. Smith", "A..B", "Mom...", "Wait.. what", "v1..2", "0xSifu1", "Team 10 x 4 all"])("%j is refused", (name) => {
+		expect(reads(name)).toBe(true)
+	})
+
+	test("ordinary names of any script, with initials and numbers, pass", () => {
+		const names = [
 			"Zoë Ångström",
 			"Søren",
 			"Deadbeef",
 			"Account 1",
+			"Наташа",
+			"李雷 2",
+			"María José",
+			"Agent 007",
+			"Uncle Bob 1.5",
+			"Fox Face",
 		]
 		for (const name of names) expect(reads(name), name).toBe(false)
+	})
+
+	test("matches in time linear in the name, however long", () => {
+		const long = [
+			`0x${"g".repeat(100_000)}`,
+			`0x${"g".repeat(100_000)}.1`,
+			"0xgg.".repeat(20_000),
+			`0${"\u0445".repeat(100_000)}`,
+			"abc.".repeat(25_000),
+			`abc${".".repeat(100_000)}g`,
+		]
+		const started = performance.now()
+		const results = long.map(isAddressShapedName)
+		expect(performance.now() - started).toBeLessThan(1_000)
+		expect(results).toEqual([false, false, false, false, false, true])
 	})
 })
