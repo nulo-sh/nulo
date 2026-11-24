@@ -30,7 +30,9 @@ export const importedKey = (account: { chainId: number; address: string }): stri
 /**
  * Every readable imported account of `profileId` on every chain, network row or not, as the profile's
  * deletion erases them; rejects with {@link ResetRunningError} while a reset runs. The pending reset
- * is read after the accounts, so a reset that starts later purges nothing the account read missed. A
+ * is read after the accounts, so a reset that starts later purges nothing the account read missed; one
+ * that ends between the two reads answers its purged list with no reset pending, so the caller drops a
+ * read its client's reset-end event overtakes (that event precedes the answer on one port). A
  * paused reset's journal-held imports count once its purge has removed their live rows (before it,
  * those rows are the accounts, at the address they had); a held import is keyed on the network's
  * chain, which the reset rewrites before it recreates any row, so a recreated one is named once.
