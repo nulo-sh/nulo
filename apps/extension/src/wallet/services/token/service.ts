@@ -774,7 +774,10 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	): Promise<TokenInterface> {
 		await this.ensureInitialized()
 		const stepContent = new StepContent("Parsing token interface")
-		const task = parentTask ? parentTask.startSubtask(stepContent) : this.tasks.startNewTask(stepContent)
+		// A root step takes its network's profile; a subtask starts at once, under a parent that shows it.
+		const task = parentTask
+			? parentTask.startSubtask(stepContent)
+			: this.tasks.startNewTask((await this.networks.getNetwork(networkId)).profileId, stepContent)
 
 		try {
 			const network = await this.networks.getNetwork(networkId)

@@ -37,11 +37,11 @@ function makeTaskService(): TaskMock {
 	const finishedAt = new Map<string, boolean>()
 	const createNewTask = vi.fn().mockImplementation(() => {
 		const id = `task-${nextId++}`
-		return { id }
+		return { id, exists: true }
 	})
 	const startNewTask = vi.fn().mockImplementation(() => {
 		const id = `task-${nextId++}`
-		return { id }
+		return { id, exists: true }
 	})
 	const startTask = vi.fn()
 	// Mirror the real TaskService: finishing an already-finished task throws, on every finish path.
@@ -515,6 +515,35 @@ describe("BalanceJobQueue", () => {
 		expect((await repo.get(1))?.syncFailure).toBeUndefined() // foreign row untouched
 		expect((await repo.get(2))?.privateBalance).toBe("9") // healthy row still processed
 		expect(onBalanceUpdated).toHaveBeenCalledTimes(1)
+	})
+
+	test("a row whose task the registry refuses gets nothing applied, while the batch's other row completes", async () => {
+		const ticker = new FakeBackgroundTicker()
+		const repo = makeRepo([raw(1, { profileId: "p0" }), raw(2)])
+		const tasks = makeTaskService()
+		for (const create of [tasks.createNewTask, tasks.startNewTask]) {
+			const tracked = create.getMockImplementation() as (...args: unknown[]) => unknown
+			create.mockImplementation((owner: string, ...rest: unknown[]) =>
+				owner === "p0" ? { id: "", exists: false } : tracked(owner, ...rest),
+			)
+		}
+		const onBalanceUpdated = vi.fn()
+		const { projector } = makeProjector([
+			{ kind: "ok", id: 1, privateBalance: "7", publicBalance: "0" },
+			{ kind: "ok", id: 2, privateBalance: "9", publicBalance: "0" },
+		])
+		const queue = new BalanceJobQueue(ticker, repo, projector, tasks.service, { getGeneration: () => 0, onBalanceUpdated })
+
+		queue.enqueue(raw(1, { profileId: "p0" }))
+		queue.enqueue(raw(2))
+		expect([queue.hasPendingTask(1), queue.hasPendingTask(2)]).toEqual([false, true])
+		await queue.tick()
+
+		expect([(await repo.get(1))?.privateBalance, (await repo.get(2))?.privateBalance]).toEqual(["0", "9"])
+		expect(tasks.completeTask).toHaveBeenCalledOnce()
+		const byId = [tasks.startTask, tasks.completeTask, tasks.failTask, tasks.cancelTask, tasks.getTaskSync, tasks.hasTask]
+		expect(byId.flatMap((mock) => mock.mock.calls).filter(([id]) => id === "")).toEqual([])
+		expect([queue.hasPendingTask(1), queue.hasPendingTask(2)]).toEqual([false, false])
 	})
 
 	test("a hostile-length failure message is bounded before persisting", async () => {

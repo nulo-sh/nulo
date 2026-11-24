@@ -220,9 +220,8 @@ describe("TransferExecutor.execute", () => {
 		// per network — a UI test supplying the field manually cannot see it vanish.
 		const { executor, deps } = makeHarness()
 		await executor.execute(makeReq(), undefined, FENCE)
-		const content = (deps.tasks.startNewTask as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
-			networkId?: string
-		}
+		const [owner, content] = (deps.tasks.startNewTask as ReturnType<typeof vi.fn>).mock.calls[0] as [string, { networkId?: string }]
+		expect(owner).toBe(FENCE.profileId)
 		expect(content.networkId).toBe("net-1")
 	})
 
