@@ -6,6 +6,8 @@ import type { EditorState, TransactionSpec } from "@codemirror/state"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
+import { downloadFile } from "@/utils"
+import { LogLevel } from "@/wallet/logger"
 import { type LogEntry, logsDocument } from "./logs-format"
 
 interface StubView {
@@ -476,8 +478,6 @@ describe("LogsViewer opened at a log", () => {
 
 describe("LogsViewer CSV export", () => {
 	test("writes only the lines the filters show", async () => {
-		const { LogLevel } = await import("@/wallet/logger")
-		const { downloadFile } = await import("@/utils")
 		const t = Date.now()
 		H.getLogs.mockResolvedValue([
 			{ id: 1, timestamp: t, source: "wallet-sdk", level: LogLevel.Info, data: ["shown-info"] },
