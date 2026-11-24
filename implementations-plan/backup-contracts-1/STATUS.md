@@ -6,3 +6,4 @@
 - 2026-11-23 Opus r1 (Plan agent): conditional approve; folded (plan § Plan review). Codex r1 folded.
 - 2026-11-23 final fresh Codex pass started.
 - 2026-11-23 final Codex pass: conditional approve, two resumed rounds folded, then approve. At the approval gate; nothing built.
+- 2026-11-24 owner decision page 201: OA-1 A, OA-2 A, OA-3 A; arc 1 building on `backup-contracts-1-a1` off origin/dev `9c913679b`.

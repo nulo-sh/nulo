@@ -1,7 +1,7 @@
 ---
 plan: backup-contracts-1
 tier: mid
-status: at the approval gate (final Codex pass: approve)
+status: arc 1 building (owner decision page 201: OA-1 A, OA-2 A, OA-3 A)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -22,9 +22,9 @@ The owner (2026-11-23, page 200) rejected three message-only answers to the back
 
 | Arc | Phases | What it does | Waits for |
 |---|---|---|---|
-| 1 | 1-4 | Format 2 of the part: each class's artifact once, debug info left out; reads every older file | approval of OA-1 (any option ships arc 1) and OA-3 |
-| 2 | 5 | Step 2: leave out the code of classes the wallet ships | OA-1 = B |
-| — | — | Step 3 (fetch code at restore) is designed below, not planned as an arc | OA-1 = C and OA-2 |
+| 1 | 1-4 | Format 2 of the part: each class's artifact once, debug info left out; reads every older file | approved (page 201) |
+| 2 | 5 | Step 2: leave out the code of classes the wallet ships | not built (OA-1 = A) |
+| — | — | Step 3 (fetch code at restore) is designed below, not planned as an arc | not built (OA-1 = A, OA-2 = A) |
 
 ## Outcome & Quality Bar
 
@@ -54,7 +54,11 @@ The owner (2026-11-23, page 200) rejected three message-only answers to the back
 - I3. A real profile holds fewer than 10 distinct unshipped classes. This, and the "typical" and "heavy" profiles in recon, are hypotheses; nothing measures the population.
 - I4. Restore time stays inside the 30 s per-network budget for 32 instances of one class, since only the class's first registration in a call carries the artifact (P3); not timed on a PXE.
 
-**Asks** (in [OWNER-ASKS.md](OWNER-ASKS.md), each with the working assumption arc 1 builds on): OA-1 which steps ship (assumed A, step 1 only); OA-2 the privacy call for step 3 (assumed A, never fetch); OA-3 an older build meeting a newer file (assumed A, the part is refused).
+**Asks** (in [OWNER-ASKS.md](OWNER-ASKS.md)), answered on decision page 201, signed 2026-11-24T12:25Z:
+- OA-1 **A**: "Step 1 only. Each contract class's code is stored once per file, without its debug information."
+- OA-3 **A**: "The new file holds one list of code for all networks. An older build restores accounts, tokens, contacts and settings, and refuses the contract part: View errors lists one record for it, reading "malformed account-state slice (not an array)". It sets no Restore again reminder."
+- OA-2 **A**: "Never fetch."
+- The owner's note on signing: "I'm a bit scared of this backup change. Please, let's test the options thoroughly." Arc 1 answers it with the evidence table in § Phases (E1-E8).
 
 ## Architecture & Implementation
 
@@ -85,7 +89,7 @@ type AccountStateSlice = BackupAccountState[] /* format 1, every file written be
 - **Hole 1, an app's contract of a shipped kind with no token row.** It is closed by the design: the export leaves out the **artifact**, never the entry. Every instance stays in `items`, and restore resolves its class from the catalog with no token row involved. The arc-1 decoder and restore already handle an entry with no table artifact.
 - **Hole 2, a restore on a build that ships different code.** A newer build gets the same guarantee as the address freeze. `RETAINED_SHIPPED_CLASS_IDS` in `packages/aztec-runtime/src/pxe/` is append-only: the aztec-standards Token, the private FPC, the sponsored FPC. A paired test hardcodes every entry and asserts each equals a catalog entry's computed class id. The export leaves out only those classes, so every later build can supply them. An entry leaves the list only on the owner's recorded decision. Retaining an id means retaining its artifact: an Aztec bump that replaces a catalog artifact must keep the old one compiled in and loadable by the new `stdlib`, which the membership test enforces. A build older than the file reads it only if it also knows every class the file left out: a pre-format-2 build cannot read format 2 at all (OA-3), and a format-2 build from before a later list entry fails those entries with "Contract artifact not found".
 - **Out of the list: the account class.** Account regimes rotate, and an off-Mainnet rotation leaves old-regime accounts unusable by design. Retaining the old artifact would contradict that rule. After step 1 the account class costs one copy (1.42 million) per file.
-- **Measured gain over step 1:** at most 3.36 million code units once per file (token 1.84 + sponsored FPC 0.91 + private FPC 0.62). For example, 32 tokens drop from 1,874,531 to 38,580, and the typical profile from 5.9 to 1.1 million. **Not recommended now** (D6): step 1 already puts the cap out of reach, and step 2 adds a cross-build rule forever.
+- **Measured gain over step 1:** at most 3.36 million code units once per file (token 1.84 + sponsored FPC 0.91 + private FPC 0.62). For example, 32 tokens drop from 1,874,531 to 38,580, and the typical profile from 5.9 to 2.53 million (the heavy one 8.57 to 5.21, the mix 7.57 to 5.11; the account class stays in the file). **Not recommended now** (D6): step 1 already puts the cap out of reach, and step 2 adds a cross-build rule forever.
 
 ### Step 3: keep the address and class id, fetch the code at restore (not planned)
 
@@ -97,7 +101,7 @@ type AccountStateSlice = BackupAccountState[] /* format 1, every file written be
 
 ### What is left (step 4)
 
-- After arc 1, passing the cap needs about 24 distinct unshipped classes of MultiToken size, 44 of Vault size, or 298 of Escrow size, across all networks (recon). Then the export and the restore behave as today: a log warning at 80%, and the import refuses the part with its existing record. This becomes **KL1**, a closed `known-limit` issue at close-out, reopened on a user report or a measured profile above half the cap.
+- After arc 1, passing the cap needs about 22 distinct unshipped classes of MultiToken size, 40 of Vault size, or 265 of Escrow size, across all networks, beside the 4.78 million of shipped classes a file already holds (recon). Then the export and the restore behave as today: a log warning at 80%, and the import refuses the part with its existing record. This becomes **KL1**, a closed `known-limit` issue at close-out, reopened on a user report or a measured profile above half the cap.
 - `maxSliceCodeUnits` stays at 40 MiB. Lowering it refuses format-1 files measured at 33.8 million. Raising it trips the 64 MiB file cap first.
 - `maxContractsPerNetwork` (32) is a count bound on restore work, not a size bound. A person with more than 32 contracts on one network loses the entries past 32 at restore, as today. The token refresh re-registers shipped-class tokens. This becomes **KL2**, reopened on a user report.
 
@@ -153,6 +157,7 @@ type AccountStateSlice = BackupAccountState[] /* format 1, every file written be
 | D7 | Step 3 not recommended | no v6 artifacts on Aztecscan; privacy; permission | OA-1 C |
 | D8 | Caps unchanged; KL1-KL2 filed | each needs conditions no measured profile meets | raise counts without a measured restore budget |
 | D9 | Results drop the artifact | the response would carry N copies back (F7) | keep the echo |
+| D10 | Owner, page 201 (2026-11-24T12:25Z): OA-1 A, OA-3 A, OA-2 A | "Step 1 only. Each contract class's code is stored once per file, without its debug information." / "The new file holds one list of code for all networks. An older build restores accounts, tokens, contacts and settings, and refuses the contract part: View errors lists one record for it, reading "malformed account-state slice (not an array)". It sets no Restore again reminder." / "Never fetch." | OA-1 B, C; OA-3 B, C; OA-2 B, C |
 
 ## Phases
 
@@ -172,6 +177,9 @@ Every gate also runs `bun run lint` and `bun run typecheck:all` from the worktre
 - Tests: 3 instances of one class register with one hash (call count), the first call carrying the artifact and the other two `{instance}` alone, and the first failing means the next carries it; a table entry of the wrong class fails only its entries, with the fixed text, while another class registers (success control); a format-1 file with two different artifacts under one class checks each, through `runImportChainSync` and in both orders (valid first, invalid first), and again for a Retry over two networks each carrying one of the two; a two-network call sends class A's artifact on each network; a missing class resolves from the wallet's copy, else fails with "Contract artifact not found"; a format-1 file restores unchanged; the payload for one network holds only its classes; a network that fails then succeeds on Retry sends a payload under the cap (the regression: 32 instances); the result records carry no `artifact` on any branch; the remap moves format-2 items and reports dropped indexes.
 - Gate: `bun --bun vitest run src/wallet/services/account-state src/composables/importChainSync.test.ts src/composables/useRestoreAgain.test.ts src/composables/useFullBackupImport.test.ts src/utils/full-backup-helpers.test.ts`, and in `packages/aztec-runtime`, `bun --bun vitest run src/pxe/artifact-class-id.test.ts`. Then, from the root, one `e2e:agent` run (per prover mode, as CLAUDE.md says) over every network spec that edits the part or imports `keepChainAccountState`, `crash-truth` or `handshake-import`: `git grep -l -E 'keepChainAccountState|crash-truth|handshake-import|"account-state"' -- apps/extension/tests/e2e/network` lists them (at `8ae2c06a4`: backup-migration-roundtrip, backup-restore-integrity, backup-import-stalled-network, backup-restore-sw-restart, backup-edited-local-network, restore-again, import-handshake-note, import-handshake-note-matrix, profile-reimport-matrix, hero-prices-unavailable, same-token-concurrent-sends; an opt-in spec runs only when armed by default). Then, in `apps/extension`: `bun run test:e2e -- tests/e2e/backup-roundtrip.test.ts tests/e2e/backup-migration.test.ts --retry=0`. Pass: every command exits 0. The round trip restores the same contract registrations as before. Record the account-state stage's duration from the round trip (`tests/e2e/helpers/import-stage-timing.ts`) in `lessons/phase-3.md`; I4's 32-instance timing stays a hypothesis unless measured.
 
+**Evidence for the owner's note (E1-E8).** Each row is run and recorded with its command and outcome in `lessons/phase-3.md` and the PR body:
+E1 a v1.3.0 file restores on head with the same (address, class id) set and senders, Chrome and Firefox, through the update harness; E2 the v1.3.0 build imports a head file and does exactly what OA-3 A says, then head restores the same file in full; E3 a head round trip on both browsers, two networks sharing a class; E4 the pinned backups under `stored-shapes/backups/` open, validate, migrate and read with nothing re-pinned; E5 the P1 and P3 refusal cases; E6 a network that fails then succeeds on Retry sends a payload under the cap, in a unit test and in the stalled-import spec; E7 the four headline sizes on real head exports; E8 the contract stage's time for 32 instances of one class on a real PXE, base and head. A spec that only produces evidence stays outside the repo.
+
 **P4. Docs and the arc gate.** Update the backup README (the part's format and versioning), ARCHITECTURE.md §5 and the `normalize.ts` cap comment. Re-measure the four headline rows with the shipped code (the unit size test, 32 instances of one class) and write the numbers into this plan.
 - Gate: `bun run test`, `bun run test:all`, and `bun run check:plans` after staging. Pass: exit 0, and 32 tokens measure under 2,000,000 code units.
 
@@ -187,10 +195,9 @@ None. No surface changes in arc 1 or arc 2. A restore of an edited file can show
 
 ## Delivery
 
-- One `gh stack` on `dev`. Arc 1: branch `backup-contracts-1-a1`. Its first commit cherry-picks this plan's commit from `worktree-backup-contracts-1`. PR `feat(backup): store each contract class's code once in a full backup` (68 characters).
-- Arc 2 (only on OA-1 = B): `backup-contracts-1-a2` stacked on arc 1. PR `feat(backup): leave out contract code the wallet ships, restored from its own copy` (82 characters).
-- Close-out: the docs-only top layer `backup-contracts-1-close-out`. PR `docs(plans): close backup-contracts-1`.
-- No issue exists for this work. The PR bodies cite the owner's page-200 decision and carry no `Closes` line. Each body: what changed and why, the measured sizes before and after, the validation runs, "No visible change."
+- One PR on `dev` (arc 2 is not built). Arc 1: branch `backup-contracts-1-a1`. Its first commit cherry-picks this plan's commit from `worktree-backup-contracts-1`. PR `feat(backup): store each contract class's code once in a full backup` (68 characters).
+- Arc 2 is not built (OA-1 = A), so the close-out rides on arc 1's PR as its final commits: the Outcome block, the known limits, the lessons pass, `STATUS.md` deleted, then `git mv` into `archive/` in its own commit with the index line moved.
+- No issue exists for this work. The PR body cites the owner's page-200 note and page-201 picks and carry no `Closes` line. Each body: what changed and why, the measured sizes before and after, the validation runs, "No visible change."
 - No label at creation. Add `e2e:extension-network` afterwards only if the path filter skips the network lane.
 - Parallelism: arc 2 depends on arc 1's decoder. There is one lane.
 

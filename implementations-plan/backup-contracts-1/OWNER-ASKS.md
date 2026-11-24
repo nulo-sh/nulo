@@ -29,3 +29,12 @@ Three calls are the owner's. None of the recommended options changes a screen, s
 - **Option B, the older build refuses the whole file:** it shows "Incompatible backup", words it already has. Nothing restores until the person updates. Every new file, even one with no contracts, is refused by an older build.
 - **Option C, keep the older build restoring senders (one copy per contract class per network):** the part stays a list per network, each network carrying its own copy of the code it uses. An older build restores senders, lists the contracts as dropped, and sets its "Restore again" reminder. The cost is permanent: the two-network person's part weighs 11.7 million instead of 5.9 million (28% of the limit instead of 14%), a three-network heavy user 25.5 million instead of 8.6 million (61% instead of 20%).
 - **Recommendation: A.** It fails one part, with no new words, and keeps one copy per class for good; C pays 2-3 times the size forever for a window that ends when the older build updates. C is the better pick if you expect older builds to stay in use for long. No change to an older build is possible anyway. (If OA-1 is B, a wallet that reads the new format but predates a later list entry fails only those contracts, with the existing "Contract artifact not found".)
+
+## Answers (decision page 201, signed 2026-11-24T12:25Z)
+
+- OA-1 **A**: "Step 1 only. Each contract class's code is stored once per file, without its debug information."
+- OA-3 **A**: "The new file holds one list of code for all networks. An older build restores accounts, tokens, contacts and settings, and refuses the contract part: View errors lists one record for it, reading "malformed account-state slice (not an array)". It sets no Restore again reminder."
+- OA-2 **A**: "Never fetch."
+- Note: "I'm a bit scared of this backup change. Please, let's test the options thoroughly."
+- Corrections to the figures above: option B keeps the account class, so the two-network person weighs 2.53 million, not 1.1; after option A the limit takes about 22 large app contracts (40 of a middle size), not 24 (44).
+

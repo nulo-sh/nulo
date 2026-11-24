@@ -59,9 +59,11 @@ One artifact, code units: aztec-standards Token as shipped (stripped) 1,835,882;
 | Typical: 2 networks × (3 accounts, 2 sponsors, 6 tokens, 2 app classes); apps stripped / with debug | 35,786,391 / 41,706,693 (99% of the cap) | 5,889,635 / 8,849,786 | 1,109,199 / 4,069,350 |
 | Heavy: 3 networks × (5 accounts, 2 sponsors, 20 tokens, 5 app contracts); apps stripped / with debug | 147,578,224 / 171,605,056 | 8,567,680 / 15,520,968 | 3,787,244 / 10,740,532 |
 
+Correction (2026-11-24): the right-hand column also leaves the account class (1.42M) out of the file, which step 2 keeps; with it, mix 5.11M, typical 2.53M, heavy 5.21M (stripped).
+
 Per-network class tables (OA-3 C: the array shape, each network carrying the classes it uses), stripped / with debug: typical 11,748,047 / 17,668,349; heavy 25,471,699 / 46,331,563; one-network rows equal format 2.
 
-The 1-token figure matches the "about 1.8 million" the earlier lane measured on the local network. A typical two-network profile is at the cap today. After format 2 with stored artifacts stripped, the cap needs about 24 distinct MultiToken-sized app classes, 44 Vault-sized or 298 Escrow-sized (with debug info kept: 10, 14, 35).
+The 1-token figure matches the "about 1.8 million" the earlier lane measured on the local network. A typical two-network profile is at the cap today. After format 2 with stored artifacts stripped, the cap needs about 22 distinct MultiToken-sized app classes, 40 Vault-sized or 265 Escrow-sized beside the 4.78M of shipped classes (first counted from an empty file as 24, 44, 298; with debug info kept: 10, 14, 35, same basis).
 
 Probe: `ContractArtifactSchema.parseAsync({...artifact, artifactHash: "0x01"})` returns no `artifactHash` key (2026-11-23).
 
