@@ -145,7 +145,7 @@ const showCancel = computed(() => props.cancellable && Boolean(props.jobId) && p
 }
 
 .direction {
-	composes: visually_hidden from "./activity-card.module.css";
+	composes: visually_hidden from "@/components/a11y.module.css";
 }
 
 .app_chip {

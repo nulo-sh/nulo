@@ -458,7 +458,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 }
 
 .retry {
-	composes: retry from "@/popup/components/modules/send/fee-shared.module.css";
+	composes: accent from "@/components/text-action.module.css";
 	flex-shrink: 0;
 	white-space: nowrap;
 }

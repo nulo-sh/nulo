@@ -205,6 +205,6 @@ defineExpose({ target, focus: () => target()?.focus() })
 }
 
 .visually_hidden {
-	composes: visually_hidden from "./fee-shared.module.css";
+	composes: visually_hidden from "@/components/a11y.module.css";
 }
 </style>
