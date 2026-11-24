@@ -1,7 +1,7 @@
 ---
 plan: shared-guards-1
 tier: mid
-status: arc 1 in PR #1956
+status: arc 1 merged (#1956); arc 2 in review
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -24,7 +24,7 @@ Issue #1928 (and the hex part of closed #1452). Three arcs, one PR each against 
 |---|---|---|---|
 | 1 | 1-4 | the guard and its baseline; the five packages; extension `content-script`, `e2e`, `utils`, `wallet/logger` | nothing |
 | 2 | 5 | extension `wallet/config`, `wallet/storage`, the free `wallet/services` files; `isPlainObject` | arc 1 merged |
-| 3 | 6 | the files other changes hold today (recon § Collisions); closes #1928 | arc 2 merged and every holder in recon § Collisions merged or closed |
+| 3 | 6 | the files other changes hold today (recon § Collisions), `execution/dapp-send-executor.ts` and its siblings included; closes #1928 | arc 2 merged and every holder in recon § Collisions merged or closed |
 
 ## Outcome & Quality Bar
 
@@ -137,7 +137,7 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 | `dapp-session/mac-storage.ts`, `dapp-session/registration-allowance.ts` | 86; 26 | `isObjectLike`; `!isRecord` | same; stored rows |
 | `dapp-session/spec.ts`, `transaction/spec.ts`, `operation-journal/spec.ts`, `auth-registry/spec.ts` | 92; 187, 194; 151; 62 | `isObjectLike` (`tolerantRecord` and `tolerantObject` removed; `z.custom(isObjectLike)`) | same; stored rows |
 | `dapp-session/service.ts` | 65 | K7 | kept |
-| `execution/call-decoder.ts`, `execution/dapp-send-executor.ts`, `execution/fast-path.ts` | 177; 1432; 96 | `isObjectLike` | same |
+| `execution/call-decoder.ts`, `execution/fast-path.ts` | 177; 96 | `isObjectLike` | same |
 | `execution/operation-fingerprint.ts` | 55 (prototype check in `encodeValue`) | `!isPlainObject(value)` | same; stamp lowered |
 | `price/service.ts`, `purge-rows.ts`, `pxe/client.ts`, `token-balance/balance-identity.ts`, `token-list/service.ts` | 59, 79, 466, 470; 89; 62; 42; 47 | `isObjectLike` | same; feed and stored rows |
 | `wallet/storage/migrations/index.ts`, `wallet/storage/stores.ts` | 102, 140; 113 | `isObjectLike` | same; stored rows |
@@ -154,11 +154,12 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 | `backup/backup-migration-registry.ts`, `backup/trust-gate.ts` | 175, 191, 258, 339, 409; 82, 157 | `!isRecord` | same; backup file |
 | `backup/row-map-migration.ts` | 300 (`applyRowTransform`, stamp to the observed score); 366 | `!isRecord`; `!isObjectLike(value) && typeof value !== "function"`; 193-194 stays (K9) | same |
 | `token/seeder.ts`, `token/service.ts` | 119, 144; 937 | `!isRecord`; `!isObjectLike` | same; stored rows |
+| `execution/dapp-send-executor.ts` (moved from arc 2: lane `dapp-estimation-extract-1`, #1934, is splitting it and holds `execution/service.ts`, `transfer-executor.ts`, `estimate-reuse-shared.ts` and any new file beside them) | 1432 | `isObjectLike` | same |
 | `wallet-sdk/content-script-validator.ts`, `wallet-sdk/wallet-message.ts` | 75, 157; 75 | `isObjectLike` | same; dApp ingress |
 | `popup/pages/send-submit.ts` | 9 | K5 | kept |
 | `extension-messaging/src/errors.ts` (held by PR #1945) | 90; 368; 372, 379 | `errorMessageFromUnknown`; `isHex32`; `isObjectLike` | same; PXE wire details |
 
-**Counts.** Same set and converted: 110 object guards, 3 hex literals, 3 message extractors, 1 delay, 2 base64 encodes, 1 stand-alone prototype check. Same set but kept inline: 1 (K1). Differs and kept: 7 (K3-K9). Differs and asked: 0. Baseline: 64 entries after arc 1 (60 pending; K1, K3-K5), 31 after arc 2, 4 after arc 3.
+**Counts.** Same set and converted: 110 object guards, 3 hex literals, 3 message extractors, 1 delay, 2 base64 encodes, 1 stand-alone prototype check. Same set but kept inline: 1 (K1). Differs and kept: 7 (K3-K9). Differs and asked: 0. Baseline: 64 entries after arc 1 (60 pending; K1, K3-K5), 32 after arc 2 (28 pending), 4 after arc 3.
 
 **Trade-offs** are in the decision ledger.
 
@@ -184,6 +185,7 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 | D8 | A ratchet against the PR's base enforces "only shrinks", reusing the complexity ratchet's base reader (moved to `scripts/ci-cd/ratchet-base.ts`) | review alone, as `type-role-ban` does | without it a PR can add a guard and its entry together and stay green (Codex r1); new code never needs an entry, since every shape has a helper form (`isObjectLike(x) && …`, `isHex32(x) && x === x.toLowerCase()`) |
 | D6 | Three arcs: collision first, then size (arc 1 is about 39 files) | one arc for every free file (about 62); arc 1 only the guard | the lane brief asks for a split past about 40 files; a guard-only arc ships a baseline of every site with nothing removed |
 | D7 | Sites inside accepted complexity functions are converted and their stamps lowered to the observed score | leave them on the baseline | the skill's procedure allows a lowered stamp; a baseline entry whose only reason is "inside an accepted function" states no contract |
+| D9 | From arc 2, a file that does not already import the `@nulo/wallet-core/utils` barrel takes its guards from the `./guards` leaf; one that does extends that import | the barrel everywhere, as arc 1 did | a barrel import is a new edge into a module Storybook can split into its own chunk, which is how arc 1's CI met a chunk cycle; a leaf with no imports adds no such edge, and extending an existing barrel import adds none either |
 
 ## Phases
 
@@ -216,7 +218,7 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 1. Add `isPlainObject` and its rows to `guards.test.ts`; add K4's upper-case case to `approval-delta.test.ts`.
 2. Convert every arc-2 row; delete their entries; lower `encodeValue`'s stamp as in phase 4.
 
-**Validation gate.** As phase 4's, without the content-script `cmp` and `test:release`; the network run, with the same two variables, is `tx-sendTx-default.test.ts register-token.test.ts session-reconnect.test.ts`. Pass: exit 0, `stored-shapes/snapshot.test.ts` among them (no stored shape changes); the baseline holds 31 entries. Layers: lint, typecheck, unit, build, network e2e.
+**Validation gate.** As phase 4's, without the content-script `cmp` and `test:release`; the network run, with the same two variables, is `tx-sendTx-default.test.ts register-token.test.ts session-reconnect.test.ts`. Then `bun run --cwd apps/extension build-storybook`. Pass: exit 0, `stored-shapes/snapshot.test.ts` among them (no stored shape changes); the baseline holds 32 entries. Layers: lint, typecheck, unit, build, Storybook build, network e2e.
 
 ### Phase 6 — the held files (arc 3)
 1. Rerun the inventory at the new base; add any new site to this arc's table.

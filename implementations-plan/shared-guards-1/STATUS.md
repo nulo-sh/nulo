@@ -11,3 +11,4 @@
 - 2026-11-23 23:20Z arc 1 final gates green on merged head 9c528cf5e (origin/dev 633cf2ac9 merged): lint, typecheck:all, test:all, test:ci-gating, check:plans; PR next
 - 2026-11-23 23:55Z PR #1956 CI: Build Storybook (chunk cycle from panel-handback's barrel import) and CodeQL (single replace) fixed; local storybook build, audit:vue, lint, typecheck green
 - 2026-11-24 00:05Z Codex verified the CI fix: approve; final gates on the head, then the last push
+- 2026-11-24 00:20Z arc 2 phase 5 implemented on `shared-guards-1-a2` off origin/dev e1243ce5c: 32 sites converted, `isPlainObject` added, K4 renamed and pinned (fails under `isHex32`), `encodeValue` 25 → 24; baseline 64 → 32; `dapp-send-executor.ts` moved to arc 3 (#1934's lane holds it)
