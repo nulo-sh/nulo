@@ -386,6 +386,17 @@ describe("the fee question window", () => {
 		expect(windowsRemoveMock).not.toHaveBeenCalled()
 	})
 
+	test("an accept refused for another reason shows the error and keeps the window and the request", async () => {
+		resolveInteractionMock.mockRejectedValueOnce(new Error("port closed"))
+		await opened()
+		await confirm().trigger("click")
+		await flushPromises()
+		expect(byId("error-text").text()).toBe("Processing error.")
+		expect(byId("dapp-cancelled-overlay").exists()).toBe(false)
+		expect(windowsRemoveMock).not.toHaveBeenCalled()
+		expect(rejectMock).not.toHaveBeenCalled()
+	})
+
 	test("another profile's question: the overlay, no balance read, and Send for stays off", async () => {
 		activeProfile = { id: "p2" }
 		await opened()

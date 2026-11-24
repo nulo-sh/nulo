@@ -12,7 +12,6 @@ import DottedTerm from "@/components/composite/DottedTerm.vue"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 
 /** Utils */
-import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { appChipOf } from "@/components/composite/contract-chip"
 import { resolveDappChain } from "../capabilities/chain-mismatch"
 import { EVERY_SITE_CONFIRM } from "@/utils/every-site"
@@ -82,11 +81,13 @@ const {
 	closeWindow,
 	endAndClose,
 	onActiveProfileChanged,
+	settleResolveError,
 	stripStatus,
 	processingError,
 	setError,
 } = useDappApprovalWindow({
 	profile,
+	requestId,
 	isInteractionCancelled,
 	isLoading,
 	connectServices: () => {
@@ -158,14 +159,10 @@ const resolveAllow = async () => {
 		closeWindow(true)
 	} catch (error) {
 		isLoading.value = false
-		if (error instanceof JobCancelledError) {
-			// A raced approve refused service-side (the dApp cancelled first):
-			// the refusal IS the cancelled state — overlay, not an error banner.
-			isInteractionCancelled.value = true
-		} else {
+		settleResolveError(error, () => {
 			console.error("Discover approve failed", { error })
 			setError("Something went wrong")
-		}
+		})
 	}
 }
 

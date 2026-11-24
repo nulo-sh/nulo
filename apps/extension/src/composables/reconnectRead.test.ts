@@ -1,7 +1,7 @@
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises } from "@vue/test-utils"
 import { describe, expect, test, vi } from "vitest"
-import { createReconnectRead } from "./reconnectRead"
+import { createReconnectCheck, createReconnectRead } from "./reconnectRead"
 
 /** A client whose first request opens the port, as the real client's does; `reconnect` is a
  *  worker restart: the port drops, the pending reads reject and the client opens it again. */
@@ -48,6 +48,14 @@ function harness(fetchImpl?: () => Promise<string>) {
 		},
 	}
 }
+
+describe("createReconnectCheck", () => {
+	test("the first connect is no reconnect, every later one is, and each check counts its own", () => {
+		const check = createReconnectCheck()
+		expect([check(), check(), check()]).toEqual([false, true, true])
+		expect(createReconnectCheck()()).toBe(false)
+	})
+})
 
 describe("createReconnectRead", () => {
 	test("the mount's read opens the port and reads once", async () => {

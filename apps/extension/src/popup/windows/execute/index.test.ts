@@ -629,6 +629,22 @@ describe("execute window — dApp cancellation state", () => {
 		expect(w!.find('[data-testid="error-text"]').exists()).toBe(false)
 		for (const { api } of feeMapInstances) expect(api.dispose).not.toHaveBeenCalled()
 	})
+
+	test("an approve refused for another reason shows the error, never the overlay (control)", async () => {
+		approveInteractionMock.mockRejectedValueOnce(new Error("port closed"))
+		w = factory()
+		await completeInit()
+		const vm = w.vm as unknown as ExecVm
+		vm.operations = [makeExecutableOp()]
+		vm.initComplete = true
+		feeMapInstances[0]!.api.results.value = { 0: { maxFee: "800" } }
+		await flushPromises()
+
+		await vm.approve()
+		await flushPromises()
+		expect(w!.find('[data-testid="error-text"]').text()).toBe("Processing error.")
+		expect(w!.find('[data-testid="dapp-cancelled-overlay"]').exists()).toBe(false)
+	})
 })
 
 // ── Init resolves operations SEQUENTIALLY (op N+1's lookups start only after op N
