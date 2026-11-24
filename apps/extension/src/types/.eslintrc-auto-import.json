@@ -477,6 +477,7 @@
     "createApp": true,
     "createContactImportGuard": true,
     "createFailedNotice": true,
+    "createReconnectCheck": true,
     "createReconnectRead": true,
     "createRunFence": true,
     "customRef": true,

@@ -1,4 +1,5 @@
 import { type Ref, ref } from "vue"
+import { createReconnectCheck } from "@/composables/reconnectRead"
 import { createRunFence } from "@/composables/runFence"
 import { type LiveTokenScope, forChain, isActiveScopeRow } from "@/utils/token-order"
 import type { TokenBalanceInfo, TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
@@ -78,10 +79,10 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 	const fence = createRunFence()
 	let dirty = false
 	let retryTimer: ReturnType<typeof setTimeout> | undefined
-	// The first connect is the one the first request opened. A later one is a port drop: events
-	// may have been missed, so resnapshot, unless a run's read is out: the drop rejected every read
-	// posted before it, so that read went out after Ready and is already the resnapshot.
-	let connectsSeen = 0
+	// A reconnect follows a port drop: events may have been missed, so resnapshot, unless a run's
+	// read is out: the drop rejected every read posted before it, so that read went out after Ready
+	// and is already the resnapshot.
+	let isReconnect = createReconnectCheck()
 	/** The current run while its read is out. */
 	let readOut: (() => boolean) | undefined
 
@@ -133,8 +134,7 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 	}
 
 	function onReconnected() {
-		connectsSeen++
-		if (connectsSeen >= 2 && !readOut?.()) void fetchTokenBalances()
+		if (isReconnect() && !readOut?.()) void fetchTokenBalances()
 	}
 	client.onConnected.add(onReconnected)
 
@@ -147,7 +147,7 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>(deps: TokenBalance
 	/** For a parent mounted once and shown many times: its next show's first connect is again its own. */
 	function reset() {
 		invalidate()
-		connectsSeen = 0
+		isReconnect = createReconnectCheck()
 	}
 
 	function dispose() {
