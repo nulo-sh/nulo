@@ -10,7 +10,7 @@
  *   derive MORE token units than the typed dollars are worth.
  */
 
-import { formatBaseUnits } from "@/utils/amount"
+import { clampDecimals, formatBaseUnits, parseAmountToBaseUnits } from "@/utils/amount"
 
 /** Micro-USD: all USD math runs at 1e-6 precision. */
 export const USD_MICRO_PER_USD = 1_000_000n
@@ -99,11 +99,9 @@ export function formatUsdMicro(micro: bigint): string {
  * isn't a plain non-negative decimal number.
  */
 export function parseUsdToMicro(input: string): bigint | null {
-	const match = /^(\d+)(?:\.(\d*))?$/.exec(input.trim())
-	if (!match) return null
-	const whole = BigInt(match[1])
-	const fracDigits = (match[2] ?? "").slice(0, 6).padEnd(6, "0")
-	return whole * USD_MICRO_PER_USD + BigInt(fracDigits)
+	const text = input.trim()
+	if (!/^\d+(?:\.\d*)?$/.test(text)) return null
+	return parseAmountToBaseUnits(clampDecimals(text, 6), 6)
 }
 
 /**
