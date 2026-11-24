@@ -1303,7 +1303,7 @@ describe("ExecutionService composition — a dApp send names its call before sim
 			planner: OperationPlanner
 			txBuilder: { buildStandard: (...args: unknown[]) => Promise<unknown> }
 			coordinator: { simulateTxTask: (...args: unknown[]) => Promise<unknown> }
-			dappSendExecutor: { estimateOperationFee: (op: unknown, feeSettings: unknown) => Promise<unknown> }
+			dappSendEstimation: { estimateOperationFee: (op: unknown, feeSettings: unknown) => Promise<unknown> }
 		}
 		vi.spyOn(internals.planner, "processAztecJsPayload").mockResolvedValue({ actions, feeOptions: undefined } as never)
 		vi.spyOn(internals.txBuilder, "buildStandard").mockImplementation(async () => ({
@@ -1364,7 +1364,7 @@ describe("ExecutionService composition — a dApp send names its call before sim
 		const record = vi.spyOn(h.lane, "recordBuiltCall")
 		const send = { ...(dappSend() as object), feeSettings: { paymentMethod: { kind: "fj" } }, opts: { from: ACCOUNT } } as never
 
-		const outcome = await internals.dappSendExecutor
+		const outcome = await internals.dappSendEstimation
 			.estimateOperationFee(send, { paymentMethod: { kind: "fj" } })
 			.catch((e: unknown) => e)
 

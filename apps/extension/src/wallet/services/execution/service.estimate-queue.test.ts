@@ -349,7 +349,7 @@ describe("ExecutionService window estimates and previews: the slot of the reques
 			lane,
 			estimateCancel: registry,
 			pxeService: { offscreenSettled: () => undefined },
-			dappSendExecutor: { estimateOperationFee: running, previewOperationAuthwits: running },
+			dappSendEstimation: { estimateOperationFee: running, previewOperationAuthwits: running },
 			logDebug: () => {},
 			emit: vi.fn(),
 		}) as ExecutionService

@@ -34,7 +34,7 @@ function makeSelf() {
 	})
 	const materializeStoredOperation = vi.fn(async () => ({}))
 	Object.assign(interactions, { materializeStoredOperation })
-	const dappSendExecutor = {
+	const dappSendEstimation = {
 		estimateOperationFee: vi.fn(async (): Promise<unknown> => ({ estimateId: "e-1" })),
 		previewOperationAuthwits: vi.fn(async (): Promise<unknown> => ({ previewId: "p-1" })),
 	}
@@ -44,19 +44,19 @@ function makeSelf() {
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		lane: { takeEstimateSlot: () => Promise.resolve(() => {}) },
 		networkService: { getNetwork: async () => ({ chainId: 7 }) },
-		dappSendExecutor,
+		dappSendEstimation,
 	}) as ExecutionService
-	return { self, interactions, dappSendExecutor, materializeStoredOperation }
+	return { self, interactions, dappSendEstimation, materializeStoredOperation }
 }
 
 describe("an estimate and a preview of a traced request are its stages", () => {
 	test("each records its label and outcome in the capture the interaction names", async () => {
-		const { self, dappSendExecutor } = makeSelf()
+		const { self, dappSendEstimation } = makeSelf()
 		const requests = new RequestLog(() => true)
 		requests.begin("1a2b3c4d", { method: "sendTx", originHost: "app.example", chainId: 7 })
 		requests.alias("1a2b3c4d", { interactionId: "req-1" })
 		Object.assign(self, { requests })
-		dappSendExecutor.estimateOperationFee.mockRejectedValueOnce(new Error("Assertion failed: balance too low"))
+		dappSendEstimation.estimateOperationFee.mockRejectedValueOnce(new Error("Assertion failed: balance too low"))
 		await expect(self.estimateOperationFee("req-1", 0, FEE)).rejects.toThrow()
 		await self.previewOperationAuthwits("req-1", 0)
 		expect(requests.get("1a2b3c4d")?.stages.map(({ kind, stage, outcome }) => ({ kind, stage, outcome }))).toEqual([
@@ -77,8 +77,8 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 	] as const)(
 		"the %s that meets a %s refusal records it, and every later attempt answers it without running",
 		async (first, _, refusal) => {
-			const { self, interactions, dappSendExecutor, materializeStoredOperation } = makeSelf()
-			const attempt = first === "estimate" ? dappSendExecutor.estimateOperationFee : dappSendExecutor.previewOperationAuthwits
+			const { self, interactions, dappSendEstimation, materializeStoredOperation } = makeSelf()
+			const attempt = first === "estimate" ? dappSendEstimation.estimateOperationFee : dappSendEstimation.previewOperationAuthwits
 			attempt.mockRejectedValueOnce(refusal)
 
 			const run = first === "estimate" ? self.estimateOperationFee("req-1", 0, FEE) : self.previewOperationAuthwits("req-1", 0)
@@ -89,18 +89,18 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 			await expect(self.previewOperationAuthwits("req-1", 0)).rejects.toBe(refusal)
 			expect(materializeStoredOperation).toHaveBeenCalledTimes(1)
 			expect(
-				dappSendExecutor.estimateOperationFee.mock.calls.length + dappSendExecutor.previewOperationAuthwits.mock.calls.length,
+				dappSendEstimation.estimateOperationFee.mock.calls.length + dappSendEstimation.previewOperationAuthwits.mock.calls.length,
 			).toBe(1)
 		},
 	)
 
 	test("an attempt that started before another recorded its refusal answers the recorded one", async () => {
-		const { self, interactions, dappSendExecutor } = makeSelf()
+		const { self, interactions, dappSendEstimation } = makeSelf()
 		const [first, second] = [
 			new AuthRegistryRefusalError(REGISTRY),
 			new ScopeViolationError("Scope violation: authwit call name does not match selector's function"),
 		]
-		dappSendExecutor.estimateOperationFee.mockImplementationOnce(async () => {
+		dappSendEstimation.estimateOperationFee.mockImplementationOnce(async () => {
 			interactions.recordRefusal("req-1", first)
 			throw second
 		})
@@ -109,10 +109,10 @@ describe("a refusal an estimate or preview meets is the request's", () => {
 	})
 
 	test("a failure that is not a recorded refusal records nothing, and the next estimate runs", async () => {
-		const { self, interactions, dappSendExecutor } = makeSelf()
-		dappSendExecutor.estimateOperationFee.mockRejectedValueOnce(new Error("node unreachable"))
-		dappSendExecutor.previewOperationAuthwits.mockRejectedValueOnce(new JobCancelledError(undefined, { jobId: "t-1" }))
-		dappSendExecutor.previewOperationAuthwits.mockRejectedValueOnce(new Error(DefaultEntrypointPublicCallError.MESSAGE))
+		const { self, interactions, dappSendEstimation } = makeSelf()
+		dappSendEstimation.estimateOperationFee.mockRejectedValueOnce(new Error("node unreachable"))
+		dappSendEstimation.previewOperationAuthwits.mockRejectedValueOnce(new JobCancelledError(undefined, { jobId: "t-1" }))
+		dappSendEstimation.previewOperationAuthwits.mockRejectedValueOnce(new Error(DefaultEntrypointPublicCallError.MESSAGE))
 
 		await expect(self.estimateOperationFee("req-1", 0, FEE)).rejects.toThrow("node unreachable")
 		await expect(self.previewOperationAuthwits("req-1", 0)).rejects.toBeInstanceOf(JobCancelledError)
