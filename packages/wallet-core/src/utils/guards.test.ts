@@ -18,6 +18,7 @@ describe("isRecord, isObjectLike and isPlainObject", () => {
 		["an object inheriting from a plain one", Object.create({ a: 1 }), true, true, false],
 		["an empty array", [], false, true, false],
 		["an array carrying fields", Object.assign([], { type: "accounts" }), false, true, false],
+		["an array with a null prototype", Object.setPrototypeOf([], null), false, true, true],
 		["null", null, false, false, false],
 		["undefined", undefined, false, false, false],
 		["a function", () => ({}), false, false, false],

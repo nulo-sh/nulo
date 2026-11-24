@@ -10,8 +10,8 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 /** Any non-null object, arrays and boxed primitives included. */
 export const isObjectLike = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null
 
-/** A non-null object whose prototype is `Object.prototype` or `null`: refuses arrays, boxed
- *  primitives and class instances, so only plain data passes. */
+/** A non-null object whose prototype is `Object.prototype` or `null`, whatever else it is: an array
+ *  given a `null` prototype passes. */
 export const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 	if (!isObjectLike(value)) return false
 	const prototype = Object.getPrototypeOf(value)
