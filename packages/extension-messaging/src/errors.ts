@@ -13,8 +13,9 @@
  * client then rejects with `new Error(message)` instead of a raw string.
  */
 
+import { errorMessageFromUnknown } from "@nulo/wallet-core/errors"
+import { isHex32 } from "@nulo/wallet-core/field"
 import { isObjectLike } from "@nulo/wallet-core/guards"
-import { errorMessageFromUnknown, isHex32 } from "@nulo/wallet-core/utils"
 
 export interface WalletErrorPayload {
 	/** Stable machine-readable code. Subclasses declare their own. */
