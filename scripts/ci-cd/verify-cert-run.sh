@@ -87,6 +87,14 @@ violation() {
 	FAILED=1
 }
 
+# gh 2.103 and later refuse to write a response holding terminal escape sequences, as every
+# coloured job log does, unless allowed: exit 1 and an empty file. An older gh has no such flag
+# and writes the log as is. The log only ever lands in a file that grep counts, never on a terminal.
+LOG_ESCAPES=""
+case "$(gh api --help 2>&1)" in
+	*--allow-escape-sequences*) LOG_ESCAPES=--allow-escape-sequences ;;
+esac
+
 # --slurp wraps the paginated pages in an array, so one jq pass sees them all.
 RUNS="$TMP/runs.json"
 gh api "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" --paginate --slurp >"$RUNS" ||
@@ -150,7 +158,7 @@ for WF in "${REQUIRED_WORKFLOWS[@]}"; do
 					;;
 			esac
 			L="$TMP/job-$JOB_ID.txt"
-			if ! gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" >"$L" 2>/dev/null; then
+			if ! gh api ${LOG_ESCAPES:+"$LOG_ESCAPES"} "repos/$REPO/actions/jobs/$JOB_ID/logs" >"$L" 2>/dev/null; then
 				violation "could not fetch logs for job $JOB_ID ($JOB_NAME) — cannot prove it consumed no retries"
 				continue
 			fi
