@@ -5,6 +5,7 @@ import { AUTH_ENTRY_ROUTES } from "@/utils/should-advance-to-general"
 import { ProfileRowSchema } from "@/wallet/services/profile/profile-row"
 import { STORED_SHAPES } from "@/wallet/storage/stored-shapes"
 import {
+	accountFileCeremonies,
 	ADVANCES_ON_OPEN,
 	ALLOWED_ERRORS,
 	bindCeremonies,
@@ -65,6 +66,8 @@ import {
 	endsOf,
 	type ListedStep,
 	mintedCredentials,
+	type ModelProfile,
+	type ParamsMap,
 	type PlannedStep,
 	plan,
 	planFromList,
@@ -1315,6 +1318,27 @@ describe("the passkey's answers", () => {
 		const wrong = bindCeremonies(b, seen as never, expected as never)
 		console.log(`[break] answers ${label}: ${wrong ?? "<none>"}`)
 		expect(wrong).toBeDefined()
+	})
+
+	describe("a passkey profile's account file", () => {
+		const open: ModelProfile = { ref: "P1", method: "passkey", credential: "K1", derived: 1, imported: [], deleted: false }
+		const own = [{ kind: "get" as const, id: "a2V5LW9uZQ==" }]
+		const file = { file: "F1", which: { derivedIndex: 0 }, password: "S1" } as const
+		const short = { ...file, variant: "short" } as const
+		const cases: [string, ParamsMap["exportAccountFile"], boolean, typeof own, "pass" | "fail"][] = [
+			["a short password the page refused, no passkey asked", short, true, [], "pass"],
+			["a short password the page refused, a passkey asked anyway", short, true, own, "fail"],
+			["a short password Save took, its passkey asked", short, false, own, "pass"],
+			["a short password Save took, no passkey asked", short, false, [], "fail"],
+			["an approved file, its passkey asked", file, false, own, "pass"],
+			["an approved file, no passkey asked", file, false, [], "fail"],
+			["a passkey the authenticator refused", { ...file, variant: "refuse" }, false, [], "pass"],
+		]
+		test.each(cases)("%s", (_label, p, beforeSave, answers, verdict) => {
+			const wrong = bindCeremonies(bound(), { answers, picks: [] }, accountFileCeremonies(open, p, beforeSave))
+			if (verdict === "pass") expect(wrong).toBeUndefined()
+			else expect(wrong).toBeDefined()
+		})
 	})
 })
 
