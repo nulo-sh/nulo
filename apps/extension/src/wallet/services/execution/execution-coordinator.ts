@@ -42,7 +42,7 @@ import { StepContent } from "@/wallet/services/task/spec"
 import type { LegalAdmission } from "@/wallet/services/legal/spec"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import type { ProveBackend, SendExpiry } from "@nulo/wallet-core/jobs"
+import { PROVE_BACKENDS, type ProveBackend, type SendExpiry } from "@nulo/wallet-core/jobs"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import type { LastProveOutcome, ProveOutcomeHint, ProvePhaseName } from "./models"
 import type { SharedSendDeps } from "./shared-send-deps"
@@ -68,7 +68,7 @@ export const ProvePhaseEventSchema = z.object({
 	proveId: z.string().uuid(),
 	seq: z.number().int().nonnegative(),
 	phase: z.enum(PROVE_PHASES),
-	backend: z.enum(["presto", "browser"]).optional(),
+	backend: z.enum(PROVE_BACKENDS).optional(),
 })
 
 /** The journal seam the coordinator writes backend evidence through. */

@@ -1,5 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { hasHiddenUrlCharacter, rpcTransportVerdict } from "@nulo/wallet-core/utils"
+// Type only: the popup reaches this file, and a value import of this barrel puts the PXE and its
+// kernel artifacts in the popup's module graph.
 import type { RouteSnapshot } from "@nulo/aztec-runtime/pxe"
 import { z } from "zod"
 
