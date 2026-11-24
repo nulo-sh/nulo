@@ -151,7 +151,7 @@ const sponsoredSentence = computed(() => {
 }
 
 .visually_hidden {
-	composes: visually_hidden from "./fee-shared.module.css";
+	composes: visually_hidden from "@/components/a11y.module.css";
 }
 
 .failed {
@@ -159,7 +159,7 @@ const sponsoredSentence = computed(() => {
 }
 
 .retry {
-	composes: retry from "./fee-shared.module.css";
+	composes: accent from "@/components/text-action.module.css";
 }
 
 </style>

@@ -448,20 +448,7 @@ onBeforeUnmount(() => {
 }
 
 .view_all {
-	composes: type--label-section from global;
-	user-select: none;
-	color: var(--nulo-secondary);
-
-	transition: color 0.2s var(--bezier);
-
-	&:hover {
-		color: var(--nulo-accent);
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--nulo-accent);
-		outline-offset: 2px;
-	}
+	composes: section_link from "./section-link.module.css";
 }
 
 .token_list {

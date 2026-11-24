@@ -1338,20 +1338,7 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	composes: type--label-section from global;
-	line-height: inherit;
-	background: none;
-	color: var(--nulo-accent);
-	cursor: pointer;
-
-	&:hover {
-		text-decoration: underline;
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--nulo-accent);
-		outline-offset: 2px;
-	}
+	composes: accent from "@/components/text-action.module.css";
 }
 
 .sheet_title {

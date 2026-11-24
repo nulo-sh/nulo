@@ -437,7 +437,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .retry {
-	composes: retry from "./fee-shared.module.css";
+	composes: accent from "@/components/text-action.module.css";
 }
 
 .whole {
