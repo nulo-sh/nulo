@@ -306,17 +306,20 @@ describe("encodeAccountState", () => {
 })
 
 describe("restorePayload", () => {
-	test("a format-1 part at the cap goes back as its own array, so its one network is never over the cap", () => {
-		const item = {
-			networkId: "n1",
-			chainId: 1,
-			senders: [],
-			contracts: [{ ...entry(addr("01"), CLASS_A), artifact: { name: "A", padding: "" } }],
-		}
-		const pad = ACCOUNT_STATE_CAPS.maxSliceCodeUnits - JSON.stringify([item]).length
-		item.contracts[0].artifact.padding = "a".repeat(pad)
-		expect(JSON.stringify([item]).length).toBe(ACCOUNT_STATE_CAPS.maxSliceCodeUnits)
-		const { items, violations } = normalizeAccountStateSlice(JSON.parse(JSON.stringify([item])))
+	test.each<[string, (pad: string) => unknown[]]>([
+		["one artifact object", (pad) => [{ ...entry(addr("01"), CLASS_A), artifact: { name: "A", pad } }]],
+		[
+			"two contracts whose artifact is the same non-object value",
+			(pad) => [
+				{ address: addr("01"), instance: { currentContractClassId: CLASS_A, pad }, artifact: true },
+				{ ...entry(addr("02"), CLASS_B), artifact: true },
+			],
+		],
+	])("a format-1 part at the cap holding %s goes back as its own array, never over the cap", (_label, contracts) => {
+		const part = (pad: string) => [{ networkId: "n1", chainId: 1, senders: [sender()], contracts: contracts(pad) }]
+		const atCap = part("a".repeat(ACCOUNT_STATE_CAPS.maxSliceCodeUnits - JSON.stringify(part("")).length))
+		expect(JSON.stringify(atCap).length).toBe(ACCOUNT_STATE_CAPS.maxSliceCodeUnits)
+		const { items, violations } = normalizeAccountStateSlice(JSON.parse(JSON.stringify(atCap)))
 		expect(violations).toEqual([])
 		expect(JSON.stringify(encodeAccountState(items)).length).toBeGreaterThan(ACCOUNT_STATE_CAPS.maxSliceCodeUnits)
 

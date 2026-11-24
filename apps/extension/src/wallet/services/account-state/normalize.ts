@@ -219,13 +219,15 @@ export function encodeAccountState<T extends EncodableItem>(items: readonly T[])
 }
 
 /**
- * The part an import sends for decoded `items`: an array when every contract holds its own artifact
- * object, as a format-1 part decodes, since a class table would only add bytes; otherwise encoded.
+ * The part an import sends for decoded `items`: an array when every contract carries an artifact and
+ * no artifact object serves two of them, as a format-1 part decodes, since a class table would only
+ * add bytes; otherwise encoded.
  * Either way it is no larger than the part the items were read from, so it stays under the cap.
  */
 export function restorePayload<T extends EncodableItem>(items: readonly T[]): AccountStateSliceV2 | T[] {
 	const artifacts = items.flatMap((item) => item.contracts.map((c) => c.artifact))
-	const ownCopies = artifacts.every((a) => a !== undefined) && new Set(artifacts).size === artifacts.length
+	const objects = artifacts.filter(isObjectLike)
+	const ownCopies = artifacts.every((a) => a !== undefined) && new Set(objects).size === objects.length
 	return ownCopies ? [...items] : encodeAccountState(items)
 }
 
