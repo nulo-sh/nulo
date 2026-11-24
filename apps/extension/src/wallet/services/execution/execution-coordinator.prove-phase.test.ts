@@ -4,6 +4,7 @@
  * these pin: a dropped or reordered event leaves evidence stale, never wrong.
  */
 
+import { PROVE_BACKENDS } from "@nulo/wallet-core/jobs"
 import { describe, expect, test, vi } from "vitest"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -232,5 +233,13 @@ describe("ExecutionCoordinator prove-phase attribution", () => {
 		expect(ProvePhaseEventSchema.safeParse({ proveId, seq: 1, phase: "transmit" }).success).toBe(true)
 		await h.emit(proveId, 1, "transmit", "presto")
 		expect(h.journal).toEqual([])
+	})
+})
+
+describe("ProvePhaseEventSchema: the backend", () => {
+	test("parses exactly the backends PROVE_BACKENDS names", () => {
+		const event = (backend: string) => ({ proveId: "6f0c5a8e-1b2d-4c3e-9f4a-5b6c7d8e9f01", seq: 1, phase: "proving", backend })
+		for (const backend of PROVE_BACKENDS) expect(ProvePhaseEventSchema.safeParse(event(backend)).success).toBe(true)
+		expect(ProvePhaseEventSchema.safeParse(event("native")).success).toBe(false)
 	})
 })

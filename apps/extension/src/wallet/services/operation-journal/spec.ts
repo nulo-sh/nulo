@@ -21,7 +21,7 @@
 import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHARS } from "@nulo/wallet-core/jobs"
 import { type AuthwitContent, isFieldAddress } from "@nulo/wallet-bridge"
 import { z } from "zod"
-import { isFeeAmount } from "@nulo/wallet-core/jobs"
+import { isFeeAmount, PROVE_BACKENDS } from "@nulo/wallet-core/jobs"
 import { isObjectLike } from "@nulo/wallet-core/guards"
 import { boundedString } from "@/utils/bounded-string"
 import { MAX_TRACKED_AUTHWITS_PER_ACCOUNT } from "@/wallet/services/auth-registry/spec"
@@ -247,7 +247,7 @@ export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("s
 	z.object({ stage: z.literal("queued"), reask: QueuedFeeReaskSchema.optional() }),
 	z.object({ stage: z.literal("pending") }),
 	z.object({ stage: z.literal("simulating") }),
-	z.object({ stage: z.literal("proving"), enteredProveAt: z.number(), backend: z.enum(["presto", "browser"]).optional() }),
+	z.object({ stage: z.literal("proving"), enteredProveAt: z.number(), backend: z.enum(PROVE_BACKENDS).optional() }),
 	z.object({
 		stage: z.literal("submitting"),
 		txHash: z.string().optional(),
