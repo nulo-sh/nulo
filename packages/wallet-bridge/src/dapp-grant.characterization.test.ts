@@ -351,7 +351,7 @@ describe("batch refusal", () => {
 		})
 	})
 
-	test("over every registry method, exactly grantPublicAuthwit, registerToken and sendTx are refused as batch legs", async () => {
+	test("over every registry method, exactly grantPublicAuthwit, registerToken and sendTx get the popup-leg refusal as batch legs", async () => {
 		const names = Object.keys(METHOD_REGISTRY)
 		expect(names.length).toBeGreaterThan(0)
 		const refusedNames: string[] = []

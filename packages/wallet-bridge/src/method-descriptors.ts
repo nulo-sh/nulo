@@ -102,7 +102,6 @@ export interface MethodDescriptor {
 
 // ── Arg guards ─────────────────────────────────────────────────────────
 
-/** The most calls one `batch` may carry. */
 const MAX_BATCH_CALLS = 1_024
 
 /** Each leg is checked by its own method's guard and parse when it re-enters dispatch. A `batch`
