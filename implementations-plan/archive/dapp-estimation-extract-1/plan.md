@@ -315,7 +315,7 @@ line) as the PR's final commits, after `git fetch` and a merge of `origin/dev`.
 
 ## Post-implementation
 
-Per [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard)
+Per [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard)
 at `967c626d1`, single arc: the Codex fix loop (`gpt-6.1-sol`, `high`, read-only) over the whole
 diff, until a round has no new material finding, hard stop at three rounds; then one Opus 5.5
 diff review; then targeted verification of its material fixes. Both carry the Security asks and
