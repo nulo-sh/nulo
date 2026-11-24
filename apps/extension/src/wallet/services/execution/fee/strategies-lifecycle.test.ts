@@ -15,9 +15,9 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { DummyLogger } from "@/wallet/logger"
 import { FpcType } from "@/wallet/services/fpc/service"
-import { StepContent, type Task, TaskService, TaskStatus } from "@/wallet/services/task/service"
+import { StepContent, type Task, TaskStatus } from "@/wallet/services/task/service"
+import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import type { Action } from "../spec"
 import { EmbeddedStrategy } from "./embedded-strategy"
 import { FeeJuiceStrategy } from "./fee-juice-strategy"
@@ -92,7 +92,7 @@ type HarnessOpts = {
 	abortOnBuild?: number
 }
 
-function harness(path: PathName, opts: HarnessOpts = {}) {
+async function harness(path: PathName, opts: HarnessOpts = {}) {
 	const builds: Built[] = []
 	const buildStandard = vi.fn(async (...args: unknown[]) => {
 		const built = makeBuilt(opts.build ?? {})
@@ -117,7 +117,7 @@ function harness(path: PathName, opts: HarnessOpts = {}) {
 		if (opts.abortOnFirstSim && simulateTxTask.mock.calls.length === 1) controller.abort()
 		return sentinelSim()
 	})
-	const tasks = new TaskService(new DummyLogger())
+	const { tasks } = await startedTaskService("p1")
 	const created: Task[] = []
 	const log: string[] = []
 	tasks.onTaskCreated.add((task) => {
@@ -182,7 +182,7 @@ async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
 const estimateTasks = (created: Task[]) => created.filter((t) => t.content.label === "Estimating fee")
 
 /** Every simulation's options, exactly: `stub` or `valid`, under the scopes of the build whose `pxe` it ran on. */
-function expectSimOpts(h: ReturnType<typeof harness>, kinds: Array<"stub" | "valid">) {
+function expectSimOpts(h: Awaited<ReturnType<typeof harness>>, kinds: Array<"stub" | "valid">) {
 	const calls = h.simulateTxTask.mock.calls as unknown[][]
 	expect(calls.map((c) => ((c[2] as { skipTxValidation?: boolean }).skipTxValidation ? "stub" : "valid"))).toEqual(kinds)
 	for (const call of calls) {
@@ -211,7 +211,7 @@ function feesOf(txRequest: { txContext: { gasSettings: GasSettings } }) {
 
 describe("estimate task lifecycle", () => {
 	test.each(PATHS)("%s: one root task, Completed when the estimate settles", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		await h.strategy.buildAndEstimate(h.ctx)
 		const tasks = estimateTasks(h.created)
 		expect(tasks).toHaveLength(1)
@@ -220,8 +220,8 @@ describe("estimate task lifecycle", () => {
 	})
 
 	test.each(PATHS)("%s: under a parent task, a subtask of it", async (path) => {
-		const h = harness(path)
-		const parent = h.tasks.startNewTask(new StepContent("parent"))
+		const h = await harness(path)
+		const parent = h.tasks.startNewTask("p1", new StepContent("parent"))
 		h.ctx.parentTask = parent
 		await h.strategy.buildAndEstimate(h.ctx)
 		const tasks = estimateTasks(h.created)
@@ -231,7 +231,7 @@ describe("estimate task lifecycle", () => {
 	})
 
 	test.each(PATHS)("%s: a build rejection fails the task and rethrows the same object", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		const boom = new Error("build boom")
 		h.buildStandard.mockRejectedValueOnce(boom)
 		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBe(boom)
@@ -240,7 +240,7 @@ describe("estimate task lifecycle", () => {
 	})
 
 	test.each(PATHS)("%s: a simulation rejection fails the task and rethrows the same object", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		const boom = new Error("sim boom")
 		h.simulateTxTask.mockRejectedValueOnce(boom)
 		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBe(boom)
@@ -248,7 +248,7 @@ describe("estimate task lifecycle", () => {
 	})
 
 	test.each(PATHS)("%s: finalize's admission-cap refusal fails the task with its exact message", async (path) => {
-		const h = harness(path, { build: { txsLimits: new Gas(10, 10) } })
+		const h = await harness(path, { build: { txsLimits: new Gas(10, 10) } })
 		const error = await rejectionOf(h.strategy.buildAndEstimate(h.ctx))
 		const message =
 			"Simulated gas (da=31000, l2=32000) exceeds the network per-tx admission limit (da=10, l2=10) — this transaction cannot be included."
@@ -276,14 +276,14 @@ describe("estimate task lifecycle", () => {
 			message: "FpcStrategy called with non-fpc payment method",
 		},
 	])("pre-task guard: $name rejects with its message and starts no task", async ({ run, path, message }) => {
-		const h = harness(path)
+		const h = await harness(path)
 		const error = await rejectionOf(run(h.deps, h.ctx))
 		expect((error as Error).message).toBe(message)
 		expect(h.created).toHaveLength(0)
 	})
 
 	test("pre-task guard: an fpc row that cannot be read rejects as-is and starts no task", async () => {
-		const h = harness("fpc two-pass")
+		const h = await harness("fpc two-pass")
 		const boom = new Error("no row")
 		;(h.deps.fpcService.getFpcImpl as ReturnType<typeof vi.fn>).mockRejectedValueOnce(boom)
 		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBe(boom)
@@ -291,14 +291,14 @@ describe("estimate task lifecycle", () => {
 	})
 
 	test("fast-path cross-chain fallback: the first task completes before the two-pass task starts", async () => {
-		const h = harness("fpc fast path", { build: { chainId: 7 }, fpcChainId: 999 })
+		const h = await harness("fpc fast path", { build: { chainId: 7 }, fpcChainId: 999 })
 		await h.strategy.buildAndEstimate(h.ctx)
 		expect(h.log).toEqual(["created:Estimating fee", "Completed:Estimating fee", "created:Estimating fee", "Completed:Estimating fee"])
 		expect(h.buildStandard.mock.calls.map((c) => c[2])).toEqual([EXTERNAL, PREEXISTING, EXTERNAL])
 	})
 
 	test("fast-path cross-chain fallback: a two-pass rejection escapes as-is; the first task stays Completed", async () => {
-		const h = harness("fpc fast path", { build: { chainId: 7 }, fpcChainId: 999 })
+		const h = await harness("fpc fast path", { build: { chainId: 7 }, fpcChainId: 999 })
 		const boom = new Error("two-pass boom")
 		h.simulateTxTask.mockRejectedValueOnce(boom)
 		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBe(boom)
@@ -317,7 +317,7 @@ describe("validated simulation options", () => {
 		{ path: "fpc two-pass" as PathName, kinds: ["valid", "valid"] },
 		{ path: "fpc fast path" as PathName, kinds: ["valid"] },
 	])("$path without a probe: every call is exactly the validated literal, scoped to its own build", async ({ path, kinds }) => {
-		const h = harness(path)
+		const h = await harness(path)
 		await h.strategy.buildAndEstimate(h.ctx)
 		expectSimOpts(h, kinds as Array<"stub" | "valid">)
 	})
@@ -370,7 +370,7 @@ describe("probe fold", () => {
 	test.each(FOLD_MATRIX)(
 		"$path, $cell: builds, simulations, probe input and final actions",
 		async ({ path, cell, methods, sims, actions }) => {
-			const h = harness(path, foldOpts(cell))
+			const h = await harness(path, foldOpts(cell))
 			await h.strategy.buildAndEstimate(h.ctx)
 			expect(h.buildStandard.mock.calls.map((c) => c[2])).toEqual(methods)
 			expectSimOpts(h, sims)
@@ -392,7 +392,7 @@ describe("probe fold", () => {
 	test.each(FOLD_MATRIX.filter((row) => row.methods.length > 1 && row.methods[1] === row.methods[0]))(
 		"$path, $cell: a cancel during the stubbed sim throws before the second build",
 		async ({ path, cell }) => {
-			const h = harness(path, foldOpts(cell, { abortOnFirstSim: true }))
+			const h = await harness(path, foldOpts(cell, { abortOnFirstSim: true }))
 			expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBeInstanceOf(JobCancelledSentinel)
 			expect(h.buildStandard).toHaveBeenCalledTimes(1)
 			expect(estimateTasks(h.created).map((t) => t.status)).toEqual([TaskStatus.Failed])
@@ -402,7 +402,7 @@ describe("probe fold", () => {
 	test.each(FOLD_MATRIX.filter((row) => row.methods.length > 1))(
 		"$path, $cell: a cancel during the second build throws before that build is simulated",
 		async ({ path, cell }) => {
-			const h = harness(path, foldOpts(cell, { abortOnBuild: 2 }))
+			const h = await harness(path, foldOpts(cell, { abortOnBuild: 2 }))
 			expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBeInstanceOf(JobCancelledSentinel)
 			expect(h.buildStandard).toHaveBeenCalledTimes(2)
 			expect(h.simulateTxTask).toHaveBeenCalledTimes(1)
@@ -411,14 +411,14 @@ describe("probe fold", () => {
 	)
 
 	test.each(PATHS)("%s: a cancel during the first build throws before any simulation", async (path) => {
-		const h = harness(path, { abortOnBuild: 1 })
+		const h = await harness(path, { abortOnBuild: 1 })
 		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBeInstanceOf(JobCancelledSentinel)
 		expect(h.simulateTxTask).not.toHaveBeenCalled()
 		expect(estimateTasks(h.created).map((t) => t.status)).toEqual([TaskStatus.Failed])
 	})
 
 	test("fpc two-pass, effects only: the fold passes; the cancel lands before Pass 2, after one fee read", async () => {
-		const h = harness("fpc two-pass", foldOpts("effects", { abortOnFirstSim: true }))
+		const h = await harness("fpc two-pass", foldOpts("effects", { abortOnFirstSim: true }))
 		expect(await rejectionOf(h.strategy.buildAndEstimate(h.ctx))).toBeInstanceOf(JobCancelledSentinel)
 		expect(h.buildStandard).toHaveBeenCalledTimes(1)
 		expect(h.builds[0]?.node.getCurrentMinFees).toHaveBeenCalledTimes(1)
@@ -427,7 +427,7 @@ describe("probe fold", () => {
 })
 
 /** Hands `ctx` a hook and returns, in call order, every build, hook call and simulation. */
-function hook(h: ReturnType<typeof harness>) {
+function hook(h: Awaited<ReturnType<typeof harness>>) {
 	const onBuilt = vi.fn(async (_txCalls: unknown) => {})
 	h.ctx.onBuilt = onBuilt
 	const events = () =>
@@ -442,7 +442,7 @@ function hook(h: ReturnType<typeof harness>) {
 }
 
 /** Every build is followed at once by the hook, given that build's own calls. */
-function expectEveryBuildHooked(h: ReturnType<typeof harness>, { onBuilt, events }: ReturnType<typeof hook>) {
+function expectEveryBuildHooked(h: Awaited<ReturnType<typeof harness>>, { onBuilt, events }: ReturnType<typeof hook>) {
 	const log = events()
 	expect(log.flatMap((tag, i) => (tag === "build" ? [log[i + 1]] : []))).toEqual(h.builds.map(() => "hook"))
 	expect(onBuilt.mock.calls.length).toBe(h.builds.length)
@@ -451,7 +451,7 @@ function expectEveryBuildHooked(h: ReturnType<typeof harness>, { onBuilt, events
 
 describe("the build hook", () => {
 	test.each(PATHS)("%s: each build's calls reach the hook before anything simulates them", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		const hooked = hook(h)
 		await h.strategy.buildAndEstimate(h.ctx)
 		expect(h.builds.length).toBeGreaterThan(0)
@@ -461,7 +461,7 @@ describe("the build hook", () => {
 	test.each(FOLD_MATRIX)(
 		"$path, $cell: under a probe, every rebuild is hooked too, the choreography unchanged",
 		async ({ path, cell, methods, sims }) => {
-			const h = harness(path, foldOpts(cell))
+			const h = await harness(path, foldOpts(cell))
 			const hooked = hook(h)
 			await h.strategy.buildAndEstimate(h.ctx)
 			expect(h.buildStandard.mock.calls.map((c) => c[2])).toEqual(methods)
@@ -471,7 +471,7 @@ describe("the build hook", () => {
 	)
 
 	test.each(PATHS)("%s: a simulation that rejects has already handed its build's calls over", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		const { onBuilt } = hook(h)
 		const boom = new Error("Assertion failed: balance too low")
 		h.simulateTxTask.mockRejectedValueOnce(boom)
@@ -483,7 +483,7 @@ describe("the build hook", () => {
 
 describe("committed fees for an explicit multiplier", () => {
 	test.each(["fj", "fjwc"] as PathName[])("%s: finalize commits the node min × 3", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		h.ctx.feeMultiplier = 3
 		const result = await h.strategy.buildAndEstimate(h.ctx)
 		expect(feesOf(result.txRequest as never)).toEqual([1_665n, 1_998n])
@@ -492,7 +492,7 @@ describe("committed fees for an explicit multiplier", () => {
 	test.each(["fpc two-pass", "fpc fast path"] as PathName[])(
 		"%s, a sponsor: the fee basis, Pass 2's cap and the payload's maxFee use × 3",
 		async (path) => {
-			const h = harness(path, { twoPassRow: "hand-added sponsor" })
+			const h = await harness(path, { twoPassRow: "hand-added sponsor" })
 			h.ctx.feeMultiplier = 3
 			const capsAtSim: bigint[][] = []
 			h.simulateTxTask.mockImplementation(async (...args: unknown[]) => {
@@ -509,7 +509,7 @@ describe("committed fees for an explicit multiplier", () => {
 	)
 
 	test("private fee juice: the level never applies; the cap is the basis × 1.2, rounded up", async () => {
-		const h = harness("fpc two-pass")
+		const h = await harness("fpc two-pass")
 		h.ctx.feeMultiplier = 3
 		const capsAtSim: bigint[][] = []
 		h.simulateTxTask.mockImplementation(async (...args: unknown[]) => {
@@ -526,7 +526,7 @@ describe("committed fees for an explicit multiplier", () => {
 	})
 
 	test("embedded: the multiplier never applies; the committed cap stays at the node min", async () => {
-		const h = harness("embedded")
+		const h = await harness("embedded")
 		h.ctx.feeMultiplier = 3
 		const result = await h.strategy.buildAndEstimate(h.ctx)
 		expect(feesOf(result.txRequest as never)).toEqual([555n, 666n])
@@ -534,13 +534,13 @@ describe("committed fees for an explicit multiplier", () => {
 })
 
 describe("an app's fee settings against the wallet's", () => {
-	function withAppFee(h: ReturnType<typeof harness>, fee: Record<string, unknown>) {
+	function withAppFee(h: Awaited<ReturnType<typeof harness>>, fee: Record<string, unknown>) {
 		const op = h.ctx.op as { fee?: Record<string, unknown> }
 		op.fee = { ...op.fee, ...fee }
 	}
 
 	test.each(["fj", "fjwc"] as PathName[])("%s: the app's cap is committed verbatim, even below the node min", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		h.ctx.feeMultiplier = 3
 		withAppFee(h, { maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" } })
 		const result = await h.strategy.buildAndEstimate(h.ctx)
@@ -552,7 +552,7 @@ describe("an app's fee settings against the wallet's", () => {
 		["fpc fast path", "hand-added sponsor"],
 		["fpc two-pass", "private fee juice"],
 	])("%s, %s: the app's cap is committed verbatim, in the cap and in the payload's maxFee", async (path, twoPassRow) => {
-		const h = harness(path, { twoPassRow })
+		const h = await harness(path, { twoPassRow })
 		h.ctx.feeMultiplier = 3
 		withAppFee(h, { maxFeesPerGas: { feePerDaGas: "99999", feePerL2Gas: "99999" } })
 		const capsAtSim: bigint[][] = []
@@ -578,7 +578,7 @@ describe("an app's fee settings against the wallet's", () => {
 		["fpc two-pass", [736n, 880n]],
 		["fpc fast path", [1_180n, 1_412n]],
 	])("%s: every build commits the app's priority fee, and the cap makes room for it", async (path, cap) => {
-		const h = harness(path)
+		const h = await harness(path)
 		withAppFee(h, { maxPriorityFeesPerGas: { feePerDaGas: "70", feePerL2Gas: "80" } })
 		const result = await h.strategy.buildAndEstimate(h.ctx)
 		expect(h.buildStandard.mock.calls.length).toBeGreaterThan(0)
@@ -591,7 +591,7 @@ describe("an app's fee settings against the wallet's", () => {
 	})
 
 	test.each(PATHS)("%s: with no app fee settings, no build is given a priority fee", async (path) => {
-		const h = harness(path)
+		const h = await harness(path)
 		await h.strategy.buildAndEstimate(h.ctx)
 		for (const call of h.buildStandard.mock.calls) expect(call[4]).toBeUndefined()
 	})
@@ -606,7 +606,7 @@ describe("scope reads at V2 and V3", () => {
 	test.each(["fjwc", "embedded"] as const)(
 		"%s: the build's scopes are taken before the gas limits and reach the simulation",
 		async (path) => {
-			const h = harness(path)
+			const h = await harness(path)
 			const order: string[] = []
 			const built = makeBuilt({})
 			const { scopes } = built
@@ -652,8 +652,8 @@ describe("embedded: the app's own fee contract", () => {
 		nestedExecutionResults: nested,
 	})
 
-	function withKernel(route: "fpc" | "fjwc", entrypoint: unknown) {
-		const h = harness("embedded")
+	async function withKernel(route: "fpc" | "fjwc", entrypoint: unknown) {
+		const h = await harness("embedded")
 		h.simulateTxTask.mockImplementation(async () => ({
 			...sentinelSim(),
 			publicInputs: { feePayer: APP_PAYER },
@@ -667,14 +667,14 @@ describe("embedded: the app's own fee contract", () => {
 		["calls nothing of Fee Juice", call(APP_PAYER), false],
 		["claims Fee Juice in a nested call", call(APP_PAYER, [call(FEE_JUICE)]), true],
 	])("an app contract pays, and its transaction %s: the kernel's payer is named", async (_case, entrypoint, callsFeeJuice) => {
-		const { strategy, ctx } = withKernel("fpc", entrypoint)
+		const { strategy, ctx } = await withKernel("fpc", entrypoint)
 		const built = await strategy.buildAndEstimate(ctx)
 		expect(built.appPayer?.address.equals(APP_PAYER)).toBe(true)
 		expect(built.appPayer?.callsFeeJuice).toBe(callsFeeJuice)
 	})
 
 	test("a claim to the sender names no app payer: the sender pays itself", async () => {
-		const { strategy, ctx } = withKernel("fjwc", call(APP_PAYER))
+		const { strategy, ctx } = await withKernel("fjwc", call(APP_PAYER))
 		expect((await strategy.buildAndEstimate(ctx)).appPayer).toBeUndefined()
 	})
 })

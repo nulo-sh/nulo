@@ -622,3 +622,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-security-fixes-5](harden-security-fixes-5/plan.md) — completed — discovery ids bound to their first tab, category-only log lines, paced discovery, bounded finished tasks, at most 1,024 calls per batch
 - [quality-lows-b](quality-lows-b/plan.md) — completed — the approval windows' raced-cancel and wrong-profile endings move into their shell, the pending-send refusal toast and the first-connect rule get one home each (#1977, #1978, #1979)
 - [quality-lows-a](quality-lows-a/plan.md) — completed — the baseline scripts' Biome reader, the landing's subscribe client, the network endpoint edits and the proving backends each get one home; the route-snapshot half of #1976 left out (#1981, #1982, #1975)
+- [task-owner-1](task-owner-1/plan.md) — completed — every root task names its profile, and the task registry inserts only its own profile's; a scan pins the creators

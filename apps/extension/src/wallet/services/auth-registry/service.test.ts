@@ -559,11 +559,11 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 	function instrument(h: Awaited<ReturnType<typeof makeHarness>>) {
 		const log: string[] = []
 		const internals = h.service as unknown as Record<string, unknown> & {
-			taskService: { startNewTask: (content: unknown) => unknown }
+			taskService: { startNewTask: (owner: unknown, content: unknown) => unknown }
 			transactionService: Record<string, unknown>
 		}
-		internals.taskService.startNewTask = (taskContent: unknown) => {
-			log.push(`task:${(taskContent as { constructor: { name: string } }).constructor.name}`)
+		internals.taskService.startNewTask = (owner: unknown, taskContent: unknown) => {
+			log.push(`task:${owner}:${(taskContent as { constructor: { name: string } }).constructor.name}`)
 			return {
 				complete: () => log.push("complete"),
 				completeIfTracked: () => log.push("complete"),
@@ -656,11 +656,12 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		const h = await makeHarness()
 		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], TX1, LIVE_EPOCH)
 		const log = instrument(h)
-		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
+		const tasks = (h.service as unknown as { taskService: { startNewTask: (owner: unknown, content: unknown) => unknown } }).taskService
 		const started = vi.spyOn(tasks, "startNewTask")
 		await h.service.revokeAuthwits("net-1", A, [1], FEE)
 		// The task names each row by its whole identity, which the Authwits page matches its rows by.
-		expect(started.mock.calls[0]?.[0]).toMatchObject({
+		expect(started.mock.calls[0]?.[0]).toBe("p1")
+		expect(started.mock.calls[0]?.[1]).toMatchObject({
 			authwitIds: [1],
 			authwitKeys: [authwitRowKey({ id: 1, ...P1, hash: "0xh1", txHash: TX1 })],
 		})
@@ -673,7 +674,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			actions: [{ kind: "call", contract: getAuthRegistryAddress().toString(), method: "set_authorized", args: ["0xh1", false] }],
 		}
 		expect(log).toEqual([
-			"task:RevokeAuthwitsContent",
+			"task:p1:RevokeAuthwitsContent",
 			`receipt:${TX1}`,
 			`send:${JSON.stringify(request)}:${JSON.stringify({ type: OriginType.UI })}:undefined:${fence}`,
 			"waitForTx:0xtx",
@@ -694,7 +695,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		// The grant of #1 is dropped after a popup listed it.
 		await h.service.reconcileAuthwits(P1, TX1, "dropped")
 		instrument(h)
-		const tasks = (h.service as unknown as { taskService: { startNewTask: (content: unknown) => unknown } }).taskService
+		const tasks = (h.service as unknown as { taskService: { startNewTask: (owner: unknown, content: unknown) => unknown } }).taskService
 		const started = vi.spyOn(tasks, "startNewTask")
 
 		await h.service.estimateRevokeFee("net-1", A, [1, 2], FEE)
@@ -702,7 +703,8 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		const actions = [{ kind: "call", contract: getAuthRegistryAddress().toString(), method: "set_authorized", args: [hash2, false] }]
 		expect(h.estimateSendTransactionFee.mock.calls[0]?.[0]).toMatchObject({ actions })
 		expect(h.executeSendTransaction.mock.calls[0]?.[0]).toMatchObject({ actions })
-		expect(started.mock.calls[0]?.[0]).toMatchObject({
+		expect(started.mock.calls[0]?.[0]).toBe("p1")
+		expect(started.mock.calls[0]?.[1]).toMatchObject({
 			authwitIds: [2],
 			authwitKeys: [authwitRowKey({ id: 2, ...P1, hash: hash2, txHash: tx2 })],
 		})
@@ -726,7 +728,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 			actions: [{ kind: "call", contract: getAuthRegistryAddress().toString(), method: "set_reject_all", args: [true] }],
 		}
 		expect(log).toEqual([
-			"task:StepContent",
+			"task:p1:StepContent",
 			`send:${JSON.stringify(request)}:${JSON.stringify({ type: OriginType.UI })}:undefined:${fence}`,
 			"waitForTx:0xtx",
 			"receiptNodeFor",
@@ -765,7 +767,7 @@ describe("AuthRegistryService revoke and registry toggle — refusals, settlemen
 		h.executeSendTransaction.mockRejectedValueOnce(boom).mockRejectedValueOnce(new JobCancelledSentinel("job-1"))
 		await expect(h.service.revokeAuthwits("net-1", A, [1], FEE)).rejects.toBe(boom)
 		await expect(h.service.setRegistryEnabled("net-1", A, false, FEE)).rejects.toBeInstanceOf(JobCancelledError)
-		expect(log).toEqual(["task:RevokeAuthwitsContent", `receipt:${TX1}`, "fail", "task:StepContent", "cancel"])
+		expect(log).toEqual(["task:p1:RevokeAuthwitsContent", `receipt:${TX1}`, "fail", "task:p1:StepContent", "cancel"])
 	})
 })
 
@@ -945,6 +947,26 @@ describe("AuthRegistryService.revokeAuthwits waits for each grant's block, then 
 		expect(await hashes()).toEqual([])
 		expect((await tasks.getTasks()).map((task) => task.status)).toEqual(switches ? [] : [TaskStatus.Completed])
 		expect(h.executeSendTransaction).toHaveBeenCalledOnce()
+	})
+
+	test.each([
+		["another profile became active while its rows were read", true],
+		["control: its profile stayed active", false],
+	])("a revoke's task joins the list only of the profile it runs for: %s", async (_name, switches) => {
+		const { internals, revoke } = await revoking()
+		const { tasks, switchToProfile } = await startedTaskService("p1")
+		internals.taskService = tasks
+		const created = vi.fn()
+		tasks.onTaskCreated.add(created)
+		const read = internals.revokeOperation as (...args: unknown[]) => Promise<unknown>
+		internals.revokeOperation = async (...args: unknown[]) => {
+			const operation = await read.apply(internals, args)
+			if (switches) switchToProfile("p2")
+			return operation
+		}
+		await revoke()
+		expect((await tasks.getTasks()).map((task) => task.status)).toEqual(switches ? [] : [TaskStatus.Completed])
+		expect(created).toHaveBeenCalledTimes(switches ? 0 : 1)
 	})
 })
 
