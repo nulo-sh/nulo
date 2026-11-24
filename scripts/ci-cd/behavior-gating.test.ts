@@ -353,6 +353,31 @@ describe("network suite job names", () => {
 		expect([...expected].sort()).toEqual([...produced].sort())
 		expect(script, "the list is checked against the PR lane's runs").toContain(`if [ "$WF" = "${workflowOf(PR_LANE).name}" ]; then`)
 	})
+
+	test("verify-cert-run.sh's workload jobs are the names Quality and smoke produce, every leg of each", () => {
+		type Shard = string | { id: string } | undefined
+		type Job = { name: string; uses?: string; strategy?: { matrix?: { shard?: Shard[] } } }
+		const legs = (job: Job, name: string): string[] =>
+			(job.strategy?.matrix?.shard ?? [undefined]).map((shard) =>
+				typeof shard === "object"
+					? name.replace("${{ matrix.shard.id }}", shard.id)
+					: name.replace("${{ matrix.shard }}", String(shard)),
+			)
+		const produced = (file: string, jobs: string[]): string[] =>
+			jobs.flatMap((key) => {
+				const caller: Job = workflowOf(file).jobs[key]
+				const called = Object.values(workflowOf(String(caller.uses).replace("./.github/workflows/", "")).jobs) as Job[]
+				expect(called, `${file} → ${key} calls a one-job workflow`).toHaveLength(1)
+				return legs(caller, caller.name).flatMap((outer) => legs(called[0], called[0].name).map((inner) => `${outer} / ${inner}`))
+			})
+		const script = readFileSync(join(ROOT, "scripts/ci-cd/verify-cert-run.sh"), "utf8")
+		const required = (workflow: string): string[] =>
+			String(new RegExp(`^\\t\\["${workflow}"\\]="(.+)"$`, "m").exec(script)?.[1])
+				.split("|")
+				.sort()
+		expect(required(workflowOf("pr-quick.yml").name)).toEqual(produced("pr-quick.yml", ["unit-tests", "lint-and-typecheck"]).sort())
+		expect(required(workflowOf("pr-extension-smoke-e2e.yml").name)).toEqual(produced("pr-extension-smoke-e2e.yml", ["smoke"]).sort())
+	})
 })
 
 describe("commitlint", () => {
@@ -578,7 +603,7 @@ describe("live labels", () => {
 				"",
 			].join("\n"),
 		)
-		expect(live.if).toBe("github.event_name == 'pull_request'")
+		expect(live.if).toBe("matrix.shard == '3/3' && github.event_name == 'pull_request'")
 		expect(live["continue-on-error"]).toBeUndefined()
 		expect(live.env).toEqual({
 			GH_TOKEN: "${{ github.token }}",
@@ -589,6 +614,7 @@ describe("live labels", () => {
 		})
 		const ratchet = steps[at + 1]
 		expect(ratchet.run).toContain("bun run test:ci-gating")
+		expect(ratchet.if).toBe("matrix.shard == '3/3'")
 		expect(ratchet.env).toEqual({ BASELINE_MOVE_APPROVED: "${{ steps.live.outputs.label-hit }}" })
 		const quick = workflow("pr-quick.yml")
 		expect(quick.jobs["unit-tests"].uses).toBe("./.github/workflows/_unit-tests.yml")
@@ -1421,15 +1447,21 @@ describe("Firefox lanes", () => {
  * the list disagrees with, leaves files unrun while the aggregator stays green.
  */
 describe("shard matrices", () => {
-	test("every shard matrix runs 1/N to N/N once, each runner handed its own shard and label", () => {
-		type MatrixJob = { strategy?: { matrix?: { shard?: unknown[] } }; with?: Record<string, unknown> }
+	type MatrixJob = { uses?: string; strategy?: { matrix?: { shard?: unknown[] } }; with?: Record<string, unknown> }
+	const shardedJobs = (): [string, string, MatrixJob][] =>
+		readdirSync(join(ROOT, ".github/workflows"))
+			.filter((name) => name.endsWith(".yml"))
+			.flatMap((file) =>
+				(Object.entries(workflowOf(file).jobs ?? {}) as [string, MatrixJob][])
+					.filter(([, job]) => job.strategy?.matrix?.shard)
+					.map(([name, job]): [string, string, MatrixJob] => [file, name, job]),
+			)
+
+	test("every suite-calling shard matrix runs 1/N to N/N once, each runner handed its own shard and label", () => {
 		let checked = 0
-		for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((name) => name.endsWith(".yml"))) {
-			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-			const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
-			for (const [name, job] of Object.entries(wf.jobs ?? {}) as [string, MatrixJob][]) {
-				const shards = job.strategy?.matrix?.shard
-				if (!shards) continue
+		for (const [file, name, job] of shardedJobs()) {
+			if (job.uses) {
+				const shards = job.strategy?.matrix?.shard ?? []
 				const want = shards.map((_, i) => ({ id: `${i + 1}/${shards.length}`, label: `${i + 1}-of-${shards.length}` }))
 				expect(shards, `${file} → ${name}`).toEqual(want)
 				// An `exclude` (or any other key) could drop a shard from both twins while the list above holds.
@@ -1440,6 +1472,57 @@ describe("shard matrices", () => {
 			}
 		}
 		expect(checked, "the scan found the sharded suites").toBeGreaterThan(0)
+	})
+
+	test("the unit tests are the one shard matrix that runs its own steps", () => {
+		expect(shardedJobs().flatMap(([file, name, job]) => (job.uses ? [] : [`${file} → ${name}`]))).toEqual([
+			"_unit-tests.yml → unit-tests",
+		])
+	})
+
+	// A leg condition no leg matches skips its piece while the job stays green, so each step's
+	// condition and place is pinned whole.
+	test("each unit-test leg runs a third of the extension's suite, and every other piece runs in exactly one leg", () => {
+		const wf = workflowOf("_unit-tests.yml")
+		expect(Object.keys(wf.jobs)).toEqual(["unit-tests"])
+		const job = wf.jobs["unit-tests"]
+		expect([job.if, job["continue-on-error"]]).toEqual([undefined, undefined])
+		expect(job.strategy).toEqual({ "fail-fast": false, matrix: { shard: ["1/3", "2/3", "3/3"] } })
+		const rootScripts = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts
+		const extension = JSON.parse(readFileSync(join(ROOT, "apps/extension/package.json"), "utf8")).name
+		const others = rootScripts["test:all"].replace("--filter '@nulo/*'", `--filter '@nulo/*' --filter '!${extension}'`)
+		expect(others, "test:all selects the workspaces by one filter").not.toBe(rootScripts["test:all"])
+		type Step = { uses?: string; with?: unknown; run?: string; id?: string; if?: string; "continue-on-error"?: unknown }
+		const guarded = (dir: string, script: string): string =>
+			[
+				`if [ -d ${dir} ]; then`,
+				`  bun run ${script}`,
+				"else",
+				`  echo "${dir}/ not present on this ref — skipping."`,
+				"fi",
+				"",
+			].join("\n")
+		const kinds: [string, (step: Step) => boolean][] = [
+			["extension", (step) => step.run === "bun run --cwd apps/extension test -- --shard=${{ matrix.shard }}"],
+			["others", (step) => step.run === others],
+			["release", (step) => step.run === guarded("scripts/release", "test:release")],
+			["live", (step) => step.id === "live"],
+			["ci-gating", (step) => step.run === guarded("scripts/ci-cd", "test:ci-gating")],
+		]
+		const kind = (step: Step): string => step.uses?.split("@")[0] ?? kinds.find(([, is]) => is(step))?.[0] ?? `unknown: ${step.run}`
+		const steps: Step[] = job.steps
+		expect(steps.map((step) => [kind(step), step.if, step["continue-on-error"]])).toEqual([
+			["actions/checkout", undefined, undefined],
+			["./.github/actions/setup-bun", undefined, undefined],
+			["extension", undefined, undefined],
+			["others", "matrix.shard == '3/3'", undefined],
+			// Workspace suites that use Node keep the runner's; both script suites get Node 24.
+			["actions/setup-node", undefined, undefined],
+			["release", "matrix.shard == '2/3'", undefined],
+			["live", "matrix.shard == '3/3' && github.event_name == 'pull_request'", undefined],
+			["ci-gating", "matrix.shard == '3/3'", undefined],
+		])
+		expect(steps.find((step) => step.uses?.startsWith("actions/setup-node@"))?.with).toEqual({ "node-version": 24 })
 	})
 })
 

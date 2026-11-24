@@ -38,21 +38,23 @@ REQUIRED_WORKFLOWS=("Quality" "Extension smoke e2e" "Extension network e2e")
 # tests having run at all. Certification is a claim that the suites RAN and were
 # green, so label the PR to force them rather than accepting a skip.
 declare -A REQUIRED_JOBS=(
-	["Quality"]="Unit tests / Vitest|Lint + Typecheck / Biome + vue-tsc"
-	["Extension smoke e2e"]="Run / shard 1/3 / Vitest + Puppeteer|Run / shard 2/3 / Vitest + Puppeteer|Run / shard 3/3 / Vitest + Puppeteer"
+	["Quality"]="Unit tests / Vitest (shard 1/3)|Unit tests / Vitest (shard 2/3)|Unit tests / Vitest (shard 3/3)|Lint + Typecheck / Biome + vue-tsc"
+	["Extension smoke e2e"]="Run / shard 1/4 / Vitest + Puppeteer|Run / shard 2/4 / Vitest + Puppeteer|Run / shard 3/4 / Vitest + Puppeteer|Run / shard 4/4 / Vitest + Puppeteer"
 )
 
-# The exact network suite job set: 5 sharded jobs + 3 heavies + the prover-ON
+# The exact network suite job set: 7 sharded jobs + 3 heavies + the prover-ON
 # canary + the two fixed chaos seeds. Checking names rather than a count means a
 # missing shard cannot be offset by an extra job elsewhere. behavior-gating.test.ts
 # derives this list from the workflows, so a renamed job or a rotated seed fails a
 # test instead of this check.
 EXPECTED_NETWORK_JOBS=(
-	"Run / shard 1/5 / network suite (shard 1/5)"
-	"Run / shard 2/5 / network suite (shard 2/5)"
-	"Run / shard 3/5 / network suite (shard 3/5)"
-	"Run / shard 4/5 / network suite (shard 4/5)"
-	"Run / shard 5/5 / network suite (shard 5/5)"
+	"Run / shard 1/7 / network suite (shard 1/7)"
+	"Run / shard 2/7 / network suite (shard 2/7)"
+	"Run / shard 3/7 / network suite (shard 3/7)"
+	"Run / shard 4/7 / network suite (shard 4/7)"
+	"Run / shard 5/7 / network suite (shard 5/7)"
+	"Run / shard 6/7 / network suite (shard 6/7)"
+	"Run / shard 7/7 / network suite (shard 7/7)"
 	"Run / heavy / fee-methods + selfpay-phase / network suite"
 	"Run / heavy / concurrent-confirm / network suite"
 	"Run / heavy / snack-placement + failed-send-check / network suite"

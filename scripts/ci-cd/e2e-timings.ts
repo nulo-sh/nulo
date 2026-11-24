@@ -166,7 +166,10 @@ async function laneRuns(workflow: string): Promise<{ id: number; costs: Map<stri
 	}
 	const kept: { id: number; costs: Map<string, number> }[] = []
 	for (const run of onePerBranch(eligible)) {
-		const logs = await Promise.all(run.shards.map((job) => gh("api", `repos/{owner}/{repo}/actions/jobs/${job.id}/logs`)))
+		// The reporter's colours make gh refuse a raw log unless allowed; classify() strips them.
+		const logs = await Promise.all(
+			run.shards.map((job) => gh("api", "--allow-escape-sequences", `repos/{owner}/{repo}/actions/jobs/${job.id}/logs`)),
+		)
 		const result = runCosts(logs)
 		if ("problem" in result) {
 			console.log(`  run ${run.databaseId} (${run.headBranch}) dropped: ${result.problem}`)
