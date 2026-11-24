@@ -1,4 +1,5 @@
 import { mount, type VueWrapper } from "@vue/test-utils"
+import { trimAddress } from "@/utils/string"
 import { describe, expect, test } from "vitest"
 import { sendEvent } from "../../../../../tests/helpers/send-event"
 import SendPersonStep from "./SendPersonStep.vue"
@@ -98,9 +99,9 @@ describe("modules/send/SendPersonStep", () => {
 		expect(chosen(w)).toEqual([[BEN, null]])
 	})
 
-	test("a recent recipient the wallet names shows the name", () => {
+	test("a recent recipient the wallet names shows the name, then its short address", () => {
 		const w = mountStep({ recents: [{ address: ANA, name: "Ana", words: "1 TST", ago: "yesterday" }] })
-		expect(w.get('[data-testid="send-recent"]').text()).toContain("Ana")
+		expect(w.get('[data-testid="send-recent"]').text()).toBe(`Ana${trimAddress(ANA, 6, 4, "…")}Last: 1 TSTyesterday`)
 	})
 
 	test("Your accounts rows show the account and emit it", async () => {

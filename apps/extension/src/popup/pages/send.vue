@@ -36,6 +36,7 @@ import { TransferType } from "@/wallet/services/transaction/client"
 import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { isAddressShapedName } from "@/utils/contact-name"
 import { entityListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { feeJuiceBridgeUrl, feePayerOf } from "@/utils/fee/fee-helpers"
@@ -228,7 +229,10 @@ contactService.onContactDeleted.add(contactList.onDeleted)
 
 const selectedContact = ref()
 const searchTerm = ref("")
-const recipientCandidates = computed(() => [...contacts.value, ...appStore.accounts])
+/** Contacts whose names may stand for their addresses: one that reads as an address names nothing
+ *  here, so every Send surface shows its address as it would with no contact. */
+const namedContacts = computed(() => contacts.value.filter((c) => !isAddressShapedName(c.name)))
+const recipientCandidates = computed(() => [...namedContacts.value, ...appStore.accounts])
 /** Who is paid is asked first, as page state: a history entry would sit behind the review's Send now. */
 const personChosen = ref(false)
 
@@ -276,9 +280,7 @@ const recentRows = computed(() =>
 )
 
 const payeeName = computed(() => selectedContact.value?.name ?? null)
-const payeeKnown = computed(() =>
-	isKnownAddress(searchTerm.value, { contacts: contacts.value, accounts: appStore.accounts, sends: pastSends.value }),
-)
+const payeeKnown = computed(() => isKnownAddress(searchTerm.value, { accounts: appStore.accounts, sends: pastSends.value }))
 /** The recipient's name as a sentence may carry it, or null. */
 const payeeSentenceName = computed(() => (payeeName.value ? sentenceName(payeeName.value, "") || null : null))
 
@@ -917,7 +919,8 @@ function applyQueryContact() {
 	const preselected = id === null ? undefined : contacts.value.find((c) => String(c.id) === id)
 	if (!preselected) return
 	queryContactApplied = true
-	if (isValidAztecAddress(preselected.address)) choosePerson(preselected.address, preselected)
+	if (isValidAztecAddress(preselected.address))
+		choosePerson(preselected.address, namedContacts.value.includes(preselected) ? preselected : null)
 	// An address that is no point stays in the field, which says it is invalid.
 	else searchTerm.value = preselected.address
 }
