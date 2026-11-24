@@ -331,19 +331,21 @@ const scheduleConvert = ({ base = fiatGuard.value, typed = false } = {}) => {
 	if (!base) return
 	fiatGuard.value = { ...base, converting: true }
 	clearTimeout(convertTimer)
-	convertTimer = setTimeout(() => {
-		const guard = fiatGuard.value
-		if (!guard) return
-		const read = readAmountText(fiatTerm.value, { currency: "$" })
-		const raw = read.ok ? usdToTokenAmount(read.plain, tokenDecimals.value, guard.frozenUsd) : null
-		if (raw !== null) {
-			writeModelFromRaw(raw)
-		} else {
-			writeAmount("")
-		}
-		if (typed) emit("typed")
-		fiatGuard.value = { ...guard, converting: false }
-	}, CONVERT_DEBOUNCE_MS)
+	convertTimer = setTimeout(() => convert(typed), CONVERT_DEBOUNCE_MS)
+}
+
+function convert(typed) {
+	const guard = fiatGuard.value
+	if (!guard) return
+	const read = readAmountText(fiatTerm.value, { currency: "$" })
+	const raw = read.ok ? usdToTokenAmount(read.plain, tokenDecimals.value, guard.frozenUsd) : null
+	if (raw !== null) {
+		writeModelFromRaw(raw)
+	} else {
+		writeAmount("")
+	}
+	if (typed) emit("typed")
+	fiatGuard.value = { ...guard, converting: false }
 }
 
 const handleFiatInput = (e) => {
@@ -461,6 +463,13 @@ defineExpose({
 	 *  it; one still converting keeps none, since its amount is not the figure typed last. */
 	exitFiat: () => {
 		if (fiatMode.value) exitFiatMode({ clearAmount: Boolean(fiatGuard.value?.converting) })
+	},
+	/** Lands a pending conversion now, as no keystroke: an estimate that starts at once must read the
+	 *  amount of the figure typed last, not the one before it. */
+	convertNow: () => {
+		if (!fiatGuard.value?.converting) return
+		clearTimeout(convertTimer)
+		convert(false)
 	},
 })
 

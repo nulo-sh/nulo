@@ -229,7 +229,7 @@ const STUBS = {
 			"side",
 		],
 		emits: ["update:modelValue", "update:rested", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount, exitFiat: mocks.exitFiat },
+		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount, exitFiat: mocks.exitFiat, convertNow() {} },
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",

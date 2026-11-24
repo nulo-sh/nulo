@@ -848,6 +848,8 @@ watch(
 )
 
 function requestEstimate() {
+	// A change during a USD conversion would start an estimate for the amount before the typed figure.
+	amountCardRef.value?.convertNow()
 	clearEstimateFailure()
 	// An estimate simulates against the node: no work for a send the wall would refuse.
 	if (!legal.isCurrent.value) {
@@ -1015,6 +1017,7 @@ onBeforeUnmount(() => {
 				:recents="recentRows"
 				:accounts="appStore.accounts"
 				@choose="choosePerson"
+				@picked="startWaitingFeeEstimate"
 			/>
 		</div>
 

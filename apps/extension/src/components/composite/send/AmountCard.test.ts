@@ -355,6 +355,33 @@ describe("composite/AmountCard — C3 fiat input", () => {
 		}
 	})
 
+	test("convertNow lands a pending conversion at once, as no keystroke, and does nothing with none pending", async () => {
+		vi.useFakeTimers()
+		try {
+			const w: ReturnType<typeof mountCard> = mountFiat({
+				"onUpdate:modelValue": (v: unknown) => w.setProps({ modelValue: v }),
+				"onUpdate:fiatMode": (v: unknown) => w.setProps({ fiatMode: v }),
+				"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
+			})
+			const convertNow = () => (w.vm as unknown as { convertNow: () => void }).convertNow()
+			const writes = () => w.emitted("update:modelValue")?.length ?? 0
+			await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+			const before = writes()
+			convertNow()
+			expect(writes()).toBe(before)
+
+			await w.get("input[data-testid='send-amount-fiat-input']").setValue("125")
+			convertNow()
+			await nextTick()
+			expect(w.props()).toMatchObject({ modelValue: "125.017877", fiatGuard: { converting: false } })
+			await vi.advanceTimersByTimeAsync(300)
+			expect(writes()).toBe(before + 1)
+			expect(w.emitted("typed")).toBeUndefined()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("toggle only offered for priced tokens", () => {
 		expect(mountFiat().find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(true)
 		expect(mountFiat({ liveQuote: null }).find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)

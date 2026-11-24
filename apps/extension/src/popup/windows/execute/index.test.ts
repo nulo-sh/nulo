@@ -2265,8 +2265,7 @@ describe("execute window — a failed fee estimate's retry", () => {
 	})
 })
 
-// ── When a fee estimate starts: at once as the window opens and after a pick; a fee card's re-read
-//    after an answer keeps the 500 ms pause. ──
+// ── Only a re-ask an answer causes waits the 500 ms pause. ──
 describe("execute window — when a fee estimate starts", () => {
 	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
 	const OWNER = `0x${"0a".repeat(32)}`

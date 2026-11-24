@@ -12,6 +12,8 @@ import { nextTick, reactive, ref } from "vue"
 
 const ACCOUNT = "0xacct"
 const DESTINATION = `0x2${"b".repeat(63)}`
+/** The amount the stubbed card's pending USD conversion lands on `convertNow`, if one is pending. */
+const converting: { amount: string | null } = { amount: null }
 /** A payee the journal has paid before, on the curve like `DESTINATION`. */
 const ANA = "0x13c29548b3340707017c5d1a457c23d8b6c29548b3340706e39bf608a5aab172"
 const TOKEN = {
@@ -231,7 +233,16 @@ const STUBS = {
 			"side",
 		],
 		emits: ["update:modelValue", "update:rested", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote() {}, focusAmount() {}, exitFiat() {} },
+		methods: {
+			refreezeQuote() {},
+			focusAmount() {},
+			exitFiat() {},
+			convertNow(this: { $emit: (e: string, v: string) => void }) {
+				if (converting.amount === null) return
+				this.$emit("update:modelValue", converting.amount)
+				converting.amount = null
+			},
+		},
 	},
 	// The card's read-only rows, and the menu chrome around the real selector's items.
 	FeeMethodRow: { template: '<div data-testid="stub-fee-method-row" />' },
@@ -284,7 +295,7 @@ const FUNDING = {
 /** What a landed estimate answers when a test names none. */
 const LANDED = { maxFee: "1000", gasDetails: {} }
 
-/** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
+/** Lets the current input's estimate land, a typed one's 800 ms pause included. */
 async function estimateLands() {
 	await vi.advanceTimersByTimeAsync(800)
 	await flushPromises()
@@ -1774,7 +1785,7 @@ describe("send page — a token's decimals against the wallet's bound, over the 
 describe("Send — when the fee estimate starts", () => {
 	const asked = () => mocks.estimateTransferFee.mock.calls.length
 	const amounts = () => mocks.estimateTransferFee.mock.calls.map((call) => call[6])
-	/** A person's next action comes in a later task: the timer turn that ends a task's mark runs first. */
+	/** Fake timers fire no timer between simulated actions: this runs the one that ends a task's mark. */
 	const nextTask = () => vi.advanceTimersByTimeAsync(0)
 
 	test("a typed amount waits the 800 ms pause; a side picked during it starts at once, with that amount", async () => {
@@ -1816,6 +1827,39 @@ describe("Send — when the fee estimate starts", () => {
 		await vi.advanceTimersByTimeAsync(799)
 		expect(asked()).toBe(1)
 		await vi.advanceTimersByTimeAsync(1)
+		expect(asked()).toBe(2)
+		w.unmount()
+	})
+
+	test("Pay this address on the address just pasted starts its waiting estimate at once", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("5")
+		await estimateLands()
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await nextTask()
+		const pasted = `0x2${"c".repeat(63)}`
+		await w.get('[data-testid="stub-recipient"]').setValue(pasted)
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(1)
+		await w.get('[data-testid="send-pay-address"]').trigger("click")
+		await flushPromises()
+		expect(mocks.estimateTransferFee.mock.calls.map((call) => call[5])).toEqual([DESTINATION, pasted])
+		w.unmount()
+	})
+
+	test("a side picked while a typed USD figure converts starts one estimate at once, for the converted amount", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"])
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="stub-amount"]').setValue("1.5")
+		await estimateLands()
+		converting.amount = "2.5"
+		await setSide(w, "to", "public")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(amounts()).toEqual([1_500_000n, 2_500_000n])
+		await vi.advanceTimersByTimeAsync(1000)
 		expect(asked()).toBe(2)
 		w.unmount()
 	})
