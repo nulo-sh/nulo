@@ -51,7 +51,7 @@ import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { SessionManager } from "./session-manager"
 import { RowKeyring } from "./row-keyring"
 import { type OpenedSlots, ProfileSecretCodec, type RowSeal, type SlotKey, unlocksWith } from "./profile-secret-codec"
-import { ExpiringStash } from "./expiring-stash"
+import { PendingRestoreState } from "./pending-restore-state"
 import { classifyProfileRow, envelopeMacFor, newPasskeyRow, newPasswordRow, newRowFor, replacementRow, sameStoredRow } from "./profile-row"
 import {
 	INVALID_PROFILE_ID,
@@ -157,36 +157,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private passkeys: PasskeyService = null!
 	private passkeyCoordinator: PasskeyRecoveryCoordinator = null!
 
-	/** An abandoned restore's rewrap context would otherwise hold two DEKs for the SW lifetime.
-	 *  Entries older than this are swept, zeroized, at the entry of every op that touches the map
-	 *  (restore/finalizeRestore/deleteProfile). The window comfortably exceeds a slow multi-service
-	 *  backup import; a legitimate import that runs longer can be expired by a later trigger —
-	 *  accepted. NEVER the id currently being finalized. */
-	private static readonly PENDING_RESTORE_TTL_MS = 30 * 60 * 1000
-
-	/**
-	 * TTL-bound, memory-only source→destination DEK rewrap context.
-	 * `restore()` runs BEFORE the imported-keys slice arrives, so the SOURCE DEK cannot be
-	 * consumed inside restore itself: it is stashed here and
-	 * `AccountService.restoreImportedKeys` consumes it atomically (rewraps every backup key row
-	 * source→destination, zeroizes the source immediately). `finalizeRestore` zeroizes any
-	 * LEFTOVER context for its id (the empty-slice case); the shared TTL sweep covers abandoned
-	 * restores + SW death. An expired/missing context with rows present fails those rows into
-	 * the existing orphan taxonomy — never silently-kept undecryptable rows.
-	 */
-	private readonly pendingDekRewraps = new ExpiringStash<{
-		sourceDek: ImportedKeysDek
-		destinationDek: ImportedKeysDek
-		capturedAt: number
-	}>(ProfileService.PENDING_RESTORE_TTL_MS, (entry) => {
-		zeroize(entry.sourceDek)
-		zeroize(entry.destinationDek)
-	})
-
-	/** What lets a restore's finalize open the profile its commit wrote: set at the commit, taken back
-	 *  by an explicit lock, a deletion or the TTL, and gone after a worker restart. Secret-free: the
-	 *  page holds the credential. */
-	private readonly restoreAdmissions = new ExpiringStash<{ capturedAt: number }>(ProfileService.PENDING_RESTORE_TTL_MS, () => undefined)
+	private readonly pendingRestore = new PendingRestoreState()
 
 	/** Durable delete-in-progress markers (finding D). NOT an EntityStorage — see
 	 *  TombstoneRepository: a corrupt tombstone must still reserve its id. */
@@ -207,18 +178,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  remains is documented at the reap site. */
 	public static readonly TORN_IMPORT_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-	/** Zeroize + drop stale rewrap contexts and drop stale admissions. MUST be called under the facade
-	 *  lock (`runExclusive`) so it can't zeroize an entry another op holds a live reference to.
-	 *  Optionally skips `exceptId`'s rewrap context (the id being finalized). */
-	private sweepStalePendingRestore(now: number, exceptId?: string): void {
-		this.pendingDekRewraps.sweep(now, exceptId)
-		// Spares no id: `get` checks no expiry, so this sweep is what expires an admission before
-		// finalize compares it.
-		this.restoreAdmissions.sweep(now)
-	}
-
 	/**
-	 * Pop the restore rewrap context for `profileId` (see `pendingDekRewraps`). The caller
+	 * Pop the restore rewrap context for `profileId` (see `PendingRestoreState`). The caller
 	 * (AccountService.restoreImportedKeys) takes ownership of BOTH buffers and zeroizes them.
 	 * `undefined` = expired / already consumed / never created — the caller fails its rows into
 	 * the orphan taxonomy.
@@ -227,13 +188,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		profileId: string,
 	): Promise<{ sourceDek: ImportedKeysDek; destinationDek: ImportedKeysDek } | undefined> {
 		await this.ensureInitialized()
-		return this.runExclusive(async () => {
-			const now = Date.now()
-			this.sweepStalePendingRestore(now, profileId)
-			const entry = this.pendingDekRewraps.take(profileId, now)
-			if (!entry) return undefined
-			return { sourceDek: entry.sourceDek, destinationDek: entry.destinationDek }
-		})
+		return this.runExclusive(async () => this.pendingRestore.take(profileId))
 	}
 	/** In-memory reserved-id set + per-profile deletion epoch (fencing). Seeded
 	 *  from the tombstone raw keys in `init()` BEFORE the session is restored.
@@ -902,7 +857,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			if (handle !== undefined && live !== undefined && live !== handle) return
 			// An explicit lock ends every pending restore before the close can fail: it wipes the
 			// rewrap contexts and takes back the admissions, so no passkey restore it ends opens.
-			this.sweepStalePendingRestore(Number.POSITIVE_INFINITY)
+			this.pendingRestore.forgetAll()
 			const { emitted, recordKept } = await this.sessionManager.close()
 			// A restarted worker holds no in-memory session, so `close()` emits
 			// nothing. Memory is locked either way, and the popups that route on this
@@ -1660,7 +1615,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		const delegate = await this.awaitDeletionDelegate()
 
 		const { profile, epoch, snapshot } = await this.runExclusive(async () => {
-			this.sweepStalePendingRestore(Date.now())
+			this.pendingRestore.sweep()
 			const profile = await this.liveRowHoldingLock(id)
 			if (tornGuard !== undefined) {
 				await this.assertTornGuardUnchangedHoldingLock(id, profile, tornGuard)
@@ -1684,8 +1639,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			await this.sessionManager.closeProfile(id)
 			// Deleting a profile mid-restore must drop + zeroize its rewrap context (its
 			// buffers aren't aged yet, so the TTL sweep wouldn't reap them), and its admission.
-			this.pendingDekRewraps.drop(id)
-			this.restoreAdmissions.drop(id)
+			this.pendingRestore.forget(id)
 			// A deleted profile's integrity records must not outlive it: a stale blocking record
 			// would keep the barrier up forever, and a stale verified-stamp could let a future
 			// same-id re-import skip its first boot verification.
@@ -2238,17 +2192,10 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 			this.emit("onProfileAdded", this.getProfileInfo(newProfile))
 
-			// Stash the rewrap context — the map takes OWNERSHIP of both buffers
-			// (restoreImportedKeys consumes; finalizeRestore/TTL sweep zeroize
-			// leftovers).
-			this.sweepStalePendingRestore(Date.now(), id)
-			this.pendingDekRewraps.set(id, {
-				sourceDek: material.transferKey,
-				destinationDek,
-				capturedAt: Date.now(),
-			})
+			// The flag flips right after the stash owns both buffers, with nothing that can throw between:
+			// the caller's `finally` zeroizes them while it is unset.
+			this.pendingRestore.stash(id, { sourceDek: material.transferKey, destinationDek })
 			scratch.storedContext = true
-			this.restoreAdmissions.set(id, { capturedAt: Date.now() })
 
 			// Late activation: do NOT open the session here. The popup
 			// will call `finalizeRestore(id, password)` after restoring
@@ -2300,16 +2247,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		password: string | undefined,
 		credentialData: PasskeyCredentialData | undefined,
 	): Promise<ProfileInfo> {
-		// Finalize is the last reader of the restore's rewrap context for its id, so every path wipes
-		// what it did not take: a leftover context is the empty-slice case (nothing consumed it). The
-		// identity check spares an entry a later restore stashed after the lock's hold watchdog
-		// released this call.
-		const seenRewrap = this.pendingDekRewraps.get(id)
-		// Read before any await, as the rewrap context is: an admission a same-id successor's commit
-		// sets meanwhile never admits this call, and this call's drop spares it.
-		const admission = this.restoreAdmissions.get(id)
+		// Every exit wipes a rewrap context nothing consumed (the empty-slice case), sparing one a same-id
+		// restore stashed after the lock's hold watchdog released this call.
+		const ticket = this.pendingRestore.beginFinalize(id)
 		try {
-			this.sweepStalePendingRestore(Date.now(), id)
+			this.pendingRestore.sweep(id)
 			// A tombstoned profile (SW died mid-delete) must not open a session. Gated here as well as
 			// at row-read so a delete that began mid-restore is caught.
 			const profile = await this.liveRowHoldingLock(id)
@@ -2329,19 +2271,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				return this.getProfileInfo(profile)
 			}
 			// A restore opens only on the admission its own commit set.
-			if (admission === undefined || this.restoreAdmissions.get(id) !== admission) {
-				throw new SessionEndedError()
-			}
+			if (!this.pendingRestore.admits(ticket)) throw new SessionEndedError()
 			// `restore` sealed the row under the credential handed back here: a row of another type was
 			// edited in between.
 			if (profile.type !== (credentialData ? "passkey" : "password")) {
 				throw new Error("Profile type changed between restore and finalizeRestore")
 			}
 			const opened = await this.finalizeOpenHoldingLock(id, profile, password, credentialData)
-			if (this.restoreAdmissions.get(id) === admission) this.restoreAdmissions.drop(id)
+			this.pendingRestore.spendAdmission(ticket)
 			return opened
 		} finally {
-			if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
+			this.pendingRestore.endFinalize(ticket)
 		}
 	}
 

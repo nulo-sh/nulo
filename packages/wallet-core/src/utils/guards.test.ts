@@ -20,12 +20,21 @@ describe("isRecord and isObjectLike", () => {
 		["undefined", undefined, false, false],
 		["a function", () => ({}), false, false],
 		["a number", 1, false, false],
+		["zero", 0, false, false],
+		["NaN", Number.NaN, false, false],
 		["a string", "{}", false, false],
+		["the empty string", "", false, false],
 		["a boolean", true, false, false],
+		["false", false, false, false],
 		["a bigint", 1n, false, false],
+		["a zero bigint", 0n, false, false],
 		["a symbol", Symbol("x"), false, false],
 	])("%s: isRecord %s, isObjectLike %s", (_label, value, record, objectLike) => {
 		expect(isRecord(value)).toBe(record)
 		expect(isObjectLike(value)).toBe(objectLike)
+		// Each inline form a site replaced has exactly its helper's set.
+		expect(typeof value === "object" && value !== null).toBe(objectLike)
+		expect(!value || typeof value !== "object").toBe(!objectLike)
+		expect(typeof value === "object" && value !== null && !Array.isArray(value)).toBe(record)
 	})
 })

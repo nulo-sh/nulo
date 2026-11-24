@@ -1,6 +1,7 @@
 /** Field facts checked without bb.js; shape, field range and curve membership stay separate predicates. */
 
-const HEX_32 = /^0x[0-9a-fA-F]{64}$/
+/** {@link isHex32}'s pattern, for a Zod `.regex` whose message names it. Not frozen: Zod resets its `lastIndex`. */
+export const HEX_32 = /^0x[0-9a-fA-F]{64}$/
 
 /** `0x` + 64 hex digits in either case. Says nothing of its range. */
 export const isHex32 = (value: string): boolean => HEX_32.test(value)

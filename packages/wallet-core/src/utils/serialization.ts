@@ -17,6 +17,7 @@
  */
 
 import { baseErrorJson } from "./error-json"
+import { isObjectLike } from "./guards"
 
 declare const Buffer: {
 	from(data: unknown, encoding?: string): { toString(encoding: string): string }
@@ -29,9 +30,9 @@ export function jsonStringify(obj: unknown): string {
 	return JSON.stringify(obj, (_key, value) => {
 		if (typeof value === "bigint") {
 			return value.toString()
-		} else if (typeof value === "object" && value && value.type === "Buffer" && Array.isArray(value.data)) {
+		} else if (isObjectLike(value) && value.type === "Buffer" && Array.isArray(value.data)) {
 			return Buffer.from(value.data).toString("base64")
-		} else if (typeof value === "object" && value && Buffer.isBuffer(value)) {
+		} else if (isObjectLike(value) && Buffer.isBuffer(value)) {
 			return (value as { toString(encoding: string): string }).toString("base64")
 		} else if (typeof value === "object" && value instanceof Map) {
 			return Array.from(value.entries())

@@ -1,3 +1,4 @@
+import { isObjectLike } from "@nulo/wallet-core/utils"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 
 /**
@@ -110,7 +111,7 @@ export function wireTitle(name: string | undefined): string | undefined {
 export function pickPrimaryWireCall(calls: unknown): { name: string; call: { to?: unknown; args?: unknown } } | undefined {
 	if (!Array.isArray(calls)) return undefined
 	const named = calls.map((call: unknown) => {
-		const name = typeof call === "object" && call !== null ? (call as { name?: unknown }).name : undefined
+		const name = isObjectLike(call) ? call.name : undefined
 		return { name: typeof name === "string" ? wireTitle(name) : undefined }
 	})
 	const idx = pickPrimaryIndex(named)

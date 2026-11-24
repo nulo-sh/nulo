@@ -60,6 +60,7 @@ import { flushPromises } from "@vue/test-utils"
 import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
+import { PENDING_RESTORE_TTL_MS } from "./pending-restore-state"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME, SessionManager } from "./session-manager"
 import type { ProfileRepository } from "./repository"
 import { pinnedTokensKey, profileImportedKey, profileNotFirstKey, profileUiKeys } from "@/utils/profile-ui-keys"
@@ -1803,13 +1804,13 @@ describe("ProfileService integration", () => {
 			// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
 			const internals = service as any
 			const buffers: Uint8Array[] = []
-			for (const e of internals.pendingDekRewraps.values()) buffers.push(e.sourceDek, e.destinationDek)
+			for (const e of internals.pendingRestore.rewraps.values()) buffers.push(e.sourceDek, e.destinationDek)
 			expect(buffers).toHaveLength(2)
 			// The sweep runs before the close, so a close that fails cannot leave the stash alive.
 			vi.spyOn(internals.sessionManager, "close").mockRejectedValue(new Error("close failed"))
 			await expect(service.lockActiveProfile()).rejects.toThrow("close failed")
-			expect(internals.pendingDekRewraps.size).toBe(0)
-			expect(internals.restoreAdmissions.size).toBe(0)
+			expect(internals.pendingRestore.rewraps.size).toBe(0)
+			expect(internals.pendingRestore.admissions.size).toBe(0)
 			expect(buffers.every((b) => b.every((x) => x === 0))).toBe(true)
 			expect(await service.consumeDekRewrapContext(out.id)).toBeUndefined()
 		}, 30_000)
@@ -1820,7 +1821,9 @@ describe("ProfileService integration", () => {
 			if ("restoreError" in out && out.restoreError) throw new Error(String(out.restoreError))
 			await service.deleteProfile(out.id)
 			expect(await service.consumeDekRewrapContext(out.id)).toBeUndefined()
-			expect((service as unknown as { restoreAdmissions: Map<string, unknown> }).restoreAdmissions.has(out.id)).toBe(false)
+			expect(
+				(service as unknown as { pendingRestore: { admissions: Map<string, unknown> } }).pendingRestore.admissions.has(out.id),
+			).toBe(false)
 			await expect(service.finalizeRestore(out.id, "pass1234")).rejects.toThrow(/Invalid profile id/)
 		}, 30_000)
 
@@ -3169,7 +3172,7 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 				)
 				if ("restoreError" in out && out.restoreError) throw new Error(String(out.restoreError))
 				// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in
-				const entry = (service as any).pendingDekRewraps.get(out.id)
+				const entry = (service as any).pendingRestore.rewraps.get(out.id)
 				expect(entry.sourceDek.some((b: number) => b !== 0)).toBe(true)
 
 				vi.advanceTimersByTime(31 * 60 * 1000)
@@ -4335,7 +4338,7 @@ describe("credential rows, degraded opens and the restore stash", () => {
 	})
 
 	describe("the restore stash", () => {
-		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to the stash map and its TTL
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to the restore stashes
 		const internalsOf = (service: ProfileService) => service as any
 		const allZero = (bytes: Uint8Array) => bytes.every((b) => b === 0)
 
@@ -4343,7 +4346,7 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			const ctx = await makeService()
 			const out = await ctx.service.restore({ id: "ignored", name: "PR", type: "password" }, await restoreSecretFor(fill), "pass1234")
 			const internals = internalsOf(ctx.service)
-			return { ...ctx, id: out.id, internals, ttl: internals.constructor.PENDING_RESTORE_TTL_MS as number }
+			return { ...ctx, id: out.id, internals, ttl: PENDING_RESTORE_TTL_MS }
 		}
 
 		type RestoredPassword = Awaited<ReturnType<typeof restoredPassword>>
@@ -4372,14 +4375,14 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			async (_label, arrange, refusal) => {
 				const restored = await restoredPassword(0x63)
 				const { service, id, internals } = restored
-				const { sourceDek, destinationDek } = internals.pendingDekRewraps.get(id)
+				const { sourceDek, destinationDek } = internals.pendingRestore.rewraps.get(id)
 				const buffers = [sourceDek, destinationDek]
 				expect(buffers.some(allZero)).toBe(false)
 				await arrange(restored)
 				const finalized = service.finalizeRestore(id, "pass1234")
 				if (refusal) await expect(finalized).rejects.toThrow(refusal)
 				else await expect(finalized).resolves.toMatchObject({ profile: { id }, fence: { profileId: id, session: 1 } })
-				expect(internals.pendingDekRewraps.has(id)).toBe(false)
+				expect(internals.pendingRestore.rewraps.has(id)).toBe(false)
 				expect(buffers.every(allZero)).toBe(true)
 			},
 			30_000,
@@ -4395,13 +4398,13 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			const clearMarker = internals.restorePending.delete.bind(internals.restorePending)
 			vi.spyOn(internals.restorePending, "delete").mockImplementation(async (profileId) => {
 				await clearMarker(profileId)
-				internals.pendingDekRewraps.drop(id)
-				internals.pendingDekRewraps.set(id, laterRewrap)
+				internals.pendingRestore.rewraps.drop(id)
+				internals.pendingRestore.rewraps.set(id, laterRewrap)
 			})
 			await expect(service.finalizeRestore(id, "pass1234")).rejects.toThrow(
 				"Profile type changed between restore and finalizeRestore",
 			)
-			expect(internals.pendingDekRewraps.get(id)).toBe(laterRewrap)
+			expect(internals.pendingRestore.rewraps.get(id)).toBe(laterRewrap)
 			expect([laterRewrap.sourceDek, laterRewrap.destinationDek].some(allZero)).toBe(false)
 		}, 30_000)
 
@@ -4419,23 +4422,23 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			const { service } = await makeService()
 			const out = await service.restore({ id: "e", name: "E", type: "password" }, await restoreSecretFor(0x62), "pass1234")
 			const internals = internalsOf(service)
-			const entry = internals.pendingDekRewraps.get(out.id)
+			const entry = internals.pendingRestore.rewraps.get(out.id)
 			const now = Date.now()
 			vi.spyOn(Date, "now").mockReturnValue(now)
-			entry.capturedAt = now - internals.constructor.PENDING_RESTORE_TTL_MS
+			entry.capturedAt = now - PENDING_RESTORE_TTL_MS
 			expect(await service.consumeDekRewrapContext(out.id)).toBeUndefined()
-			expect(internals.pendingDekRewraps.has(out.id)).toBe(false)
+			expect(internals.pendingRestore.rewraps.has(out.id)).toBe(false)
 			expect(allZero(entry.sourceDek) && allZero(entry.destinationDek)).toBe(true)
 		}, 30_000)
 
 		test("an unrelated consume wipes and drops another restore's context exactly at the TTL", async () => {
 			const { service, id, internals, ttl } = await restoredPassword(0x65)
-			const entry = internals.pendingDekRewraps.get(id)
+			const entry = internals.pendingRestore.rewraps.get(id)
 			const now = Date.now()
 			vi.spyOn(Date, "now").mockReturnValue(now)
 			entry.capturedAt = now - ttl
 			expect(await service.consumeDekRewrapContext("unrelated")).toBeUndefined()
-			expect(internals.pendingDekRewraps.has(id)).toBe(false)
+			expect(internals.pendingRestore.rewraps.has(id)).toBe(false)
 			expect(allZero(entry.sourceDek) && allZero(entry.destinationDek)).toBe(true)
 		}, 30_000)
 	})

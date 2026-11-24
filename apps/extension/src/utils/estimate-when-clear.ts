@@ -1,4 +1,4 @@
-import type { IEventHandler } from "@nulo/wallet-core/utils"
+import { type IEventHandler, isObjectLike } from "@nulo/wallet-core/utils"
 import type { EstimateStarted, TransferFeeQueued } from "@/wallet/services/execution/spec"
 import { abortableSleep } from "./abortable-sleep"
 
@@ -22,8 +22,7 @@ export class EstimateRequeue extends Error {
 	}
 }
 
-const isQueued = (answer: unknown): answer is Queued =>
-	typeof answer === "object" && answer !== null && (answer as Partial<Queued>).queued === true
+const isQueued = (answer: unknown): answer is Queued => isObjectLike(answer) && answer.queued === true
 
 /**
  * Asks again, with the same unspent token, until no in-flight send holds what the estimate needs.

@@ -10,7 +10,7 @@
  */
 
 import { AuthRegistryRefusalError, OwnAccountIntentRefusalError } from "@nulo/extension-messaging/errors"
-import { isRecord } from "@nulo/wallet-core/utils"
+import { isObjectLike, isRecord } from "@nulo/wallet-core/utils"
 import { isAuthRegistry, isAuthRegistryGrantCall } from "./auth-registry"
 import type { Capability, GrantedCapabilityRecord, Scope, ScopePattern } from "./capabilities"
 import { sameFieldAddress } from "./field-address"
@@ -148,7 +148,7 @@ function checkSimulationTransactions(methodName: MethodName, args: unknown[], gr
 
 	const typedCalls = calls as WireCall[]
 	for (const call of typedCalls) {
-		if (typeof call !== "object" || call === null || (call as WireCall).to === undefined) {
+		if (!isObjectLike(call) || call.to === undefined) {
 			throw new Error(`Scope enforcement: ${methodName} exec.calls entries must be objects with a \`to\` field`)
 		}
 	}
@@ -231,19 +231,16 @@ type CallIntentShape = { caller: unknown; call: { to: unknown; name: string } }
 type IntentInnerHashShape = { consumer: unknown; innerHash: unknown }
 
 function isCallIntent(x: unknown): x is CallIntentShape {
-	if (!x || typeof x !== "object") return false
-	const obj = x as Record<string, unknown>
-	if (!("caller" in obj) || !("call" in obj)) return false
-	const call = obj.call
-	if (!call || typeof call !== "object") return false
-	const c = call as Record<string, unknown>
-	return "to" in c && "name" in c && typeof c.name === "string"
+	if (!isObjectLike(x)) return false
+	if (!("caller" in x) || !("call" in x)) return false
+	const call = x.call
+	if (!isObjectLike(call)) return false
+	return "to" in call && "name" in call && typeof call.name === "string"
 }
 
 function isIntentInnerHash(x: unknown): x is IntentInnerHashShape {
-	if (!x || typeof x !== "object") return false
-	const obj = x as Record<string, unknown>
-	return "consumer" in obj && "innerHash" in obj
+	if (!isObjectLike(x)) return false
+	return "consumer" in x && "innerHash" in x
 }
 
 /**

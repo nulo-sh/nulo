@@ -6,6 +6,7 @@
  */
 import { z } from "zod"
 import type { Log } from "@nulo/wallet-core/logger"
+import { isRecord } from "@nulo/wallet-core/utils"
 import { formatLogData } from "./format"
 import { scrubReportData, scrubReportText } from "./utils"
 
@@ -99,8 +100,8 @@ export function traceTag(walletTraceId: string | undefined): [{ walletTraceId: s
 
 function traceIdOf(data: readonly unknown[]): string | undefined {
 	for (const item of data) {
-		if (typeof item !== "object" || item === null || Array.isArray(item) || !Object.hasOwn(item, "walletTraceId")) continue
-		const id = (item as { walletTraceId: unknown }).walletTraceId
+		if (!isRecord(item) || !Object.hasOwn(item, "walletTraceId")) continue
+		const id = item.walletTraceId
 		if (typeof id === "string") return id
 	}
 	return undefined

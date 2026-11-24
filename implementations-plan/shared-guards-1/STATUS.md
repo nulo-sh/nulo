@@ -1,0 +1,13 @@
+- 2026-11-23 21:22Z phase 0-1: recon done (AST inventory, one Sonnet sweep), plan drafted with outline B; going to dual audit
+- 2026-11-23 21:30Z plan audit: Codex r1 reject (7 findings, all verified and accepted: K9, polarity-aware content key, ratchet D8, distinguishing pins, errors.ts to arc 3, complexity inventory, token encode kept K8); Opus running
+- 2026-11-23 21:43Z plan audit: Opus r1 conditional approve (K2 claim did not hold: converted; zeroize-sites pin; F8 restated; staged-bytes compare; falsy rows); final fresh Codex pass next
+- 2026-11-23 21:49Z plan audit: final Codex pass conditional approve, conditions applied, resumed: approve. Gate passed (auto-continue); arc 1 next
+- 2026-11-23 21:56Z arc 1 phase 1 gate green: guard test 20/20 (119 entries; delete and stray checks fail as designed), test:ci-gating 774 pass (ratchet: origin/dev predates the JSON), lint, typecheck:all
+- 2026-11-23 21:59Z arc 1 phase 2 gate green: wallet-core test 358+ pass, lint, typecheck:all
+- 2026-11-23 22:20Z arc 1 phase 3 gate green: lint, typecheck:all, test:all, test:release (7 zip tests fail: no zip on this host), staged wallet-crypto byte-identical; commit 516822810
+- 2026-11-23 22:38Z arc 1 phase 4 gate green: lint, typecheck:all, test:all, audit:vue, test:ci-gating, check:plans, rescore (trim 43), content script byte-identical, smoke 3 specs and network 3 specs at retry 0 on Chrome; baseline 66; commit 2ecbe62a8
+- 2026-11-23 22:50Z arc 1 review r1: Codex conditional approve (2 of 3 accepted), Opus conditional approve (5 of 6 accepted); baseline 64
+- 2026-11-23 23:05Z arc 1 review: Codex r2 conditional approve (2 accepted), r3 conditional approve (1 accepted, verified); loop stopped at three rounds, converged
+- 2026-11-23 23:20Z arc 1 final gates green on merged head 9c528cf5e (origin/dev 633cf2ac9 merged): lint, typecheck:all, test:all, test:ci-gating, check:plans; PR next
+- 2026-11-23 23:55Z PR #1956 CI: Build Storybook (chunk cycle from panel-handback's barrel import) and CodeQL (single replace) fixed; local storybook build, audit:vue, lint, typecheck green
+- 2026-11-24 00:05Z Codex verified the CI fix: approve; final gates on the head, then the last push
