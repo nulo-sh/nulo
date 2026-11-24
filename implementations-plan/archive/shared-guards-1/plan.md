@@ -261,7 +261,7 @@ None of K3-K9 is a bug a person meets: K3-K5 read values the wallet itself wrote
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as read at `4a333b343`. Plan-specific values:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) as read at `4a333b343`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2, per arc at its boundary: Codex `gpt-6.1-sol` at `high` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`), resumed with each fix diff, hard stop at three rounds. Each prompt carries the arc map, the standard's two rules verbatim, and the adversarial ask on rule 1: a site moved to a helper with another set, a name hiding `isObjectLike`, a changed refusal message, a published entry that gained an import, a baseline reason that is false. One Opus 5.5 diff review (`Agent`, `general-purpose`, `model: opus`) with the same ask beside round 1. After arc 3, one fresh Codex session over the net diff from `4a333b343` asks for cross-arc issues. Log every round in `lessons/phase-N.md` and below.
