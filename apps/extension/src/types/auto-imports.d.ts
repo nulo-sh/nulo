@@ -500,6 +500,7 @@ declare global {
   const restoreServiceSlices: typeof import('../composables/full-backup-restore').restoreServiceSlices
   const restoreTokensStage: typeof import('../composables/full-backup-restore').restoreTokensStage
   const restoredNetworkIds: typeof import('../composables/full-backup-restore').restoredNetworkIds
+  const retiredChain: typeof import('../utils/chain-ids').retiredChain
   const retryAccountStateStage: typeof import('../composables/full-backup-restore').retryAccountStateStage
   const retryNetworkIds: typeof import('../composables/full-backup-restore').retryNetworkIds
   const retryReplacedRows: typeof import('../composables/full-backup-restore').retryReplacedRows
@@ -1528,6 +1529,7 @@ declare module 'vue' {
     readonly restoreServiceSlices: UnwrapRef<typeof import('../composables/full-backup-restore')['restoreServiceSlices']>
     readonly restoreTokensStage: UnwrapRef<typeof import('../composables/full-backup-restore')['restoreTokensStage']>
     readonly restoredNetworkIds: UnwrapRef<typeof import('../composables/full-backup-restore')['restoredNetworkIds']>
+    readonly retiredChain: UnwrapRef<typeof import('../utils/chain-ids')['retiredChain']>
     readonly retryAccountStateStage: UnwrapRef<typeof import('../composables/full-backup-restore')['retryAccountStateStage']>
     readonly retryNetworkIds: UnwrapRef<typeof import('../composables/full-backup-restore')['retryNetworkIds']>
     readonly retryReplacedRows: UnwrapRef<typeof import('../composables/full-backup-restore')['retryReplacedRows']>

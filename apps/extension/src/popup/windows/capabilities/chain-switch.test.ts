@@ -223,25 +223,51 @@ describe("capabilities window — chain mismatch banner and switch", () => {
 		expect(approveBtn()?.attributes("disabled")).toBeDefined()
 	})
 
-	test("a chain with no row keeps the invitation but offers no switch", async () => {
-		appStoreMock.networks = [TESTNET]
-		await open(payloadFor("0", oneAccount))
-		expect(banner()?.attributes("data-state")).toBe("mismatch")
-		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').exists()).toBe(false)
-	})
-
-	test.each([
-		{ chainId: "3415328944", reads: "Testnet V6-RC.3" },
-		{ chainId: "677692", reads: "Aztec:677692" },
-	])("an app on chain $chainId, which has no row, is named $reads in the action line and the banner", async ({ chainId, reads }) => {
+	const UNSERVED =
+		"Allowing saves these permissions, but your wallet refuses this app's requests there. Reject, then switch the app to another network if it offers one."
+	const askingForMore = (chainId: string) => {
 		const held = [{ type: "accounts", canGet: true, canCreateAuthWit: false }]
-		await open({
+		return {
 			session: { chainId },
 			params: { delta: [{ type: "data", addressBook: true }], existingGrants: held, heldGrants: held, reRequested: [] },
-		})
+		}
+	}
+
+	test.each([
+		{ chainId: "2904119610", title: "Testnet V6-RC.1 has been retired", reads: "Testnet V6-RC.1" },
+		{ chainId: "3415328944", title: "Testnet V6-RC.3 has been retired", reads: "Testnet V6-RC.3" },
+		{ chainId: "4248422646", title: "Alpha V5 has been retired", reads: "Alpha V5" },
+		{ chainId: "677692", title: "No network for Aztec:677692", reads: "Aztec:677692" },
+	])("an app on chain $chainId, which has no row, is warned: $title", async ({ chainId, title, reads }) => {
+		await open(askingForMore(chainId))
 		expect(w?.find('[data-testid="identity-block"]').attributes("data-action-label")).toBe(`wants more permissions on ${reads}`)
-		expect(banner()?.find('[data-testid="banner-title"]').text()).toBe(`Connecting on ${reads}`)
+		expect(banner()?.attributes("data-state")).toBe("mismatch")
+		expect(banner()?.attributes("data-variant")).toBe("warning")
+		expect(banner()?.find('[data-testid="banner-title"]').text()).toBe(title)
+		expect(banner()?.find('[data-testid="banner-desc"]').text()).toBe(UNSERVED)
 		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').exists()).toBe(false)
+		expect(approveBtn()?.text()).toBe("Allow")
+	})
+
+	test("a first grant on a chain with no row gets the same warning over Grant access", async () => {
+		appStoreMock.networks = [TESTNET]
+		await open(payloadFor("0", oneAccount))
+		expect(banner()?.attributes("data-variant")).toBe("warning")
+		expect(banner()?.find('[data-testid="banner-title"]').text()).toBe("No network for Sandbox")
+		expect(banner()?.find('[data-testid="banner-desc"]').text()).toBe(UNSERVED)
+		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').exists()).toBe(false)
+		expect(approveBtn()?.text()).toBe("Grant access")
+	})
+
+	test("a row reusing a retired chain's id is a row: today's invitation and switch, by its own name", async () => {
+		appStoreMock.networks = [TESTNET, { id: "n-old", chainId: 3415328944, name: "Old RC" }]
+		await open(askingForMore("3415328944"))
+		expect(banner()?.attributes("data-variant")).toBe("info")
+		expect(banner()?.find('[data-testid="banner-title"]').text()).toBe("Connecting on Old RC")
+		expect(banner()?.find('[data-testid="banner-desc"]').text()).toBe(
+			"Your wallet is on Testnet. Allow as is, or switch to see Old RC balances.",
+		)
+		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').text()).toBe("Switch wallet to Old RC")
 	})
 
 	test("a running switch holds the footer and ignores a second click; activated settles to the done state", async () => {

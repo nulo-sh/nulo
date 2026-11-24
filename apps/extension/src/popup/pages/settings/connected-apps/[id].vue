@@ -13,7 +13,7 @@ import { Dropdown } from "@/components/ui/Dropdown"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 import DetailsTable from "@/components/composite/capabilities/DetailsTable.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
-import { getChainName } from "@/components/ui/utils.js"
+import { getNetworkName } from "@/components/ui/utils.js"
 
 /** Services */
 import { AccountServiceClient } from "@/wallet/services/account/client"
@@ -68,7 +68,7 @@ const events = computed(() => sessionParams.value.events)
 const sessionChainName = computed(() => {
 	const cid = session.value?.chainId
 	if (cid === undefined || cid === null) return ""
-	return getChainName(Number(cid))
+	return getNetworkName(Number(cid), appStore.networks)
 })
 
 const expiryFormatted = computed(() => formatSessionExpiry(session.value?.expiry))
@@ -322,7 +322,7 @@ onBeforeUnmount(() => {
 					:key="`${acc.chainId}:${acc.address}`"
 					:title="getAccountAlias(acc)"
 					titleVariant="name"
-					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
+					:description="`${getNetworkName(acc.chainId, appStore.networks).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
 					descriptionVariant="meta"
 					raw
 					data-testid="connected-app-account-row"

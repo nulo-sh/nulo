@@ -8,7 +8,6 @@
  * A `locked` row is one the session already holds: it renders selected, cannot be toggled, and has
  * no rename link, since the stored alias is not re-consented here.
  */
-import { getChainName } from "@/components/ui/utils.js"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { formatCaipAccount } from "@/wallet/utils/caip"
@@ -16,6 +15,8 @@ import { stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
 
 const props = defineProps<{
 	account: { address: string; name: string; chainId: number }
+	/** The account's network as the person named it. */
+	chainName: string
 	selected: boolean
 	alias?: string
 	disabled?: boolean
@@ -89,7 +90,7 @@ const onAliasInput = (e: Event) => {
 				<Flex align="center" justify="between" gap="8" wide>
 					<span :id="nameId" :class="$style.row_name">{{ account.name }}</span>
 					<span v-if="locked" :class="$style.chain_label">SHARED</span>
-					<span v-else :class="$style.chain_label">{{ getChainName(account.chainId).toUpperCase() }}</span>
+					<span v-else :class="$style.chain_label">{{ chainName.toUpperCase() }}</span>
 				</Flex>
 				<Flex align="center" justify="between" gap="8" wide :class="$style.address_line">
 					<span data-testid="account-select-address" :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>

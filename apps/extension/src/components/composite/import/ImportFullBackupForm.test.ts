@@ -197,6 +197,24 @@ describe("ImportFullBackupForm", () => {
 		)
 	})
 
+	it("says an account on a retired network was not restored, before the step for one whose network can be added", () => {
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({
+				restoreStatus: "finished",
+				isRestoreHasErrors: true,
+				hasOtherErrors: true,
+				heldAccounts: [
+					{ name: "Cold", chainId: 677692 },
+					{ name: "Trading", chainId: 2904119610 },
+				],
+			}),
+			global: { stubs },
+		})
+		expect(wrapper.get("[data-testid=import-full-backup-warning]").text()).toContain(
+			"Profile import completed with some errors. The imported account “Trading” was not restored. It was on Testnet V6-RC.1, which has been retired. The imported account “Cold” was not restored. Add the network with chain ID 677692 to restore it, or import it again from its account file. Turn on Developer Mode in Settings to add a network. You can review the details or continue.",
+		)
+	})
+
 	it("scrolls the warning into view once, as it appears, and marks it an alert", async () => {
 		const scroll = vi.spyOn(Element.prototype, "scrollIntoView")
 		try {

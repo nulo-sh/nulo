@@ -6,6 +6,8 @@ import { isClientDisconnectRejection } from "@nulo/extension-messaging/errors"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import DetailsTable from "@/components/composite/capabilities/DetailsTable.vue"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
+import { useAppStore } from "@/stores/app.store"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import ConnectedApp from "./[id].vue"
 
 const mocks = vi.hoisted(() => ({
@@ -392,6 +394,30 @@ describe("Settings › Connected app › the Network line", () => {
 			permissions: [{ methods: ["aztec_sendTx"] }],
 		} as unknown as StoredSession)
 		expect(network(w)).toBe(reads)
+	})
+
+	test.each([
+		{ chainId: CHAIN_IDS.TESTNET, name: "Staging", row: "STAGING" },
+		{ chainId: 31337, name: "My Devnet", row: "MY DEVNET" },
+		{ chainId: CHAIN_IDS.SANDBOX, name: "Local Network", row: "LOCAL NETWORK" },
+	])("a session on a network named $name reads it on the Network line and $row on its account rows", async ({ chainId, name, row }) => {
+		const address = `0x${"2a".repeat(32)}`
+		mocks.getNetworks.mockImplementation(async (id: number) => [{ chainId: id }])
+		mocks.getAccount.mockImplementation(async (_profileId: string, id: number, at: string) => ({
+			chainId: id,
+			address: at,
+			name: "Main",
+		}))
+		const w = await mountPage({
+			...session([accounts(false)]),
+			chainId: String(chainId),
+			accounts: [`aztec:${chainId}:${address}`],
+			permissions: [{ methods: ["aztec_sendTx"] }],
+		} as unknown as StoredSession)
+		useAppStore().networks = [{ chainId, name }] as never
+		await flushPromises()
+		expect(network(w)).toBe(name)
+		expect(w.get('[data-testid="connected-app-account-row"]').attributes("description")).toBe(`${row} · 0x2a2a...2a2a`)
 	})
 })
 

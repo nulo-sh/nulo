@@ -3,10 +3,6 @@ import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { nextTick } from "vue"
 import AccountSelectRow from "./AccountSelectRow.vue"
 
-vi.mock("@/components/ui/utils.js", () => ({
-	getChainName: (chainId: number) => `chain-${chainId}`,
-}))
-
 vi.mock("@/wallet/utils/caip", () => ({
 	formatCaipAccount: (chainId: number, address: string) => `aztec:${chainId}:${address}`,
 }))
@@ -25,7 +21,7 @@ const baseAccount = { address: `0x${"0a".repeat(32)}`, name: "Alpha", chainId: 1
 
 const factory = (props: Record<string, unknown> = {}) =>
 	mount(AccountSelectRow, {
-		props: { account: baseAccount, selected: false, ...props },
+		props: { account: baseAccount, chainName: "Staging", selected: false, ...props },
 		attachTo: document.body,
 		global: { stubs: STUBS },
 	})
@@ -48,10 +44,10 @@ describe("AccountSelectRow", () => {
 		expect(root(factory({ selected: true })).attributes("data-selected")).toBe("true")
 	})
 
-	test("shows the name, the uppercased chain and the trimmed address", () => {
-		const w = factory({ account: { ...baseAccount, chainId: 7 } })
+	test("shows the name, the uppercased network name and the trimmed address", () => {
+		const w = factory({ chainName: "My Devnet" })
 		expect(w.text()).toContain("Alpha")
-		expect(w.text()).toContain("CHAIN-7")
+		expect(w.text()).toContain("MY DEVNET")
 		expect(w.text()).toContain("0x0a0a...0a0a")
 	})
 
@@ -240,5 +236,6 @@ describe("AccountSelectRow", () => {
 		expect(rename(w).exists()).toBe(false)
 		expect(field(w).exists()).toBe(false)
 		expect(w.text()).toContain("SHARED")
+		expect(w.text()).not.toContain("STAGING")
 	})
 })

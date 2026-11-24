@@ -777,6 +777,7 @@
     "restoreServiceSlices": true,
     "restoreTokensStage": true,
     "restoredNetworkIds": true,
+    "retiredChain": true,
     "retryAccountStateStage": true,
     "retryNetworkIds": true,
     "retryReplacedRows": true,

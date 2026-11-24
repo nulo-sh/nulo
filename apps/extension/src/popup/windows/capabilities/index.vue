@@ -24,6 +24,8 @@ import PermissionGroup from "./PermissionGroup.vue"
 import { formatCaipAccount } from "@/wallet/utils/caip"
 import { requireNetwork } from "@/utils/core"
 import { copyWithToast } from "@/utils/clipboard"
+import { getNetworkName } from "@/components/ui/utils"
+import { retiredChain } from "@/utils/chain-ids"
 import { buildCapabilityItems, buildGrant, type CapabilityWindowParams, currentLine, type WindowRow } from "./build-items"
 import { resolveDappChain } from "./chain-mismatch"
 import { buildDetailsTable } from "./details-table"
@@ -81,6 +83,13 @@ const dappChain = computed(() =>
 	payload.value ? resolveDappChain(payload.value.session.chainId, appStore.networks, appStore.network?.chainId) : undefined,
 )
 const chainName = computed(() => dappChain.value?.name ?? "this network")
+// With no row for the app's chain the window has nothing to switch to, and the wallet refuses the
+// app's requests there, so the banner warns instead of inviting.
+const unservedChainTitle = computed(() => {
+	const chain = dappChain.value
+	if (!chain || chain.network) return undefined
+	return retiredChain(chain.chainId) ? `${chain.name} has been retired` : `No network for ${chain.name}`
+})
 const isSwitching = ref(false)
 // The chain the user switched to from THIS window. The done banner shows only while it is still
 // the active one; a later switch elsewhere brings the invitation back.
@@ -385,7 +394,7 @@ onUnmounted(disposeWindow)
 					data-testid="cap-chain-banner"
 					:data-state="chainBannerState"
 					:class="$style.chain_banner"
-					:variant="chainBannerState === 'switched' ? 'done' : 'info'"
+					:variant="chainBannerState === 'switched' ? 'done' : unservedChainTitle ? 'warning' : 'info'"
 					direction="vertical"
 					wide
 					:action="
@@ -395,8 +404,12 @@ onUnmounted(disposeWindow)
 					"
 				>
 					<template v-if="chainBannerState === 'switched'" #title>Wallet switched to {{ dappChain.name }}</template>
+					<template v-else-if="unservedChainTitle" #title>{{ unservedChainTitle }}</template>
 					<template v-else #title>Connecting on {{ dappChain.name }}</template>
 					<template v-if="chainBannerState === 'switched'" #description>Balances and activity now follow {{ dappChain.name }}.</template>
+					<template v-else-if="unservedChainTitle" #description>
+						Allowing saves these permissions, but your wallet refuses this app's requests there. Reject, then switch the app to another network if it offers one.
+					</template>
 					<template v-else #description>
 						Your wallet is on {{ appStore.network?.name }}. {{ confirmWord }} as is, or switch to see {{ dappChain.name }} balances.
 					</template>
@@ -413,6 +426,7 @@ onUnmounted(disposeWindow)
 							v-for="acc in availableAccounts"
 							:key="acc.address"
 							:account="acc"
+							:chainName="getNetworkName(acc.chainId, appStore.networks)"
 							:selected="isAccountSelected(acc)"
 							:locked="isAccountGranted(acc)"
 							:alias="accountAliases[formatCaipAccount(acc.chainId, acc.address)]"
