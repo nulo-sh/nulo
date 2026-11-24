@@ -96,6 +96,7 @@ describe("normalizeBackupData reject oracle", () => {
 	})
 	test("non-object row", () => {
 		expect(reason({ contact: [42] })).toBe('slice "contact" row 0 is not an object')
+		expect(reason({ contact: [[]] })).toBe('slice "contact" row 0 is not an object')
 	})
 	test("missing row id", () => {
 		expect(reason({ contact: [{ name: "no-id" }] })).toBe('slice "contact" row 0 has a missing or malformed id')
@@ -278,6 +279,7 @@ describe("config value-projection converter oracle (moves with the registry deco
 
 	test("toStored: non-object element", () => {
 		expect(normReason([42])).toBe("config slice element is not an object")
+		expect(normReason([[]])).toBe("config slice element is not an object")
 	})
 	test("toStored: malformed key", () => {
 		expect(normReason([{ key: "" }])).toBe("config slice element has a missing or malformed key")
@@ -294,7 +296,9 @@ describe("config value-projection converter oracle (moves with the registry deco
 		).toBe('config slice has a duplicate key "a"')
 	})
 	test("fromStored: non-object stored value", () => {
-		const res = denormalizeBackupData({ [CONFIG_STORAGE_KEY]: '"str"' }, { passThrough: {}, present: new Set(["config"]) })
-		expect(res).toEqual({ ok: false, reason: "stored config value is not an object" })
+		for (const stored of ['"str"', "[]"]) {
+			const res = denormalizeBackupData({ [CONFIG_STORAGE_KEY]: stored }, { passThrough: {}, present: new Set(["config"]) })
+			expect(res).toEqual({ ok: false, reason: "stored config value is not an object" })
+		}
 	})
 })

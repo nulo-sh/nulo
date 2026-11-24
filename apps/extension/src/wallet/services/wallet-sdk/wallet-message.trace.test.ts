@@ -19,6 +19,7 @@ function harness(
 		session?: never
 		overCap?: boolean
 		locked?: boolean
+		message?: unknown
 	} = {},
 ) {
 	const session = opts.session ?? SESSION
@@ -60,12 +61,25 @@ function harness(
 		logger: { log },
 		requests,
 	} as unknown as MessagePipelineDeps
-	onWalletMessage(session, { type: "getChainInfo", args: [], messageId: "m1" } as never, deps)
+	const message = "message" in opts ? opts.message : { type: "getChainInfo", args: [], messageId: "m1" }
+	onWalletMessage(session, message as never, deps)
 	const walletTraceId = () => begin.mock.calls[0]?.[0]
 	return { sent, begin, end, walletTraceId, dispatch, log, done: settled.promise }
 }
 
 describe("onWalletMessage: the request capture ends once, with its own outcome", () => {
+	test.each([null, "m1", 42])("a decrypted %j is dropped before any capture", (message) => {
+		const h = harness({ message })
+		expect(h.begin).not.toHaveBeenCalled()
+		expect(h.log).toHaveBeenCalledWith("wallet-sdk", LogLevel.Debug, expect.stringContaining("not an object"))
+	})
+
+	test("a decrypted array passes the object check and is captured", async () => {
+		const h = harness({ message: [] })
+		expect(h.begin).toHaveBeenCalledTimes(1)
+		await h.done
+	})
+
 	test("a session with a malformed chainInfo still gets its typed refusal, carrying its id", async () => {
 		const malformed = { ...(SESSION as object), chainInfo: { chainId: "nope" } } as never
 		const h = harness({ session: malformed })

@@ -10,7 +10,7 @@ import { fakeBrowser } from "@webext-core/fake-browser"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
-import { PinMismatchError, SEED_ATTEMPT_CAP, TokenSeeder, type SeedPreview, type TokenSeederDeps } from "./seeder"
+import { PinMismatchError, SEED_ATTEMPT_CAP, TokenSeeder, decodeSeedMarkers, type SeedPreview, type TokenSeederDeps } from "./seeder"
 import {
 	CHAIN_ID,
 	CLASS_ID,
@@ -367,6 +367,11 @@ describe("TokenSeeder — lifecycle + marker-shape hardening", () => {
 		await fakeBrowser.storage.local.set({ [MARKER_KEY]: JSON.stringify([]) })
 		await seeder.markDeletedByUser("p1", CHAIN_ID, CONTRACT)
 		expect((await readMarker())[KEY].outcome).toBe("deleted")
+	})
+
+	test("a marker blob that is an array reads as empty, the entries it holds included", () => {
+		expect(decodeSeedMarkers({ [KEY]: { attempts: 1 } }, 0)).toEqual({ [KEY]: { attempts: 1 } })
+		expect(decodeSeedMarkers([{ attempts: 1 }], 0)).toEqual({})
 	})
 
 	test("a marker write that fails rejects its own caller, and the marker lock still runs the next one", async () => {

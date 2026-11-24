@@ -35,7 +35,7 @@ import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import type { RestoreData } from "@/wallet/services/backup/trust-gate"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS, runImportChainSync } from "./importChainSync"
-import { errorMessageFromUnknown, raceTimeout } from "@nulo/wallet-core/utils"
+import { errorMessageFromUnknown, isObjectLike, raceTimeout } from "@nulo/wallet-core/utils"
 
 export type RestoreStatus = "" | "progress" | "failed" | "finished" | null | undefined
 
@@ -389,7 +389,7 @@ export async function restoreAccountsAndFilterOwnedSlices(
 
 /** The scope a backup row names, or undefined when it names none. */
 function scopeOfRow(row: unknown): AccountScope | undefined {
-	const { chainId, address } = (typeof row === "object" && row !== null ? row : {}) as { chainId?: unknown; address?: unknown }
+	const { chainId, address } = (isObjectLike(row) ? row : {}) as { chainId?: unknown; address?: unknown }
 	return typeof chainId === "number" && typeof address === "string" ? { chainId, address } : undefined
 }
 

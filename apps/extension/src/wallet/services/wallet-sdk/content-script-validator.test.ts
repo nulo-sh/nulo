@@ -256,6 +256,7 @@ describe("validateContentScriptMessage — a secure message's content", () => {
 		["a ciphertext that is not a string", { iv: IV, ciphertext: ["A"] }],
 		["no content", undefined],
 		["content that is not an object", "A"],
+		["content that is an array", []],
 		["a key beside iv and ciphertext", { iv: IV, ciphertext: "", padding: "A" }],
 		["an own __proto__ key beside iv and ciphertext", JSON.parse(`{"iv":"${IV}","ciphertext":"","__proto__":"A"}`)],
 	])("refuses %s", (_label, content) => {

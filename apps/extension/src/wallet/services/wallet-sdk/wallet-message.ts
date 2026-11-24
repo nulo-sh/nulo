@@ -6,6 +6,7 @@
 
 import type { ActiveSession, BackgroundConnectionHandler } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { WalletMessage, WalletResponse } from "@aztec-labs/wallet-sdk/types"
+import { isObjectLike } from "@nulo/wallet-core/guards"
 import {
 	describeExternalId,
 	describeWireMethod,
@@ -72,7 +73,7 @@ export function onWalletMessage(session: ActiveSession, message: WalletMessage, 
 	const key = session.sessionId
 	// Upstream passes whatever the ciphertext's JSON decoded to. A non-object has no id to answer, and
 	// reading one past the admission below would throw before its slot could be released.
-	if (typeof message !== "object" || message === null) {
+	if (!isObjectLike(message)) {
 		deps.logger.log(
 			"wallet-sdk",
 			LogLevel.Debug,

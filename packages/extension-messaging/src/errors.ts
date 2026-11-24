@@ -13,6 +13,9 @@
  * client then rejects with `new Error(message)` instead of a raw string.
  */
 
+import { isObjectLike } from "@nulo/wallet-core/guards"
+import { errorMessageFromUnknown, isHex32 } from "@nulo/wallet-core/utils"
+
 export interface WalletErrorPayload {
 	/** Stable machine-readable code. Subclasses declare their own. */
 	code: string
@@ -87,7 +90,7 @@ export class RpcConnectError extends WalletError {
 	public static readonly CODE = "RPC_CONNECT_FAILED"
 
 	public constructor(service: string, cause: unknown) {
-		const reason = cause instanceof Error ? cause.message : String(cause)
+		const reason = errorMessageFromUnknown(cause)
 		super(RpcConnectError.CODE, `Cannot open a port to '${service}': ${reason}`, { service }, "RpcConnectError")
 	}
 }
@@ -365,18 +368,17 @@ export interface ContractAssertionDetails {
 
 const ASSERTION_MAX = 1_024
 const FRAMES_MAX = 16
-const FIELD_ADDRESS = /^0x[0-9a-fA-F]{64}$/
 const SELECTOR = /^0x[0-9a-fA-F]{8}$/
 
 function frameOf(frame: unknown): ContractAssertionDetails["frames"] {
-	const { contract, selector } = (typeof frame === "object" && frame !== null ? frame : {}) as Record<string, unknown>
-	if (typeof contract !== "string" || !FIELD_ADDRESS.test(contract)) return []
+	const { contract, selector } = (isObjectLike(frame) ? frame : {}) as Record<string, unknown>
+	if (typeof contract !== "string" || !isHex32(contract)) return []
 	return [typeof selector === "string" && SELECTOR.test(selector) ? { contract, selector } : { contract }]
 }
 
 /** Wire details are unvalidated, so the bound is applied on every construction, a rebuild included. */
 function boundedAssertion(details: unknown): ContractAssertionDetails {
-	const { assertion, frames } = (typeof details === "object" && details !== null ? details : {}) as Record<string, unknown>
+	const { assertion, frames } = (isObjectLike(details) ? details : {}) as Record<string, unknown>
 	return {
 		// Cut by code point, so a cap never leaves half a surrogate pair.
 		assertion: typeof assertion === "string" ? [...assertion.slice(0, 2 * ASSERTION_MAX)].slice(0, ASSERTION_MAX).join("") : "",

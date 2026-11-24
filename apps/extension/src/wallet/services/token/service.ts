@@ -32,7 +32,7 @@ import type { PreparedWrite, SealedEntityStorage } from "@/wallet/storage/sealed
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { tokenKey } from "@nulo/token-list"
-import { EventHandler, raceTimeout } from "@nulo/wallet-core/utils"
+import { EventHandler, isObjectLike, raceTimeout } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { feeJuiceAddress, feeJuiceName, feeJuiceSymbol } from "@/wallet/utils/fee-juice"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
@@ -934,9 +934,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	public async rawTokenIdsForProfile(profileId: string): Promise<number[]> {
 		const out = new Set<number>()
 		for (const [id, raw] of await this.tokens.rawEntries()) {
-			if (typeof raw !== "object" || raw === null) continue
-			const r = raw as Record<string, unknown>
-			if (r.profileId !== profileId) continue
+			if (!isObjectLike(raw)) continue
+			if (raw.profileId !== profileId) continue
 			const n = canonicalNumericStorageId(id)
 			if (n !== undefined) out.add(n)
 		}
