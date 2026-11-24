@@ -376,6 +376,25 @@ describe("Settings › Connected app › Permissions", () => {
 	})
 })
 
+describe("Settings › Connected app › the Network line", () => {
+	const network = (w: Awaited<ReturnType<typeof mountPage>>) => {
+		const label = w.findAll("span").find((span) => span.text() === "Network:")
+		return label?.element.nextElementSibling?.textContent?.trim()
+	}
+
+	test.each([
+		{ chainId: "2904119610", reads: "Testnet V6-RC.1" },
+		{ chainId: "677692", reads: "Aztec:677692" },
+	])("a session on chain $chainId, which has no network row, reads $reads", async ({ chainId, reads }) => {
+		const w = await mountPage({
+			...session([accounts(false)]),
+			chainId,
+			permissions: [{ methods: ["aztec_sendTx"] }],
+		} as unknown as StoredSession)
+		expect(network(w)).toBe(reads)
+	})
+})
+
 describe("Settings › Connected app › its row deleted elsewhere", () => {
 	test("a delete naming another row keeps the page; one naming this row leaves it", async () => {
 		await mountPage(session([accounts(false)]))
