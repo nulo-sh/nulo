@@ -22,6 +22,7 @@
 	color: var(--txt-primary);
 }
 
+/* Each selected rule follows its `.tab` twin: the two tie on specificity and both set `color`. */
 .tab_active {
 	background: var(--nulo-accent);
 	color: var(--app-bg);
@@ -31,7 +32,6 @@
 	font-weight: 700;
 }
 
-/* After `.tab:hover`, which it ties on specificity and on `color`. */
 .tab_active:hover {
 	color: var(--app-bg);
 }
