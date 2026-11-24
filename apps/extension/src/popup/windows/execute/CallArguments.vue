@@ -4,6 +4,7 @@
  * unreadable call the fields are a last resort and the notice above them says why; under a readable
  * one they are the same fields the JSON view shows, when the host passes them.
  */
+import ArgsPlaceholder from "@/components/composite/ArgsPlaceholder.vue"
 import type { TokenInfo } from "@/wallet/services/token/client"
 import {
 	type CallSurface,
@@ -44,6 +45,9 @@ const props = withDefaults(
 		/** Off when the host already states a pending or unreadable reading at rest: the block then
 		 *  prints neither, and the advice stands alone. */
 		notice?: boolean
+		/** The call's field count: while it is read, placeholder pairs stand where its rows will read,
+		 *  in place of the words. */
+		fields?: number
 	}>(),
 	{ notice: true },
 )
@@ -66,7 +70,16 @@ const nonce = computed(() =>
 
 <template>
 	<template v-if="surface.kind === 'pending'">
-		<Text v-if="notice" :data-testid="`${prefix}-args-pending`" variant="body" color="tertiary" :class="$style.block">
+		<ArgsPlaceholder
+			v-if="fields !== undefined"
+			:data-testid="`${prefix}-args-pending`"
+			:fields="fields"
+			:decorative="!notice"
+			:role="notice ? 'status' : undefined"
+			:aria-busy="notice ? 'true' : undefined"
+			:class="[$style.block, rawShown?.rows.length ? $style.toggle_room : undefined]"
+		/>
+		<Text v-else-if="notice" :data-testid="`${prefix}-args-pending`" variant="body" color="tertiary" :class="$style.block">
 			Reading arguments…
 		</Text>
 	</template>
@@ -166,6 +179,11 @@ const nonce = computed(() =>
 
 .notice {
 	margin-bottom: 6px;
+}
+
+/* Room for the raw-fields toggle a reading draws under its rows: one 13 px line and its 2 px gap. */
+.toggle_room {
+	padding-bottom: 15px;
 }
 
 /* A dApp's artifact names each parameter and supplies its value; either may run long and unbroken. */

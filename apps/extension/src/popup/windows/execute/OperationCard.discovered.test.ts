@@ -70,10 +70,15 @@ describe("OperationCard — discovered authorizations", () => {
 		expect(summary).toContain(CALLER)
 		expect(summary).toContain("0x1234abcd")
 		const details = rows[0]!.find('[data-testid="execute-discovered-authwit-details"]')
-		expect(details.text()).toContain("Reading arguments…")
-		// Its line at rest states no pending reading, so the details say it, once.
+		// Its line states the pending reading, once; the details draw a pair per field, unsaid.
+		const placeholder = details.get('[data-testid="execute-discovered-authwit-args-pending"]')
+		expect([placeholder.attributes("aria-hidden"), placeholder.attributes("role"), placeholder.text()]).toEqual(["true", undefined, ""])
 		const listed = w.findAll('[data-testid="execute-op-summary-authwit"]')
 		expect(listed.map((li) => li.text().split("Reading arguments…").length - 1)).toEqual([1, 1])
+		expect(listed.map((li) => li.find('[data-testid="execute-op-summary-authwit-pending"]').text())).toEqual([
+			"Reading arguments…",
+			"Reading arguments…",
+		])
 		expect(details.find("[title]").attributes("title")).toBe(INNER)
 		expect(details.text()).not.toContain(INNER)
 		const panelIds = rows.map((row) => row.get('[data-testid="execute-discovered-authwit-details"]').attributes("id"))

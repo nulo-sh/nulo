@@ -5,7 +5,7 @@
  * their own details. Fed the wire-shaped fixture: 32-byte hex fields, real Token decodes.
  */
 
-import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { type DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { CLAIM_AND_END_SETUP, CLAIM_AND_END_SETUP_SELECTOR, FEE_JUICE_CONTRACT } from "@nulo/wallet-bridge"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import SectionLabel from "@nulo/design/ui/SectionLabel.vue"
@@ -387,6 +387,24 @@ describe("OperationCard — a multi-call transaction's summary", () => {
 		expect(unparsed(w)).toEqual(["Nulo can't parse calls from steps 1 and 3."])
 		expect(w.find('[data-testid="execute-op-summary-args-pending"]').exists()).toBe(false)
 		expect(warnings(w)).toHaveLength(0)
+	})
+
+	test("a step and an authorization still being read each carry one bar under their line, the authorization's details a silent pair per field; none is left once read", async () => {
+		const w = await mountCard({ feeEstimate: feeEstimateWith(AUTHWITS) })
+		await openAllSteps(w)
+		const bar = (el: DOMWrapper<Element>) => [el.findAll('[aria-hidden="true"]').length, el.text()]
+		expect(w.findAll('[data-testid="execute-op-summary-args-pending"]').map(bar)).toEqual(Array(3).fill([1, "Reading arguments…"]))
+		expect(w.findAll('[data-testid="execute-op-summary-authwit-pending"]').map(bar)).toEqual(Array(2).fill([1, "Reading arguments…"]))
+		const details = w.findAll('[data-testid="execute-discovered-authwit-args-pending"]')
+		expect(
+			details.map((d) => [d.findAll("span > span[aria-hidden='true']").length / 2, d.attributes("aria-hidden"), d.text()]),
+		).toEqual([
+			[4, "true", ""],
+			[2, "true", ""],
+		])
+
+		await w.setProps(await decodeFixture())
+		expect(w.findAll('[data-testid$="-args-pending"], [data-testid="execute-op-summary-authwit-pending"]')).toHaveLength(0)
 	})
 
 	test("a transfer the wallet does not read as one keeps the function's own name in its step, its decoded values under it", async () => {
