@@ -30,7 +30,7 @@ Absence trail for the last row: `git grep -n -E "profileId|owner" -- apps/extens
 | `execution/execution-coordinator.ts:261,287,325` | steps "Simulating", "Generating proof", "Sending" | none | every production caller passes a parent: strategies pass their estimate task; `dapp-send-executor` and `transfer-executor` pass the operation's task (`execution/service.ts:1025-1027,1107,1152`; `auth-registry/service.ts:437,484`; `transfer-executor.ts:260`); `executeSendTransaction` is not an RPC (`execution/service.ts:201-216`) |
 | `execution/fee/fee-strategy.ts:429` `startEstimateTask` | step "Estimating fee" | `ctx.fence` (`FeeStrategyContext`, `fee-strategy.ts:142`) | root on estimate paths |
 | `execution/tx-request-builder.ts:169,441` | step "Processing transaction" | `fence` parameter | root on estimate paths |
-| `token/service.ts:777` `parseTokenInterface` | step "Parsing token interface" | `network.profileId`, read after the task today | root from the popup RPC and the seeder (`:863`) |
+| `token/service.ts:777` `parseTokenInterface` | step "Parsing token interface" | `network.profileId`, from the network the parse reads | root from the popup RPC and the seeder (`:863`) |
 | `token-balance/balance-job-queue.ts:149,282` | `BalanceUpdateContent` (balance id, account) | `balance.profileId` (`token-balance/spec.ts:35-41`) | `startBatchTasks` runs outside `syncBatch`'s try/finally, so a throw there drops the batch (its comment, `:270-280`) |
 | `task/wrapped-task.ts:15,19` | subtasks | the parent | not root creators |
 
