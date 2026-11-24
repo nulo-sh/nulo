@@ -197,7 +197,7 @@ At arc 3's head, one at a time at retry 0: `lint`, `typecheck:all`, `test:all`, 
 
 ## Post-implementation
 
-The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) as read at `fe2a12524`. Plan-specific values:
+The execution contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) as read at `fe2a12524`. Plan-specific values:
 
 - Step 1 is absent (`code_review: off`).
 - Step 2, arcs 1 and 2 at their boundaries: Codex `gpt-6.1-sol` at `high` (`~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`), resumed with each fix diff, hard stop at three rounds; each prompt carries the arc map ("arc N of 2") and the standard's two rules verbatim. One Opus 5.5 diff review (`Agent`, `general-purpose`, `model: opus`) beside the first round. Log every round in `lessons/phase-N.md` and below. After arc 2, one fresh Codex session over the net diff from `fe2a12524` asks for cross-arc issues. Arc 3 is bounded work: one Codex pass over the plan and its diff, which also takes that cross-arc question over the three arcs' squash commits, then targeted verification of each material fix, hard stop at three rounds.
