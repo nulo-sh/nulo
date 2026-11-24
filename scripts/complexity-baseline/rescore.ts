@@ -14,16 +14,12 @@
  * `bun run baseline:rescore` runs it over the tree; scripts/ci-cd/complexity-rescore.test.ts is
  * the CI mirror and exercises the audit with injected descriptors.
  */
-import { spawnSync } from "node:child_process"
 import { readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { isBaselined, readBiomeReport } from "./biome-report"
 import { parseObserved } from "./messages"
 import { type AcceptedDirective, BASELINED_RULES, type BaselinedRule, scanTree } from "./scan"
-
-const CATEGORY_PREFIX = "lint/complexity/"
-/** This checkout's installed launcher, run on Bun; never one found through the working directory, `PATH` or a runner. */
-const BIOME = join(import.meta.dir, "..", "..", "node_modules", ".bin", "biome")
 
 export interface RescoreResult {
 	checked: number
@@ -49,35 +45,12 @@ function normalisePath(p: string): string {
 	return p.replace(/^\.\//, "")
 }
 
+/** A path Biome prints as `./x` is matched without the prefix a directive's file never has; a
+ *  diagnostic with no position sorts as line 0; parse errors go back to `rescore`, which refuses them. */
 function lintPaths(paths: string[], cwd: string): { diagnostics: Diagnostic[]; parseErrors: string[] } {
-	const res = spawnSync(process.execPath, ["--no-install", BIOME, "lint", "--reporter=json", "--max-diagnostics=none", ...paths], {
-		cwd,
-		encoding: "utf8",
-		maxBuffer: 256 * 1024 * 1024,
-	})
-	if (!res.stdout) throw new Error(`biome lint produced no output: ${res.stderr}`)
-	const report = JSON.parse(res.stdout)
-	const notPrinted = report.summary?.diagnosticsNotPrinted ?? 0
-	if (notPrinted > 0) throw new Error(`biome truncated ${notPrinted} diagnostic(s) — the audit would be incomplete`)
-	const all = (report.diagnostics ?? []) as Array<{
-		category?: string
-		message: string
-		location: { path: string; start?: { line: number } }
-	}>
-	const parseErrors = all.filter((d) => (d.category ?? "").startsWith("parse")).map((d) => `${d.location.path}: ${d.message}`)
-	const diagnostics = all
-		.filter((d) => (d.category ?? "").startsWith(CATEGORY_PREFIX))
-		.map((d) => ({
-			path: normalisePath(d.location.path),
-			category: (d.category as string).slice(CATEGORY_PREFIX.length),
-			message: d.message,
-			line: d.location.start?.line ?? 0,
-		}))
+	const { budget, parseErrors } = readBiomeReport(paths, "audit", cwd)
+	const diagnostics = budget.map((d) => ({ ...d, path: normalisePath(d.path), line: d.line ?? 0 }))
 	return { diagnostics, parseErrors }
-}
-
-function isBaselined(category: string): category is BaselinedRule {
-	return (BASELINED_RULES as readonly string[]).includes(category)
 }
 
 /** Audits the given directives (normally `scanTree().accepted`; a test may inject its own). */
