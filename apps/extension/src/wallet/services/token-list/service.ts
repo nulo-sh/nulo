@@ -52,7 +52,7 @@ type StoredState = TokenListStoredState
  *  past {@link DEADLINE_CEILING_MS} reads as due, so a planted value cannot stop refreshes. */
 export function decodeTokenListState(raw: unknown, now: number): TokenListStoredState {
 	if (!isObjectLike(raw)) return { failures: 0 }
-	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw as Record<string, unknown>
+	const { envelope, lastSuccessAt, nextAttemptAt: due, failures } = raw
 	const latest = now + DEADLINE_CEILING_MS
 	return {
 		envelope: typeof envelope === "string" ? envelope : undefined,

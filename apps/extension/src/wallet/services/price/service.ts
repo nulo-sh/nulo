@@ -466,10 +466,10 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 		if (!isObjectLike(body)) return out
 		for (const id of priceIdsOf(table)) {
 			if (!Object.hasOwn(body, id)) continue
-			const row = (body as Record<string, unknown>)[id]
+			const row = body[id]
 			if (!isObjectLike(row)) continue
-			const usd = (row as Record<string, unknown>).usd
-			const lastUpdated = (row as Record<string, unknown>).last_updated_at
+			const usd = row.usd
+			const lastUpdated = row.last_updated_at
 			const providerUpdatedAt = typeof lastUpdated === "number" && Number.isFinite(lastUpdated) ? lastUpdated * 1000 : null
 			const quote: PriceQuote = {
 				coingeckoId: id,
