@@ -106,7 +106,7 @@ describe("the imported accounts Delete Profile names", () => {
 		expect(r.getStaleNetwork).not.toHaveBeenCalled()
 	})
 
-	test("the pending reset is read once the accounts have answered, so a reset begun later purged nothing they missed", async () => {
+	test("the pending reset is read once the accounts have answered", async () => {
 		let answer: (rows: Account[]) => void = () => {}
 		const r = reads([], { getImportedAccounts: vi.fn(() => new Promise<Account[]>((resolve) => (answer = resolve))) })
 		const read = readImportedAccounts(r, "p1")

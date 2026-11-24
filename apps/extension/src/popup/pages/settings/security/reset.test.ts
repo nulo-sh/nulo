@@ -554,12 +554,30 @@ describe("Delete Profile names the imported accounts the recovery phrase cannot 
 		expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Couldn't delete profile. Try again" })
 		expect(w.find(RUNNING).exists()).toBe(true)
 
+		let answer: (rows: Account[]) => void = () => {}
+		reads.getImportedAccounts.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
 		await resetEnds()
 		expect(w.find(RUNNING).exists()).toBe(false)
+		answer([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		await flushPromises()
 		expect(listed(w)).toEqual([["Savings", "0x04c0…03b4"]])
 		await deleteButton(w).trigger("click")
 		await flushPromises()
 		expect(client.deleteProfile).toHaveBeenCalledWith("p1")
+	})
+
+	test("a read straddling a reset's end is dropped: its stale 'no reset' with the purged list never shows", async () => {
+		reads.getNetworks.mockResolvedValue([{ id: "tn", chainId: TESTNET }])
+		let noReset: (pending: null) => void = () => {}
+		reads.getPendingReset.mockReturnValueOnce(new Promise((resolve) => (noReset = resolve)))
+		reads.getImportedAccounts.mockResolvedValueOnce([])
+		const { w } = await mountReady({ isLogined: true })
+		await flushPromises()
+		reads.getImportedAccounts.mockResolvedValue([row(TESTNET, SAVINGS, "Savings", AccountType.Imported)])
+		await resetEnds()
+		noReset(null)
+		await flushPromises()
+		expect(listed(w)).toEqual([["Savings", "0x04c0…03b4"]])
 	})
 
 	test("a reset begun after the page read refuses the press, and the page then says why", async () => {

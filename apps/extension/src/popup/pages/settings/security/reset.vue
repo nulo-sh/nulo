@@ -101,7 +101,12 @@ const readImported = async () => {
 	imported.value = result
 	importedReadFailed.value = result === null
 }
-managers.networkReset.onStaleNetworkChanged.add(readImported)
+/** A reset's own end report clears the line at once; the read it starts settles the rest. */
+const onStaleNetworkChanged = (change) => {
+	if (change?.running === false && change.profileId === appStore.profile?.id) resetRunning.value = false
+	void readImported()
+}
+managers.networkReset.onStaleNetworkChanged.add(onStaleNetworkChanged)
 const importedAccounts = computed(() => (appStore.isLogined ? (imported.value?.accounts ?? []) : []))
 const importedRowDescription = (account) => {
 	const address = trimAddress(account.address, 6, 4, "…")
@@ -297,7 +302,7 @@ watch(
 
 onBeforeUnmount(() => {
 	isUnmounted = true
-	managers.networkReset.onStaleNetworkChanged.remove(readImported)
+	managers.networkReset.onStaleNetworkChanged.remove(onStaleNetworkChanged)
 	if (!isResetting.value) deleteService.disconnect()
 	if (slowDeleteTimer) clearTimeout(slowDeleteTimer)
 	clearTimeout(mismatchTimer)
