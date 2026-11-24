@@ -21,9 +21,11 @@ interface SendDataDeps {
 	tokenBalances: Ref<unknown[]>
 	balancesState: Ref<TokenBalanceSnapshotState>
 	live: SendIdentity
-	/** This account's succeeded transfers; it opens and closes its own client. */
+	/** This account's succeeded transfers; it opens and closes its own client, and resolves `[]` on a
+	 *  refused read, since a rejection fails the whole fetch. */
 	readPastSends: (profileId: string, accountAddress: string) => Promise<OperationRecord[]>
-	/** Runs in the task that commits a current fetch, before queued pre watchers flush. */
+	/** Called right after a current fetch writes its lists, with no await between, so queued pre
+	 *  watchers flush after it. */
 	onLoaded: (tokens: TokenInfo[]) => void
 }
 
@@ -165,8 +167,8 @@ export function useSendData(deps: SendDataDeps) {
 		reloadTokens,
 		refetch,
 		retry,
-		/** Ends the fetch in flight, so its late reads write nothing, the shared token selection included.
-		 *  Not terminal: a later call starts a new read, as the page's unmount always allowed. */
+		/** Ends the fetch in flight: nothing this hook writes lands, the shared token selection included;
+		 *  the balance read is fenced by the snapshot's own `dispose()`. Not terminal: a later call reads. */
 		dispose: state.identityFetches.invalidate,
 	}
 }

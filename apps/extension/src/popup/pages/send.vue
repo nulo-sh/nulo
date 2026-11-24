@@ -126,7 +126,7 @@ const awaitingNewToken = ref(false)
 
 const tokenService = new TokenServiceClient()
 const tokenBalances = ref([])
-/** `loaded` once the hook has landed a read since the identity fetch began. */
+/** `loaded` once the snapshot has landed a read since the identity fetch began. */
 const balancesState = ref("loading")
 const tokenBalanceService = new TokenBalanceServiceClient()
 const balances = useTokenBalanceSnapshot({

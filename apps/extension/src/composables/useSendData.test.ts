@@ -110,11 +110,16 @@ describe("useSendData", () => {
 		h.data.contacts.value = [contact(1)]
 		h.data.journalOps.value = [op("o1")]
 		h.tokenBalances.value = [{}]
+		h.data.tokensFailed.value = true
 		h.live.account = null
 		await h.data.refetch()
 		expect(h.balances.invalidate).toHaveBeenCalledOnce()
+		expect(h.balancesState.value).toBe("loading")
+		expect(h.data.tokensFailed.value).toBe(false)
 		expect(h.tokenService.getTokens).not.toHaveBeenCalled()
+		expect(h.balances.fetchTokenBalances).not.toHaveBeenCalled()
 		expect(h.contactService.getContacts).not.toHaveBeenCalled()
+		expect(h.readPastSends).not.toHaveBeenCalled()
 		expect([h.data.tokens.value, h.data.contacts.value, h.data.journalOps.value, h.tokenBalances.value]).toEqual([[], [], [], []])
 		expect(h.data.tokensLoading.value).toBe(false)
 		expect(h.onLoaded).not.toHaveBeenCalled()
@@ -158,7 +163,9 @@ describe("useSendData", () => {
 		expect(h.data.tokensFailed.value).toBe(true)
 		expect(h.data.tokensLoading.value).toBe(false)
 		h.balances.fetchTokenBalances.mockResolvedValueOnce(false)
-		await expect(h.data.refetch()).rejects.toThrow("token balance read refused")
+		const again = h.data.refetch()
+		expect(h.data.tokensFailed.value).toBe(false)
+		await expect(again).rejects.toThrow("token balance read refused")
 		expect(h.data.tokensFailed.value).toBe(true)
 		expect(h.onLoaded).not.toHaveBeenCalled()
 	})
