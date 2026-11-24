@@ -1,6 +1,9 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
+import { isAddressShapedName, isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
 import { ALREADY_EXISTS, INVALID_ADDRESS } from "@/utils/entity-rules"
+
+/** The name field's refusal of a name that reads as an address. */
+export const ADDRESS_LIKE_NAME = "A name can't look like an address. Use a word, like Ana."
 
 // `c` and `v` keep the validators' own names, so a native error on a malformed row reads the same.
 
@@ -18,8 +21,9 @@ export function canonicalContactAddress(address: string): string {
 // reaches them, so a computed over them tracks only the refs its check reaches.
 type Handle<T> = { readonly value: T }
 
-/** The name field's verdict: `null` while empty or free, `ALREADY_EXISTS` when a saved contact other
- *  than `isExcluded` (the row being edited) holds the name it would be stored as. */
+/** The name field's verdict: `null` while empty or free, `ADDRESS_LIKE_NAME` when the name it would
+ *  be stored as reads as an address, `ALREADY_EXISTS` when a saved contact other than `isExcluded`
+ *  (the row being edited) holds it. */
 export function contactNameError<C extends { name: string }>(
 	v: string,
 	contacts: Handle<readonly C[]>,
@@ -27,7 +31,9 @@ export function contactNameError<C extends { name: string }>(
 ): string | null {
 	if (isEmptyContactName(v)) return null // empty is "not yet valid", not an error to display
 	// The name as it would be stored: the cut can make a longer draft another contact's name.
-	if (contacts.value.some((c) => sameContactName(c.name, sanitizeContactName(v)) && !isExcluded?.(c))) return ALREADY_EXISTS
+	const stored = sanitizeContactName(v)
+	if (isAddressShapedName(stored)) return ADDRESS_LIKE_NAME
+	if (contacts.value.some((c) => sameContactName(c.name, stored) && !isExcluded?.(c))) return ALREADY_EXISTS
 	return null
 }
 

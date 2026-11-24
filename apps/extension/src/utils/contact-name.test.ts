@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 import {
 	CONTACT_NAME_MAX,
 	contactNameKey,
+	isAddressShapedName,
 	isEmptyContactName,
 	sameContactName,
 	sanitizeContactName,
@@ -141,5 +142,70 @@ describe("sameContactName", () => {
 	])("%j and %j: %s", (a, b, expected) => {
 		expect(sameContactName(a, b)).toBe(expected)
 		expect(sameContactName(b, a)).toBe(expected)
+	})
+})
+
+describe("isAddressShapedName, on the name as it is stored", () => {
+	const reads = (name: string) => isAddressShapedName(sanitizeContactName(name))
+
+	test("`0x` and four hex digits, in any case and anywhere in the name", () => {
+		for (const name of ["0x0c2b7e..4b5c", "0x0c2b", "Wallet 0xdeadbeef", "0X0C2B"]) expect(reads(name), name).toBe(true)
+	})
+
+	test("two hex runs of three joined by two or more dots", () => {
+		for (const name of ["c2b7e..4b5c", "0c2b...4b5c"]) expect(reads(name), name).toBe(true)
+		// The owner's accepted over-refusal: a word of hex letters on each side of the dots.
+		expect(reads("Abe...Dad")).toBe(true)
+	})
+
+	test("a `0x` run shorter than four before the dots", () => {
+		expect(reads("0x0c..4b5c")).toBe(true)
+		expect(reads("0x..4b5c")).toBe(false)
+	})
+
+	test.each([
+		["Latin o", "Ox0c2b"],
+		["Cyrillic а", "0x0\u04302b"],
+		["Cyrillic в", "0x0c2\u0432"],
+		["Cyrillic с", "0x0\u04412b"],
+		["Cyrillic ԁ", "0x0\u05012b"],
+		["Cyrillic е", "0x0\u04352b"],
+		["Cyrillic О", "\u041Ex0c2b"],
+		["Cyrillic х", "0\u04450c2b"],
+		["Greek α", "0x0\u03B12b"],
+		["Greek β", "0x0c2\u03B2"],
+		["Greek ϲ", "0x0\u03F22b"],
+		["Greek Ϲ", "0x0\u03F92b"],
+		["Greek ε", "0x0\u03B52b"],
+		["Greek ο", "\u03BFx0c2b"],
+		["Greek χ", "0\u03C70c2b"],
+	])("a look-alike letter reads as the hex it is drawn like: %s", (_letter, name) => {
+		expect(reads(name)).toBe(true)
+	})
+
+	test("compatibility forms and marks fold first: fullwidth letters, a mathematical capital, a marked x or Cyrillic е", () => {
+		for (const name of ["0\uFF58\uFF41\uFF42\uFF43\uFF44", "0x0\u{1D402}2b", "0\u1E8B0c2b", "0x0\u04512b"])
+			expect(reads(name), name).toBe(true)
+	})
+
+	test("an address cut to the name's 25 characters", () => {
+		expect(reads(`0x${"0c2b7e41".repeat(8)}`)).toBe(true)
+	})
+
+	test("ordinary names, dotted initials and words with hex letters pass", () => {
+		const names = [
+			"Ana",
+			"Oxford",
+			"Box 0xford",
+			"J.R. Smith",
+			"J.R.. Smith",
+			"A..B",
+			"Ed..Bob",
+			"Zoë Ångström",
+			"Søren",
+			"Deadbeef",
+			"Account 1",
+		]
+		for (const name of names) expect(reads(name), name).toBe(false)
 	})
 })
