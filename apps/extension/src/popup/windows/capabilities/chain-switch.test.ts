@@ -230,6 +230,20 @@ describe("capabilities window — chain mismatch banner and switch", () => {
 		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').exists()).toBe(false)
 	})
 
+	test.each([
+		{ chainId: "3415328944", reads: "Testnet V6-RC.3" },
+		{ chainId: "677692", reads: "Aztec:677692" },
+	])("an app on chain $chainId, which has no row, is named $reads in the action line and the banner", async ({ chainId, reads }) => {
+		const held = [{ type: "accounts", canGet: true, canCreateAuthWit: false }]
+		await open({
+			session: { chainId },
+			params: { delta: [{ type: "data", addressBook: true }], existingGrants: held, heldGrants: held, reRequested: [] },
+		})
+		expect(w?.find('[data-testid="identity-block"]').attributes("data-action-label")).toBe(`wants more permissions on ${reads}`)
+		expect(banner()?.find('[data-testid="banner-title"]').text()).toBe(`Connecting on ${reads}`)
+		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').exists()).toBe(false)
+	})
+
 	test("a running switch holds the footer and ignores a second click; activated settles to the done state", async () => {
 		const settle = deferActivation()
 		await open(payloadFor("0", oneAccount))

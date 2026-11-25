@@ -12,11 +12,11 @@ export class WrappedTask {
 	) {}
 
 	public createSubtask(content: ITaskContent): WrappedTask {
-		return this.taskService.createNewTask(content, this.id, this.origin)
+		return this.taskService.createSubtask(this.id, content, this.origin)
 	}
 
 	public startSubtask(content: ITaskContent): WrappedTask {
-		return this.taskService.startNewTask(content, this.id, this.origin)
+		return this.taskService.startSubtask(this.id, content, this.origin)
 	}
 
 	public start(): void {
@@ -70,4 +70,28 @@ export class WrappedTask {
 		const status = this.status
 		return status === TaskStatus.Completed || status === TaskStatus.Failed || status === TaskStatus.Cancelled
 	}
+}
+
+/** A root the registry refused: its creator acts for a profile the registry does not hold. Nothing it
+ *  does reaches the registry, so the creator runs on unchanged and records nothing. */
+export class RefusedTask extends WrappedTask {
+	constructor(taskService: TaskService, origin?: TxOrigin) {
+		super("", taskService, origin)
+	}
+
+	public override createSubtask(_content: ITaskContent): WrappedTask {
+		return this
+	}
+
+	public override startSubtask(_content: ITaskContent): WrappedTask {
+		return this
+	}
+
+	public override start(): void {}
+
+	public override complete(_result?: ITaskResult): void {}
+
+	public override fail(_error: unknown): void {}
+
+	public override cancel(): void {}
 }

@@ -1,7 +1,6 @@
 /**
- * C3 fiat-mode submit gate — pure and FAIL-CLOSED. Extracted from `send.vue`
- * (which owns `handleSend`) so the policy that stops "typed $50, sent 2×
- * that" is unit-testable in isolation, like its sibling `send-amount.ts`.
+ * Send's fiat-mode submit gate, pure and FAIL-CLOSED: the policy that stops
+ * "typed $50, sent 2× that".
  *
  * Policy (quote consistency):
  * - outside fiat mode the gate is inert (`ok`);

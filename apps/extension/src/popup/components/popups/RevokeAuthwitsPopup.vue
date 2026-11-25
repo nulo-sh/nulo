@@ -225,6 +225,7 @@ onBeforeUnmount(() => {
 							:modelValue="ch.feeSettings"
 							@update:modelValue="($event) => setChunkFee(i, $event)"
 							@retryEstimate="estimates.refresh(i)"
+							@reread="estimates.pauseThisTask"
 						/>
 
 						<div :class="$style.status_line" />

@@ -48,10 +48,11 @@ function contactAddresses(count: number): string[] {
 	return out
 }
 
-/** Saves contacts straight to storage, which Send reads when it opens; the i-th at `contactAddresses`' i-th. */
-async function seedContacts(page: Page, names: string[]): Promise<void> {
+/** Saves contacts straight to storage, which Send reads when it opens; the i-th at `at`'s i-th, by
+ *  default `contactAddresses`' i-th. */
+async function seedContacts(page: Page, names: string[], at = contactAddresses(names.length)): Promise<void> {
 	const profileId = await captureSoleProfileId(page)
-	const addresses = contactAddresses(names.length)
+	const addresses = at
 	await page.evaluate(
 		(pid: string, list: string[], at: string[]) => {
 			const rows = list.map((name, i) => {
@@ -572,39 +573,35 @@ async function pickSponsorBehindStub(ctx: ExtensionContext): Promise<void> {
 	}
 }
 
-test("a mouse press held on a suggestion while the field's blur matches another destination picks the pressed one", {
+test("a mouse press held on a suggestion while the field's blur matches another candidate at that address picks the pressed one", {
 	timeout: 120_000,
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
 	const home = await openPopup(ctx)
 	await waitForHash(home, "#/popup/general", 30_000)
 	const account = await getAccountAddress(home)
-	// Named after the account's address, so typing that address suggests both.
-	await seedContacts(home, [`${account} fan`])
-	const [namesake] = contactAddresses(1)
+	// Saved at the account's own address, so typing that address suggests both, the contact first.
+	await seedContacts(home, ["Fan"], [account])
 	await home.close()
 	const { page } = await openSendPage(ctx)
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type(account)
 	await waitForSuggestionRows(page, 2)
 
-	// The press blurs the field, which matches the account; the step waits for the press to end, so
-	// its release lands on the row it began on.
-	const at = await page.$$eval(
-		sel("recipient-suggestion-address"),
-		(els, short: string) => {
-			const box = els.find((el) => el.textContent?.trim() === short)?.getBoundingClientRect()
-			return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null
-		},
-		trimAddress(namesake),
-	)
-	if (!at) throw new Error("the namesake's suggestion is not drawn")
+	// The press blurs the field, which matches the contact; the step waits for the press to end, so
+	// its release lands on the row it began on, the account's.
+	const at = await page.$$eval(sel("recipient-suggestion-address"), (els) => {
+		const box = els[1]?.getBoundingClientRect()
+		return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null
+	})
+	if (!at) throw new Error("the account's suggestion is not drawn")
 	await page.mouse.move(at.x, at.y)
 	await page.mouse.down()
 	await new Promise((resolve) => setTimeout(resolve, 300))
 	await page.mouse.up()
 	await page.waitForSelector(sel("send-payee"), { visible: true, timeout: 5_000 })
-	expect((await readSendInputs(page)).destination).toBe(namesake)
+	expect((await readSendInputs(page)).destination).toBe(account)
+	expect(await page.$eval(sel("send-payee-name"), (el) => el.textContent?.trim())).toBe("Account 1")
 	expect(await page.$(sel("token-address-field"))).toBeNull()
 	expect(await page.$(sel("select-token-search"))).toBeNull()
 })

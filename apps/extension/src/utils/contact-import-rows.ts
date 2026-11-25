@@ -1,5 +1,5 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { contactNameKey, sanitizeContactName } from "@/utils/contact-name"
+import { contactNameKey, isAddressShapedName, sanitizeContactName } from "@/utils/contact-name"
 import { sanitizeString, trimAddress } from "@/utils/string"
 
 const IMPORT_ADDRESS_MAX = 66
@@ -86,7 +86,7 @@ export function matchSavedContacts(row: StagedRow, index: SavedContactIndex): Co
 	return { kind: byName.length ? "address-change" : "name-change", target }
 }
 
-export type ImportRowKind = ContactMatchKind | "invalid"
+export type ImportRowKind = ContactMatchKind | "invalid" | "name"
 
 export interface ClassifiedImportRow {
 	/** The name the row shows and writes: a row that matched a saved contact by name keeps the saved
@@ -103,13 +103,25 @@ export interface ClassifiedImportRow {
 	savedAddress: string | null
 }
 
+const keepsSavedName = (kind: ImportRowKind): boolean => kind === "unchanged" || kind === "address-change"
+
+/** The name judged is the one the row would write: a row matched by name writes the saved spelling,
+ *  which can read as an address where the file's spelling of the same key does not. */
+function judgeRow(row: StagedRow, index: SavedContactIndex): ContactMatch | { kind: "invalid" | "name"; target: null } {
+	if (!isValidAztecAddress(row.address)) return { kind: "invalid", target: null }
+	if (isAddressShapedName(row.name)) return { kind: "name", target: null }
+	const match = matchSavedContacts(row, index)
+	if (match.target && keepsSavedName(match.kind) && isAddressShapedName(sanitizeContactName(match.target.name)))
+		return { kind: "name", target: null }
+	return match
+}
+
 export function classifyImportRow(row: StagedRow, index: SavedContactIndex): ClassifiedImportRow {
-	const { kind, target } = isValidAztecAddress(row.address) ? matchSavedContacts(row, index) : { kind: "invalid" as const, target: null }
-	const matchedByName = kind === "unchanged" || kind === "address-change"
+	const { kind, target } = judgeRow(row, index)
 	return {
-		name: target && matchedByName ? sanitizeContactName(target.name) : row.name,
+		name: target && keepsSavedName(kind) ? sanitizeContactName(target.name) : row.name,
 		kind,
-		importable: kind !== "invalid" && kind !== "conflict",
+		importable: kind !== "invalid" && kind !== "conflict" && kind !== "name",
 		selected: kind === "new",
 		targetId: target?.id ?? null,
 		savedName: target?.name ?? null,

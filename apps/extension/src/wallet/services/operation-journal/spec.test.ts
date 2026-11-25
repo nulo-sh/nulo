@@ -1,3 +1,4 @@
+import { PROVE_BACKENDS } from "@nulo/wallet-core/jobs"
 import { describe, expect, test } from "vitest"
 import { JobErrorSchema, JobProgressSchema } from "./spec"
 
@@ -19,6 +20,14 @@ describe("JobProgressSchema: a queued send's fee question", () => {
 		["an unknown payer", { ...reask, payer: { type: "sponsor", isProtocol: true } }],
 	])("refuses %s", (_name, bad) => {
 		expect(JobProgressSchema.safeParse({ stage: "queued", reask: bad }).success).toBe(false)
+	})
+})
+
+describe("JobProgressSchema: the proving backend", () => {
+	test("parses exactly the backends PROVE_BACKENDS names", () => {
+		const proving = (backend: string) => ({ stage: "proving", enteredProveAt: 1, backend })
+		for (const backend of PROVE_BACKENDS) expect(JobProgressSchema.safeParse(proving(backend)).success).toBe(true)
+		expect(JobProgressSchema.safeParse(proving("native")).success).toBe(false)
 	})
 })
 

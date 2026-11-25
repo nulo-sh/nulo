@@ -177,6 +177,24 @@ describe("composite/AmountCard", () => {
 		expect(field.getAttribute("aria-labelledby")).toBe(max.parentElement?.querySelector("span")?.id)
 	})
 
+	test.each([78, 1_000_000_000])(
+		"a stored token with %i decimals derives no amount: no rate, no USD mode, Max fills nothing, the line says why, and nothing throws",
+		async (decimals) => {
+			const w = mountCard({
+				token: { symbol: "BIG", decimals },
+				liveQuote: { usd: 1, fetchedAt: Date.now() },
+				balanceRawByType: "1",
+				modelValue: "1.5",
+				"onUpdate:modelValue": () => {},
+			})
+			await w.get("[data-testid='send-amount-max']").trigger("click")
+			expect(w.find("[data-testid='send-amount-fiat-label']").exists()).toBe(false)
+			expect(w.find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)
+			expect(w.emitted("update:modelValue")).toBeUndefined()
+			expect(w.get("[data-testid='send-amount-unsendable']").text()).toBe("Nulo can't send this token.")
+		},
+	)
+
 	test("quoteless: no fiat line at all — no fake $0.00, no warning noise", () => {
 		const w = mountCard()
 		expect(w.text()).not.toContain("Price unavailable")
@@ -260,7 +278,7 @@ describe("composite/AmountCard", () => {
 		expect(emits[emits.length - 1]?.[0]).toBe("1,234,567.123456")
 	})
 
-	test("a blur's rest, a re-clamp and a write from the page each write the amount and none is an edit", async () => {
+	test("a blur's rest, a re-clamp and a write from the page each write the amount and none is an edit; only the rest is typing", async () => {
 		const w: ReturnType<typeof mountCard> = mountCard({
 			modelValue: "1000.123456789",
 			token: { symbol: "ETH", decimals: 18 },
@@ -271,6 +289,8 @@ describe("composite/AmountCard", () => {
 		await w.setProps({ modelValue: "" })
 		expect(w.emitted("update:modelValue")).toEqual([["1,000.123456789"], ["1,000.1234"]])
 		expect(w.emitted("edit")).toBeUndefined()
+		expect(w.emitted("typed")).toEqual([[]])
+		expect(w.emitted("picked")).toBeUndefined()
 	})
 
 	test("clamps to 0 decimals (token with no fractional units strips the dot)", async () => {
@@ -335,6 +355,33 @@ describe("composite/AmountCard — C3 fiat input", () => {
 		}
 	})
 
+	test("convertNow lands a pending conversion at once, as no keystroke, and does nothing with none pending", async () => {
+		vi.useFakeTimers()
+		try {
+			const w: ReturnType<typeof mountCard> = mountFiat({
+				"onUpdate:modelValue": (v: unknown) => w.setProps({ modelValue: v }),
+				"onUpdate:fiatMode": (v: unknown) => w.setProps({ fiatMode: v }),
+				"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
+			})
+			const convertNow = () => (w.vm as unknown as { convertNow: () => void }).convertNow()
+			const writes = () => w.emitted("update:modelValue")?.length ?? 0
+			await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+			const before = writes()
+			convertNow()
+			expect(writes()).toBe(before)
+
+			await w.get("input[data-testid='send-amount-fiat-input']").setValue("125")
+			convertNow()
+			await nextTick()
+			expect(w.props()).toMatchObject({ modelValue: "125.017877", fiatGuard: { converting: false } })
+			await vi.advanceTimersByTimeAsync(300)
+			expect(writes()).toBe(before + 1)
+			expect(w.emitted("typed")).toBeUndefined()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("toggle only offered for priced tokens", () => {
 		expect(mountFiat().find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(true)
 		expect(mountFiat({ liveQuote: null }).find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)
@@ -355,14 +402,20 @@ describe("composite/AmountCard — C3 fiat input", () => {
 			"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
 		})
 		const edits = () => w.emitted("edit")?.length ?? 0
+		const count = () => ({ typed: w.emitted("typed")?.length ?? 0, picked: w.emitted("picked")?.length ?? 0 })
 		await w.get("input[data-testid='send-amount-input']").setValue("5")
+		expect(count()).toEqual({ typed: 1, picked: 0 })
 		await w.get("[data-testid='send-amount-max']").trigger("click")
 		expect(edits()).toBe(2)
 		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
 		expect(edits()).toBe(2)
+		expect(count()).toEqual({ typed: 1, picked: 2 })
+		// A USD keystroke writes no amount until its conversion, which is the typing.
 		await w.get("input[data-testid='send-amount-fiat-input']").setValue("3")
+		expect(count()).toEqual({ typed: 1, picked: 2 })
 		await w.get("[data-testid='send-amount-max']").trigger("click")
 		expect(edits()).toBe(4)
+		expect(count()).toEqual({ typed: 1, picked: 3 })
 		expect(w.props("modelValue")).toBe("1000")
 	})
 
@@ -452,12 +505,15 @@ describe("composite/AmountCard — C3 fiat input", () => {
 			await input.setValue("120")
 			await input.trigger("input")
 			await vi.advanceTimersByTimeAsync(300)
+			// The typed figure's conversion is typing; Refresh quote's, a press, is not.
+			expect(w.emitted("typed")).toHaveLength(1)
 			;(w.vm as unknown as { refreezeQuote(): void }).refreezeQuote()
 			const guard = w.emitted("update:fiatGuard")?.at(-1)?.[0] as { frozenUsd: number }
 			expect(guard.frozenUsd).toBe(1.2)
 			await vi.advanceTimersByTimeAsync(300)
 			// $120 at $1.20 → exactly 100 tokens.
 			expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["100"])
+			expect(w.emitted("typed")).toHaveLength(1)
 		} finally {
 			vi.useRealTimers()
 		}
@@ -487,6 +543,16 @@ describe("composite/AmountCard — the amount in dollars, for the review", () =>
 		await nextTick()
 		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $43.20")
 		expect(figures(w).at(-1)).toBe("≈ $43.20")
+	})
+
+	test("a token with no decimals cuts a fraction: a bare one reads as nothing, never a throw", async () => {
+		const w = mountCard({ token: { symbol: "INT", decimals: 0 }, liveQuote: { usd: 1.5, fetchedAt: Date.now() }, modelValue: ".5" })
+		await nextTick()
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("1 INT ≈ $1.50")
+		expect(figures(w).at(-1) ?? null).toBeNull()
+		await w.setProps({ modelValue: "1.5" })
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $1.50")
+		expect(figures(w).at(-1)).toBe("≈ $1.50")
 	})
 
 	test("no price or no amount: none", async () => {

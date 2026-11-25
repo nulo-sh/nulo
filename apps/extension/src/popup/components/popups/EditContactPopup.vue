@@ -2,7 +2,7 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
+import { ADDRESS_LIKE_NAME, canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
 import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { sanitizeContactName } from "@/utils/contact-name"
 import { entityListReducers } from "@/utils/entity-list"
@@ -90,6 +90,8 @@ const isStartedEditing = computed(() => isStartedEditingName.value || isStartedE
 
 // Either field's duplicate blocks the save, so once anything is edited both warnings show: an
 // unchanged name can clash with a stored spaced twin, an unchanged address with a mixed-case copy.
+// Shown from the start: a stored name that reads as an address blocks every save until renamed.
+const nameLooksLikeAddress = computed(() => form.fields.name.error.value === ADDRESS_LIKE_NAME)
 const isAlreadyExistName = computed(() => form.fields.name.error.value === ALREADY_EXISTS && isStartedEditing.value)
 const isAlreadyExistAddress = computed(() => form.fields.address.error.value === ALREADY_EXISTS && isStartedEditing.value)
 const isValidAddress = computed(() => isValidAztecAddress(contactAddressTerm.value))
@@ -216,6 +218,7 @@ watch(
 			v-model:name="nameTerm"
 			v-model:address="contactAddressTerm"
 			:nameExists="isAlreadyExistName"
+			:nameLooksLikeAddress="nameLooksLikeAddress"
 			:addressValid="isValidAddress"
 			:addressExists="isAlreadyExistAddress"
 		/>

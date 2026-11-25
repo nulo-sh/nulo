@@ -65,7 +65,7 @@ const STUBS = {
 	Input: {
 		props: ["modelValue"],
 		emits: ["update:modelValue"],
-		template: `<div><input data-testid="name-input" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" /><slot name="right" /></div>`,
+		template: `<div><input data-testid="name-input" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" /><slot name="right" /><slot name="bottom" /></div>`,
 	},
 	AddressInput: {
 		props: ["modelValue"],
@@ -316,6 +316,24 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		await w.find('[data-testid="form-submit"]').trigger("click")
 		await flushPromises()
 		expect(contactServiceMock.updateContact).not.toHaveBeenCalled()
+	})
+
+	test("a stored name that reads as an address opens refused: an address-only edit stays off, a new name clears it and saves", async () => {
+		const legacy = { id: "c2", name: "0x0c2b7e..4b5c", address: addr("c") }
+		const w = await mountAndOpen([CONTACT, legacy], "c2")
+		const refusal = () => w.find('[data-testid="contact-name-address-like"]')
+		expect(refusal().text()).toBe("A name can't look like an address. Use a word, like Ana.")
+		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await flushPromises()
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(contactServiceMock.updateContact).not.toHaveBeenCalled()
+
+		await w.find('[data-testid="name-input"]').setValue("Bea")
+		await flushPromises()
+		expect(refusal().exists()).toBe(false)
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("false")
 	})
 
 	const fieldText = (w: ReturnType<typeof mount>, id: string) =>

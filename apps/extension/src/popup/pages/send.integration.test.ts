@@ -231,7 +231,12 @@ const STUBS = {
 			"side",
 		],
 		emits: ["update:modelValue", "update:rested", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote() {}, focusAmount() {}, exitFiat() {} },
+		methods: {
+			refreezeQuote() {},
+			focusAmount() {},
+			exitFiat() {},
+			convertNow() {},
+		},
 	},
 	// The card's read-only rows, and the menu chrome around the real selector's items.
 	FeeMethodRow: { template: '<div data-testid="stub-fee-method-row" />' },
@@ -284,7 +289,7 @@ const FUNDING = {
 /** What a landed estimate answers when a test names none. */
 const LANDED = { maxFee: "1000", gasDetails: {} }
 
-/** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
+/** Lets the current input's estimate land, a typed one's 800 ms pause included. */
 async function estimateLands() {
 	await vi.advanceTimersByTimeAsync(800)
 	await flushPromises()
@@ -1468,6 +1473,22 @@ describe("send page — Same as last time, over the real amount card", () => {
 		w.unmount()
 	})
 
+	test.each([78, 1_000_000_000])(
+		"a last send of a token with %i decimals, which the wallet cannot use, is told and offered with no amount",
+		async (decimals) => {
+			const BIG = { ...OTHER, decimals }
+			mocks.getTokens.mockResolvedValue([TOKEN, BIG])
+			mocks.getTokenBalances.mockResolvedValue([BALANCE, { ...BALANCE, id: "b8", token: BIG, privateBalance: "500000000" }])
+			mocks.getOperations.mockResolvedValue([sent({ tokenId: BIG.id, amountRaw: "123456750" })])
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+			expect(w.get('[data-testid="send-recent"]').text()).not.toContain("OTH")
+			await payRecent(w)
+			expect(w.get('[data-testid="send-payee-address"]').text()).toBe(ANA)
+			expect(again(w).exists()).toBe(false)
+			w.unmount()
+		},
+	)
+
 	describe("in USD mode", () => {
 		const PRICED = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		const PLAIN = { ...OTHER, chainId: CHAIN_IDS.TESTNET }
@@ -1687,6 +1708,184 @@ describe("send page — Same as last time, over the real amount card", () => {
 			await payRecent(next.w)
 			expect(again(next.w).text()).toBe("Same as last time: 2.5 TST, publicly")
 			next.w.unmount()
+		})
+	})
+})
+
+describe("send page — a token's decimals against the wallet's bound, over the real amount card", () => {
+	const amountField = (w: W) => w.get('[data-testid="send-amount-input"]')
+	const unsendable = (w: W) => w.find('[data-testid="send-amount-unsendable"]')
+
+	/** The form for `DESTINATION`, with `token` the only one held, as the token service hands it over. */
+	async function formWith(token: typeof TOKEN, privateBalance: string, opts: { priced?: boolean } = {}) {
+		mocks.getTokens.mockResolvedValue([token])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token, privateBalance, publicBalance: "0" }])
+		const mounted = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, chainId: token.chainId })
+		if (opts.priced) {
+			for (const { value } of vi.mocked(PriceServiceClient).mock.results) {
+				value.onQuotesUpdated.invoke({
+					quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } },
+					pricedTokens: TEST_PRICED_TOKENS,
+					tokenIcons: {},
+					bridgeIcons: {},
+				})
+			}
+		}
+		await toForm(mounted.w)
+		return mounted
+	}
+
+	test("24 decimals: an amount, its dollar figure, the unit switch both ways, Max, Review and the exact base units sent", async () => {
+		const BIG = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC", decimals: 24 }
+		const { w } = await formWith(BIG, "12345678901234567890123456", { priced: true })
+		expect(unsendable(w).exists()).toBe(false)
+
+		await amountField(w).setValue("1.5")
+		expect(w.get('[data-testid="send-amount-fiat-label"]').text()).toBe("≈ $1.50")
+
+		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+		await w.get('[data-testid="send-amount-fiat-input"]').setValue("2")
+		await vi.advanceTimersByTimeAsync(250)
+		expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 2 USDC")
+		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+		expect((amountField(w).element as HTMLInputElement).value).toBe("2")
+
+		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		expect((amountField(w).element as HTMLInputElement).value).toBe("12.345678901234567890123456")
+		await estimateLands()
+		await submit(w).trigger("click")
+		expect(w.get('[data-testid="send-review-amount"]').text()).toBe("12.345678901234567890123456USDC")
+		await armed()
+		await sendNow(w).trigger("click")
+		expect(mocks.executeTransfer.mock.calls[0]?.[6]).toBe(12_345_678_901_234_567_890_123_456n)
+		w.unmount()
+	})
+
+	test("78 decimals: the line says Nulo can't send it, Max fills nothing, typed text derives no amount, Review stays disabled", async () => {
+		const BIG = { ...TOKEN, decimals: 78 }
+		const { w } = await formWith(BIG, "5000000")
+		expect(unsendable(w).text()).toBe("Nulo can't send this token.")
+		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		expect((amountField(w).element as HTMLInputElement).value).toBe("")
+		await amountField(w).setValue("1.5")
+		expect(unsendable(w).text()).toBe("Nulo can't send this token.")
+		await estimateLands()
+		expect(submit(w).attributes("disabled")).toBeDefined()
+		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
+		w.unmount()
+	})
+})
+
+describe("Send — when the fee estimate starts", () => {
+	const asked = () => mocks.estimateTransferFee.mock.calls.length
+	const amounts = () => mocks.estimateTransferFee.mock.calls.map((call) => call[6])
+	/** Fake timers fire no timer between simulated actions: this runs the one that ends a task's mark. */
+	const nextTask = () => vi.advanceTimersByTimeAsync(0)
+
+	test("a typed amount waits the 800 ms pause; a side picked during it starts at once, with that amount", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("1.5")
+		await vi.advanceTimersByTimeAsync(799)
+		expect(asked()).toBe(0)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(amounts()).toEqual([1_500_000n])
+
+		await w.get('[data-testid="send-amount-input"]').setValue("1.25")
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(1)
+		await setSide(w, "to", "public")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(amounts()).toEqual([1_500_000n, 1_250_000n])
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(asked()).toBe(2)
+		w.unmount()
+	})
+
+	test("Max on the amount already typed starts the waiting estimate at once; an address typed on the person step waits", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("5")
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(0)
+		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		await nextTask()
+		expect(amounts()).toEqual([5_000_000n])
+
+		// Back on the person step the amount stays, so a valid address typed there asks again.
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await nextTask()
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await vi.advanceTimersByTimeAsync(799)
+		expect(asked()).toBe(1)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(asked()).toBe(2)
+		w.unmount()
+	})
+
+	test("Pay this address on the address just pasted starts its waiting estimate at once", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("5")
+		await estimateLands()
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await nextTask()
+		const pasted = `0x2${"c".repeat(63)}`
+		await w.get('[data-testid="stub-recipient"]').setValue(pasted)
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(1)
+		await w.get('[data-testid="send-pay-address"]').trigger("click")
+		await flushPromises()
+		expect(mocks.estimateTransferFee.mock.calls.map((call) => call[5])).toEqual([DESTINATION, pasted])
+		w.unmount()
+	})
+
+	describe("while a typed USD figure converts", () => {
+		/** The form in USD mode on a USDC balance of 1.234567 at $0.50, with "0.3" typed 100 ms ago. */
+		async function converting() {
+			const PRICED = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+			mocks.getTokens.mockResolvedValue([PRICED])
+			mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: PRICED, privateBalance: "1234567", publicBalance: "1234567" }])
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, chainId: CHAIN_IDS.TESTNET })
+			for (const { value } of vi.mocked(PriceServiceClient).mock.results) {
+				value.onQuotesUpdated.invoke({
+					quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 0.5, fetchedAt: Date.now(), providerUpdatedAt: null } },
+					pricedTokens: TEST_PRICED_TOKENS,
+					tokenIcons: {},
+					bridgeIcons: {},
+				})
+			}
+			await toForm(w)
+			await nextTask()
+			await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+			await nextTask()
+			await w.get('[data-testid="send-amount-fiat-input"]').setValue("0.3")
+			await vi.advanceTimersByTimeAsync(100)
+			expect(asked()).toBe(0)
+			return w
+		}
+
+		test("a side picked starts one estimate at once, for the converted amount", async () => {
+			const w = await converting()
+			await setSide(w, "to", "public")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(amounts()).toEqual([600_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("Max sends the exact balance, not its rounded dollars converted back, estimated once, at once", async () => {
+			const w = await converting()
+			await w.get('[data-testid="send-amount-max"]').trigger("click")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(amounts()).toEqual([1_234_567n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
 		})
 	})
 })

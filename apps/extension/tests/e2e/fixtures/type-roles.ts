@@ -743,8 +743,7 @@ const READS_IN_FLIGHT = [
 
 /**
  * Waits up to a popup RPC's own bound for `page` to draw no read in flight, then fails naming what is
- * still drawn. An authorization preview can outlast it (its bound is 15 min) and then fails the wait;
- * a discovered authorization's summary line draws no mark while it decodes, so it is not waited for.
+ * still drawn. An authorization preview can outlast it (its bound is 15 min) and then fails the wait.
  */
 export async function waitForReadsSettled(page: Page, label: string): Promise<void> {
 	await withTimeoutMessage(

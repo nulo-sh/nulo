@@ -70,4 +70,15 @@ describe("matchRecipients", () => {
 		expect(names(ALICE_ADDRESS.toUpperCase().replace("0X", "0x"))).toEqual(["Alice"])
 		expect(names(ALICE_ADDRESS.slice(0, 20))).toEqual([])
 	})
+
+	test("a term written like an address matches no name or initials, however its characters are written; a name term still does", () => {
+		const box = { id: "4", name: "Box 0xford", address: `0x${"4".repeat(64)}`, abbr: "0X" }
+		const list = [box, alice]
+		const found = (term: string) => matchRecipients(list, term).map((c) => c.name)
+		for (const term of ["0xf", " 0Xf", "0x\u200Cf", "\uFF10xf", "0x\uFF46"]) expect(found(term), JSON.stringify(term)).toEqual([])
+		expect(found(box.address)).toEqual(["Box 0xford"])
+		// No hex digit yet: the term is not written like an address.
+		expect(found("0x")).toEqual(["Box 0xford"])
+		expect(found("Al")).toEqual(["Alice"])
+	})
 })

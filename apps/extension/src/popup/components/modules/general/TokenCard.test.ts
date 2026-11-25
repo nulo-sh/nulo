@@ -310,9 +310,9 @@ describe("TokenCard — hostile rows", () => {
 		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)
 	})
 
-	test("an absurd decimals value is treated the same way (no exponent is ever computed)", async () => {
+	test.each([78, 500])("decimals past the bound (%i) are treated the same way (no exponent is ever computed)", async (decimals) => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
-		const w = factory({ updatedAt: 1, publicBalance: "1" }, { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 500 })
+		const w = factory({ updatedAt: 1, publicBalance: "1" }, { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals })
 		await flushPromises()
 		expect(w.find('[data-malformed="true"]').text()).toBe("—")
 		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)
@@ -400,6 +400,14 @@ describe("TokenCard — R5 layout (subtitle left, private/public split right)", 
 		await flushPromises()
 		expect(w.get('[data-testid="token-amount"]').text()).toBe("999.99")
 		expect(splitSides(w)).toEqual(["0", "999.99"])
+	})
+
+	test("a token with 24 decimals reads its total and its side as the list rule reads any token", async () => {
+		mockQuotes = {}
+		const w = factory({ updatedAt: 1, privateBalance: (12_345n * 10n ** 23n).toString() }, { decimals: 24 })
+		await flushPromises()
+		expect(w.get('[data-testid="token-amount"]').text()).toBe("1,234.5")
+		expect(splitSides(w)).toEqual(["1,234.5", "0"])
 	})
 
 	test("each side reads at the total's decimals: a dust side under 999.999 reads <0.01, never 0", async () => {

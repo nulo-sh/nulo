@@ -168,7 +168,7 @@ export class TxRequestBuilder {
 		reads?: RunReads,
 	): Promise<BuiltStandardTx> {
 		const step = new StepContent("Processing transaction")
-		const task = parentTask ? parentTask.startSubtask(step) : this.taskService.startNewTask(step)
+		const task = parentTask ? parentTask.startSubtask(step) : this.taskService.startNewTask(fence.profileId, step)
 
 		try {
 			const ctx = await this.resolveBuildContext(op, fence, reads, gasSettings)
@@ -447,7 +447,7 @@ export class TxRequestBuilder {
 	 *  references `window`). */
 	public async buildNoFrom(op: AztecSendTxOperation, fence: ExecutionFence, parentTask?: WrappedTask): Promise<BuiltNoFromTx> {
 		const step = new StepContent("Processing transaction")
-		const task = parentTask ? parentTask.startSubtask(step) : this.taskService.startNewTask(step)
+		const task = parentTask ? parentTask.startSubtask(step) : this.taskService.startNewTask(fence.profileId, step)
 
 		try {
 			this.log(`buildNoFrom: starting, accountAddress=${op.accountAddress}, networkId=${op.networkId}`)

@@ -10,11 +10,7 @@ export interface UseFeeEstimationMapOptions<TKey extends string | number, TParam
 	 * `signal` aborts once this attempt is superseded, cancelled or disposed.
 	 */
 	estimate: (params: TParams, estimateToken: string, flowKey: string, signal: AbortSignal) => Promise<TResult>
-	/**
-	 * Debounce window per key before the estimator actually fires. Default: 500ms,
-	 * matching the prior inline debounce in the execute window. Send-page-style
-	 * 800ms callers should prefer `useFeeEstimation` (single-slot).
-	 */
+	/** The pause an estimate asked in a task the caller marked with `pauseThisTask` waits. Default: 500ms. */
 	debounceMs?: number
 	/**
 	 * Called when the estimator throws a real error (not a stale-counter cancel).
@@ -32,8 +28,13 @@ export interface UseFeeEstimationMapResult<TKey extends string | number, TParams
 	estimating: Ref<Record<TKey, boolean>>
 	/** Per-key: its last attempt failed with a real error, until the key is asked again or cancelled. */
 	failed: Ref<Record<TKey, boolean>>
-	/** Schedule a debounced estimation for `key`. Cancels any in-flight one for the same key. */
+	/**
+	 * Schedule an estimation for `key`: it starts once the task ends, or after the pause in a marked
+	 * task. Cancels any in-flight one for the same key.
+	 */
 	estimate: (key: TKey, params: TParams) => void
+	/** An answer's consequence is handled in this task: what it schedules waits the pause. */
+	pauseThisTask: () => void
 	/** Cancel the pending estimation for `key` (if any) and clear its result. Safe to call repeatedly. */
 	cancel: (key: TKey) => void
 	/** Cancel every pending estimation. Useful before tearing down a multi-op view. */
@@ -112,6 +113,7 @@ export function useFeeEstimationMap<TKey extends string | number, TParams, TResu
 			failed.value = {} as Record<TKey, boolean>
 			engine.cancelAll()
 		},
+		pauseThisTask: engine.pauseThisTask,
 		handoffAll,
 		rearm: engine.rearm,
 		dispose: engine.dispose,

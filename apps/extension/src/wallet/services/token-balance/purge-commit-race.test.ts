@@ -88,8 +88,8 @@ async function world(project: (b: TokenBalanceRaw) => ProjectedBalance = ok) {
 	let nextTask = 0
 	services.add(
 		svc(TASK_SERVICE_NAME, {
-			createNewTask: () => ({ id: `t${++nextTask}` }),
-			startNewTask: () => ({ id: `t${++nextTask}` }),
+			createNewTask: () => ({ id: `t${++nextTask}`, exists: true }),
+			startNewTask: () => ({ id: `t${++nextTask}`, exists: true }),
 			hasTask: () => true,
 			startTask: () => {},
 			completeTask: () => {},

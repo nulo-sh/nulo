@@ -122,17 +122,21 @@ describe("useWalletTxEstimates", () => {
 	test("an answer for the network just left is dropped, and its run is cancelled remotely", async () => {
 		const { inputs, scope, estimate, cancel, estimates } = setup()
 		let resolveA!: (v: TransferFeeEstimate) => void
+		let resolveB!: (v: TransferFeeEstimate) => void
 		estimate.mockImplementationOnce(() => new Promise((r) => (resolveA = r)))
+		estimate.mockImplementationOnce(() => new Promise((r) => (resolveB = r)))
 		estimates.refresh(0)
 		await lands()
 		const tokenA = estimate.mock.calls[0]?.[1]
 		inputs.value[0] = { network: "B", fee: 1 }
 		scope.value += 1
 		expect(cancel).toHaveBeenCalledWith(tokenA)
+		await lands()
 		resolveA(estimateFor({ network: "A", fee: 1 }))
 		await vi.advanceTimersByTimeAsync(0)
 		expect(estimates.results.value[0] ?? null).toBeNull()
-		await lands()
+		resolveB(estimateFor({ network: "B", fee: 1 }))
+		await vi.advanceTimersByTimeAsync(0)
 		expect(estimates.results.value[0]?.maxFee).toBe("B:1")
 	})
 

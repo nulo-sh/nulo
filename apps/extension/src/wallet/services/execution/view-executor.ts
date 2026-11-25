@@ -33,6 +33,7 @@ import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { InvalidWalletArgumentsError, UnsupportedMethodError } from "@nulo/extension-messaging/errors"
 import z from "zod"
 import type { AccountService } from "@/wallet/services/account/service"
+import { isAddressShapedName } from "@/utils/contact-name"
 import type { ContactService } from "@/wallet/services/contact/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import { networkInfoFrom } from "@/wallet/services/network/spec"
@@ -243,10 +244,12 @@ export class ViewExecutor {
 
 	public async executeAztecGetAddressBook(_op: AztecGetAddressBookOperation): Promise<Aliased<AztecAddress>[]> {
 		// TODO: filter by chainId
-		return (await this.deps.contactService.getContacts()).map((x) => ({
-			alias: x.name,
-			item: AztecAddress.fromStringUnsafe(x.address),
-		}))
+		return (await this.deps.contactService.getContacts()).map((x) => {
+			const item = AztecAddress.fromStringUnsafe(x.address)
+			// An app may print the alias where it would print the address: a name written like an
+			// address is answered as the address it names.
+			return { alias: isAddressShapedName(x.name) ? item.toString() : x.name, item }
+		})
 	}
 
 	/** The dApp gets the app-facing shape; the fast path's merge still reads the full standard arm. */

@@ -4,16 +4,16 @@
  * these pin: a dropped or reordered event leaves evidence stale, never wrong.
  */
 
+import { PROVE_BACKENDS } from "@nulo/wallet-core/jobs"
 import { describe, expect, test, vi } from "vitest"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import type { IPXE } from "@/wallet/services/pxe/client"
-import type { TaskService, WrappedTask } from "@/wallet/services/task/service"
+import type { WrappedTask } from "@/wallet/services/task/service"
 import { ExecutionCoordinator, ProvePhaseEventSchema } from "./execution-coordinator"
 
 const fakeTask = { complete: vi.fn(), completeIfTracked: vi.fn(), fail: vi.fn(), startSubtask: vi.fn() } as unknown as WrappedTask
 ;(fakeTask.startSubtask as ReturnType<typeof vi.fn>).mockReturnValue(fakeTask)
-const tasks = { startNewTask: () => fakeTask } as unknown as TaskService
 
 type Phase = ReturnType<typeof ProvePhaseEventSchema.parse>["phase"]
 type Backend = "presto" | "browser"
@@ -30,7 +30,7 @@ function harness(opts: { journalRejects?: boolean } = {}) {
 		journal.push([id, backend])
 	})
 	const provePhase = vi.fn()
-	const coordinator = new ExecutionCoordinator(tasks, new LoggerStore(new ConfigStore()), { assertCurrent: async () => {} }, undefined, {
+	const coordinator = new ExecutionCoordinator(new LoggerStore(new ConfigStore()), { assertCurrent: async () => {} }, undefined, {
 		updateProvingBackend,
 		provePhase,
 	})
@@ -232,5 +232,13 @@ describe("ExecutionCoordinator prove-phase attribution", () => {
 		expect(ProvePhaseEventSchema.safeParse({ proveId, seq: 1, phase: "transmit" }).success).toBe(true)
 		await h.emit(proveId, 1, "transmit", "presto")
 		expect(h.journal).toEqual([])
+	})
+})
+
+describe("ProvePhaseEventSchema: the backend", () => {
+	test("parses exactly the backends PROVE_BACKENDS names", () => {
+		const event = (backend: string) => ({ proveId: "6f0c5a8e-1b2d-4c3e-9f4a-5b6c7d8e9f01", seq: 1, phase: "proving", backend })
+		for (const backend of PROVE_BACKENDS) expect(ProvePhaseEventSchema.safeParse(event(backend)).success).toBe(true)
+		expect(ProvePhaseEventSchema.safeParse(event("native")).success).toBe(false)
 	})
 })

@@ -19,10 +19,8 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
 import { scrubUrls } from "../src/utils/scrub-urls"
 import { TESTNET_RPC_URL } from "../src/wallet/constants/network-endpoints"
+import { MAX_DECIMALS } from "../src/utils/token-amount"
 import { createPreflightNodeClient, readPinnedTestnetIdentity } from "./seed-preflight-node"
-
-/** The seeder's own bound: a token outside it is never seeded. */
-const MAX_DECIMALS = 18n
 
 const [target, url = TESTNET_RPC_URL] = process.argv.slice(2)
 if (!target) {
@@ -64,7 +62,7 @@ function decodeCompressedString(hex: string): string | undefined {
 function decode(key: string, hex: string): string | undefined {
 	if (key !== "decimals") return decodeCompressedString(hex)
 	const decimals = BigInt(hex)
-	return decimals <= MAX_DECIMALS ? decimals.toString() : undefined
+	return decimals <= BigInt(MAX_DECIMALS) ? decimals.toString() : undefined
 }
 
 let failed = false

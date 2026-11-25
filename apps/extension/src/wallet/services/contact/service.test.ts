@@ -198,6 +198,21 @@ describe("ContactService (port-migrated)", () => {
 			expect((await contactService.updateContact(c.id, undefined, "0xb")).name).toBe("BOB")
 		})
 
+		test("refuses a name that reads as an address on add and on update, the kept name of an address-only update included, writing nothing; a restored row keeps it and a new name clears it", async () => {
+			await expect(contactService.addContact("0x0c2b7e..4b5c", "0xa")).rejects.toThrow("contact name reads as an address")
+			const ana = await contactService.addContact("Ana", "0xa")
+			await expect(contactService.updateContact(ana.id, "0x0c2b..4b5c")).rejects.toThrow("contact name reads as an address")
+			const [genuine] = await contactService.backup()
+			const [restored] = await contactService.restore([{ ...genuine, id: "c-legacy", name: "0x0c2b7e..4b5c", address: "0xb" }])
+			expect(restored.restoreError).toBeUndefined()
+			await expect(contactService.updateContact(restored.id, undefined, "0xc")).rejects.toThrow("contact name reads as an address")
+			expect((await contactService.getContacts()).map((c) => [c.name, c.address])).toEqual([
+				["Ana", "0xa"],
+				["0x0c2b7e..4b5c", "0xb"],
+			])
+			expect((await contactService.updateContact(restored.id, "Bea", "0xc")).name).toBe("Bea")
+		})
+
 		test("emits onContactUpdated", async () => {
 			const c = await contactService.addContact("Alice", "0xa")
 			const seen = vi.fn()

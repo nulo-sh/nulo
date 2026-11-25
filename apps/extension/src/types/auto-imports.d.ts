@@ -11,6 +11,7 @@ declare global {
   const ACCOUNT_FILE_NOT_BACKUP: typeof import('../composables/full-backup-selection').ACCOUNT_FILE_NOT_BACKUP
   const ACTIVITY_FEED_KINDS: typeof import('../utils/journal-state').ACTIVITY_FEED_KINDS
   const ADDED_COALESCE: typeof import('../utils/coalesce').ADDED_COALESCE
+  const ADDRESS_LIKE_NAME: typeof import('../utils/contact-rules').ADDRESS_LIKE_NAME
   const ALREADY_ADDED: typeof import('../utils/entity-rules').ALREADY_ADDED
   const ALREADY_EXISTS: typeof import('../utils/entity-rules').ALREADY_EXISTS
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
@@ -85,6 +86,7 @@ declare global {
   const ONBOARDING_COMPLETED_KEY: typeof import('../stores/app.store').ONBOARDING_COMPLETED_KEY
   const OWN_WINDOW_ROUTES: typeof import('../utils/own-window').OWN_WINDOW_ROUTES
   const PASSKEY_COPY: typeof import('../utils/passkey-copy').PASSKEY_COPY
+  const PENDING_SEND_REFUSAL: typeof import('../utils/pending-send').PENDING_SEND_REFUSAL
   const PHRASE_WORD_COUNT: typeof import('../utils/recovery-phrase').PHRASE_WORD_COUNT
   const PINNED_TOKENS_MAX: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX
   const PINNED_TOKENS_MAX_CHAINS: typeof import('../utils/pinned-tokens').PINNED_TOKENS_MAX_CHAINS
@@ -93,10 +95,12 @@ declare global {
   const PROFILE_NAME_MAX: typeof import('../utils/profile-name').PROFILE_NAME_MAX
   const PROFILE_NOT_FIRST_ROOT: typeof import('../utils/profile-ui-keys').PROFILE_NOT_FIRST_ROOT
   const PROFILE_UI_KEY_PREFIXES: typeof import('../utils/profile-ui-keys').PROFILE_UI_KEY_PREFIXES
+  const QUOTE_DRIFT_LIMIT: typeof import('../utils/send-fiat-gate').QUOTE_DRIFT_LIMIT
   const RECOVERY_PHRASE_AUTO_CLOSE_MS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_AUTO_CLOSE_MS
   const RECOVERY_PHRASE_WARNINGS: typeof import('../utils/recovery-phrase-warnings').RECOVERY_PHRASE_WARNINGS
   const RESTORE_OUTCOME_LEASE_MS: typeof import('../utils/restore-outcome').RESTORE_OUTCOME_LEASE_MS
   const RESTORE_OUTCOME_ROOT: typeof import('../utils/profile-ui-keys').RESTORE_OUTCOME_ROOT
+  const RETIRED_CHAINS: typeof import('../utils/chain-ids').RETIRED_CHAINS
   const REVIEW_ARM_MS: typeof import('../composables/useSendReview').REVIEW_ARM_MS
   const ROW_AMOUNT_LENGTH: typeof import('../utils/snack-amount').ROW_AMOUNT_LENGTH
   const RPC_URL_MIN_LENGTH: typeof import('../utils/entity-rules').RPC_URL_MIN_LENGTH
@@ -107,6 +111,7 @@ declare global {
   const SETTINGS_ROWS: typeof import('../utils/settings-search').SETTINGS_ROWS
   const SETTING_UPDATE_FAILED: typeof import('../composables/useSettingUpdate').SETTING_UPDATE_FAILED
   const SNACK_GAP: typeof import('../composables/snackInset').SNACK_GAP
+  const SNAPSHOT_MAX_AGE_MS: typeof import('../utils/send-fiat-gate').SNAPSHOT_MAX_AGE_MS
   const STALE_NETWORK_KEY: typeof import('../composables/useStaleNetwork').STALE_NETWORK_KEY
   const STALLED_MIN_DISPLAY_MS: typeof import('../composables/useIncomingSyncHealth').STALLED_MIN_DISPLAY_MS
   const SUCCESS_TOAST_MS: typeof import('../composables/toast.js').SUCCESS_TOAST_MS
@@ -200,6 +205,7 @@ declare global {
   const createApp: typeof import('vue').createApp
   const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
   const createFailedNotice: typeof import('../utils/profile-flow-notices').createFailedNotice
+  const createReconnectCheck: typeof import('../composables/reconnectRead').createReconnectCheck
   const createReconnectRead: typeof import('../composables/reconnectRead').createReconnectRead
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
@@ -226,6 +232,7 @@ declare global {
   const entityListReducers: typeof import('../utils/entity-list').entityListReducers
   const errorLogWriters: typeof import('../composables/restore-error-log').errorLogWriters
   const estimateWhenClear: typeof import('../utils/estimate-when-clear').estimateWhenClear
+  const evaluateFiatGate: typeof import('../utils/send-fiat-gate').evaluateFiatGate
   const exportsHeld: typeof import('../composables/useStaleNetwork').exportsHeld
   const feeDisplay: typeof import('../utils/fee-estimation').feeDisplay
   const feeFigure: typeof import('../utils/fee-estimation').feeFigure
@@ -296,6 +303,7 @@ declare global {
   const isActivating: typeof import('../composables/useProfileBootstrap').isActivating
   const isActivatingOtherThan: typeof import('../composables/useProfileBootstrap').isActivatingOtherThan
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
+  const isAddressShapedName: typeof import('../utils/contact-name').isAddressShapedName
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isAnyActivating: typeof import('../composables/useProfileBootstrap').isAnyActivating
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
@@ -481,6 +489,7 @@ declare global {
   const replaceNetworkClient: typeof import('../utils/core').replaceNetworkClient
   const requireAccount: typeof import('../utils/core').requireAccount
   const requireNetwork: typeof import('../utils/core').requireNetwork
+  const requoteReason: typeof import('../utils/send-fiat-gate').requoteReason
   const reseedNetworksStage: typeof import('../composables/full-backup-restore').reseedNetworksStage
   const resolveComponent: typeof import('vue').resolveComponent
   const resolveFromDisplay: typeof import('../utils/received-display').resolveFromDisplay
@@ -571,6 +580,7 @@ declare global {
   const toRefs: typeof import('vue').toRefs
   const toRestoreError: typeof import('../utils/restore-error').toRestoreError
   const toValue: typeof import('vue').toValue
+  const toastPendingSendRefusal: typeof import('../utils/pending-send').toastPendingSendRefusal
   const tokenForReceipt: typeof import('../utils/received-display').tokenForReceipt
   const tokenHeroCandidates: typeof import('../utils/hero-fit').tokenHeroCandidates
   const tokenIconFor: typeof import('../utils/token-icon').tokenIconFor
@@ -662,7 +672,10 @@ declare global {
   const useSecretClipboardCopy: typeof import('../composables/useSecretClipboardCopy').useSecretClipboardCopy
   const useSecretCountdown: typeof import('../composables/useSecretCountdown').useSecretCountdown
   const useSeedStatus: typeof import('../composables/useSeedStatus').useSeedStatus
+  const useSendData: typeof import('../composables/useSendData').useSendData
+  const useSendEstimate: typeof import('../composables/useSendEstimate').useSendEstimate
   const useSendFeeSelection: typeof import('../composables/useFeeSelection').useSendFeeSelection
+  const useSendFiatGate: typeof import('../composables/useSendFiatGate').useSendFiatGate
   const useSendReview: typeof import('../composables/useSendReview').useSendReview
   const useSendStageLine: typeof import('../composables/useSendStageLine').useSendStageLine
   const useSendsInProgress: typeof import('../composables/useSendsInProgress').useSendsInProgress
@@ -889,6 +902,9 @@ declare global {
   export type { AuthRequiredGate, ActiveProfileLookup } from '../utils/auth-guard'
   import('../utils/auth-guard')
   // @ts-ignore
+  export type { RetiredChain } from '../utils/chain-ids'
+  import('../utils/chain-ids')
+  // @ts-ignore
   export type { CopyToastSpec } from '../utils/clipboard'
   import('../utils/clipboard')
   // @ts-ignore
@@ -991,6 +1007,9 @@ declare global {
   export type { Side, RowWay, RowDirection } from '../utils/row-direction'
   import('../utils/row-direction')
   // @ts-ignore
+  export type { FiatGuard, FiatGateVerdict } from '../utils/send-fiat-gate'
+  import('../utils/send-fiat-gate')
+  // @ts-ignore
   export type { HubConfig, HubValues } from '../utils/settings-labels'
   import('../utils/settings-labels')
   // @ts-ignore
@@ -1030,6 +1049,7 @@ declare module 'vue' {
     readonly ACCOUNT_FILE_NOT_BACKUP: UnwrapRef<typeof import('../composables/full-backup-selection')['ACCOUNT_FILE_NOT_BACKUP']>
     readonly ACTIVITY_FEED_KINDS: UnwrapRef<typeof import('../utils/journal-state')['ACTIVITY_FEED_KINDS']>
     readonly ADDED_COALESCE: UnwrapRef<typeof import('../utils/coalesce')['ADDED_COALESCE']>
+    readonly ADDRESS_LIKE_NAME: UnwrapRef<typeof import('../utils/contact-rules')['ADDRESS_LIKE_NAME']>
     readonly ALREADY_ADDED: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_ADDED']>
     readonly ALREADY_EXISTS: UnwrapRef<typeof import('../utils/entity-rules')['ALREADY_EXISTS']>
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
@@ -1104,6 +1124,7 @@ declare module 'vue' {
     readonly ONBOARDING_COMPLETED_KEY: UnwrapRef<typeof import('../stores/app.store')['ONBOARDING_COMPLETED_KEY']>
     readonly OWN_WINDOW_ROUTES: UnwrapRef<typeof import('../utils/own-window')['OWN_WINDOW_ROUTES']>
     readonly PASSKEY_COPY: UnwrapRef<typeof import('../utils/passkey-copy')['PASSKEY_COPY']>
+    readonly PENDING_SEND_REFUSAL: UnwrapRef<typeof import('../utils/pending-send')['PENDING_SEND_REFUSAL']>
     readonly PHRASE_WORD_COUNT: UnwrapRef<typeof import('../utils/recovery-phrase')['PHRASE_WORD_COUNT']>
     readonly PINNED_TOKENS_MAX: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX']>
     readonly PINNED_TOKENS_MAX_CHAINS: UnwrapRef<typeof import('../utils/pinned-tokens')['PINNED_TOKENS_MAX_CHAINS']>
@@ -1112,10 +1133,12 @@ declare module 'vue' {
     readonly PROFILE_NAME_MAX: UnwrapRef<typeof import('../utils/profile-name')['PROFILE_NAME_MAX']>
     readonly PROFILE_NOT_FIRST_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_NOT_FIRST_ROOT']>
     readonly PROFILE_UI_KEY_PREFIXES: UnwrapRef<typeof import('../utils/profile-ui-keys')['PROFILE_UI_KEY_PREFIXES']>
+    readonly QUOTE_DRIFT_LIMIT: UnwrapRef<typeof import('../utils/send-fiat-gate')['QUOTE_DRIFT_LIMIT']>
     readonly RECOVERY_PHRASE_AUTO_CLOSE_MS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_AUTO_CLOSE_MS']>
     readonly RECOVERY_PHRASE_WARNINGS: UnwrapRef<typeof import('../utils/recovery-phrase-warnings')['RECOVERY_PHRASE_WARNINGS']>
     readonly RESTORE_OUTCOME_LEASE_MS: UnwrapRef<typeof import('../utils/restore-outcome')['RESTORE_OUTCOME_LEASE_MS']>
     readonly RESTORE_OUTCOME_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['RESTORE_OUTCOME_ROOT']>
+    readonly RETIRED_CHAINS: UnwrapRef<typeof import('../utils/chain-ids')['RETIRED_CHAINS']>
     readonly REVIEW_ARM_MS: UnwrapRef<typeof import('../composables/useSendReview')['REVIEW_ARM_MS']>
     readonly ROW_AMOUNT_LENGTH: UnwrapRef<typeof import('../utils/snack-amount')['ROW_AMOUNT_LENGTH']>
     readonly RPC_URL_MIN_LENGTH: UnwrapRef<typeof import('../utils/entity-rules')['RPC_URL_MIN_LENGTH']>
@@ -1126,6 +1149,7 @@ declare module 'vue' {
     readonly SETTINGS_ROWS: UnwrapRef<typeof import('../utils/settings-search')['SETTINGS_ROWS']>
     readonly SETTING_UPDATE_FAILED: UnwrapRef<typeof import('../composables/useSettingUpdate')['SETTING_UPDATE_FAILED']>
     readonly SNACK_GAP: UnwrapRef<typeof import('../composables/snackInset')['SNACK_GAP']>
+    readonly SNAPSHOT_MAX_AGE_MS: UnwrapRef<typeof import('../utils/send-fiat-gate')['SNAPSHOT_MAX_AGE_MS']>
     readonly STALE_NETWORK_KEY: UnwrapRef<typeof import('../composables/useStaleNetwork')['STALE_NETWORK_KEY']>
     readonly STALLED_MIN_DISPLAY_MS: UnwrapRef<typeof import('../composables/useIncomingSyncHealth')['STALLED_MIN_DISPLAY_MS']>
     readonly SUCCESS_TOAST_MS: UnwrapRef<typeof import('../composables/toast.js')['SUCCESS_TOAST_MS']>
@@ -1219,6 +1243,7 @@ declare module 'vue' {
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
     readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
     readonly createFailedNotice: UnwrapRef<typeof import('../utils/profile-flow-notices')['createFailedNotice']>
+    readonly createReconnectCheck: UnwrapRef<typeof import('../composables/reconnectRead')['createReconnectCheck']>
     readonly createReconnectRead: UnwrapRef<typeof import('../composables/reconnectRead')['createReconnectRead']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
@@ -1245,6 +1270,7 @@ declare module 'vue' {
     readonly entityListReducers: UnwrapRef<typeof import('../utils/entity-list')['entityListReducers']>
     readonly errorLogWriters: UnwrapRef<typeof import('../composables/restore-error-log')['errorLogWriters']>
     readonly estimateWhenClear: UnwrapRef<typeof import('../utils/estimate-when-clear')['estimateWhenClear']>
+    readonly evaluateFiatGate: UnwrapRef<typeof import('../utils/send-fiat-gate')['evaluateFiatGate']>
     readonly exportsHeld: UnwrapRef<typeof import('../composables/useStaleNetwork')['exportsHeld']>
     readonly feeDisplay: UnwrapRef<typeof import('../utils/fee-estimation')['feeDisplay']>
     readonly feeFigure: UnwrapRef<typeof import('../utils/fee-estimation')['feeFigure']>
@@ -1315,6 +1341,7 @@ declare module 'vue' {
     readonly isActivating: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivating']>
     readonly isActivatingOtherThan: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isActivatingOtherThan']>
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
+    readonly isAddressShapedName: UnwrapRef<typeof import('../utils/contact-name')['isAddressShapedName']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isAnyActivating: UnwrapRef<typeof import('../composables/useProfileBootstrap')['isAnyActivating']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
@@ -1500,6 +1527,7 @@ declare module 'vue' {
     readonly replaceNetworkClient: UnwrapRef<typeof import('../utils/core')['replaceNetworkClient']>
     readonly requireAccount: UnwrapRef<typeof import('../utils/core')['requireAccount']>
     readonly requireNetwork: UnwrapRef<typeof import('../utils/core')['requireNetwork']>
+    readonly requoteReason: UnwrapRef<typeof import('../utils/send-fiat-gate')['requoteReason']>
     readonly reseedNetworksStage: UnwrapRef<typeof import('../composables/full-backup-restore')['reseedNetworksStage']>
     readonly resolveComponent: UnwrapRef<typeof import('vue')['resolveComponent']>
     readonly resolveFromDisplay: UnwrapRef<typeof import('../utils/received-display')['resolveFromDisplay']>
@@ -1590,6 +1618,7 @@ declare module 'vue' {
     readonly toRefs: UnwrapRef<typeof import('vue')['toRefs']>
     readonly toRestoreError: UnwrapRef<typeof import('../utils/restore-error')['toRestoreError']>
     readonly toValue: UnwrapRef<typeof import('vue')['toValue']>
+    readonly toastPendingSendRefusal: UnwrapRef<typeof import('../utils/pending-send')['toastPendingSendRefusal']>
     readonly tokenForReceipt: UnwrapRef<typeof import('../utils/received-display')['tokenForReceipt']>
     readonly tokenHeroCandidates: UnwrapRef<typeof import('../utils/hero-fit')['tokenHeroCandidates']>
     readonly tokenIconFor: UnwrapRef<typeof import('../utils/token-icon')['tokenIconFor']>
@@ -1681,7 +1710,10 @@ declare module 'vue' {
     readonly useSecretClipboardCopy: UnwrapRef<typeof import('../composables/useSecretClipboardCopy')['useSecretClipboardCopy']>
     readonly useSecretCountdown: UnwrapRef<typeof import('../composables/useSecretCountdown')['useSecretCountdown']>
     readonly useSeedStatus: UnwrapRef<typeof import('../composables/useSeedStatus')['useSeedStatus']>
+    readonly useSendData: UnwrapRef<typeof import('../composables/useSendData')['useSendData']>
+    readonly useSendEstimate: UnwrapRef<typeof import('../composables/useSendEstimate')['useSendEstimate']>
     readonly useSendFeeSelection: UnwrapRef<typeof import('../composables/useFeeSelection')['useSendFeeSelection']>
+    readonly useSendFiatGate: UnwrapRef<typeof import('../composables/useSendFiatGate')['useSendFiatGate']>
     readonly useSendReview: UnwrapRef<typeof import('../composables/useSendReview')['useSendReview']>
     readonly useSendStageLine: UnwrapRef<typeof import('../composables/useSendStageLine')['useSendStageLine']>
     readonly useSendsInProgress: UnwrapRef<typeof import('../composables/useSendsInProgress')['useSendsInProgress']>

@@ -10,7 +10,6 @@
 <script setup lang="ts">
 /** Vendor */
 import { onMounted, onUnmounted, shallowRef } from "vue"
-import { JobCancelledError } from "@nulo/extension-messaging/errors"
 
 /** Components */
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
@@ -269,6 +268,7 @@ const {
 	rearm: rearmFeeEstimates,
 	cancelAll: cancelAllFeeEstimates,
 	dispose: disposeFeeEstimates,
+	pauseThisTask: pauseFeeEstimates,
 } = useFeeEstimationMap<number, { index: number; feeSettings: FeeSettings }, TransferFeeEstimate>({
 	// By reference: the SW re-materializes the stored request at this index and
 	// applies the fee choice itself — the popup never hands it an operation.
@@ -396,12 +396,15 @@ const {
 	closeWindow,
 	endAndClose,
 	onActiveProfileChanged,
+	dismissWrongProfile,
+	settleResolveError,
 	stripStatus,
 	processingError,
 	setError,
 	clearError,
 } = useDappApprovalWindow({
 	profile,
+	requestId,
 	isInteractionCancelled,
 	isLoading,
 	connectServices: () => {
@@ -624,15 +627,9 @@ const approve = async () => {
 }
 
 const showApprovalFailure = (error: unknown) => {
-	if (error instanceof JobCancelledError) {
-		// A raced approve refused service-side (the dApp cancelled first):
-		// the refusal IS the cancelled state — render the overlay, never an
-		// error banner. Covers the case where the cancel broadcast itself
-		// was lost to this popup.
-		isInteractionCancelled.value = true
-	} else if (!holdRefusal(error)) {
-		setError("Processing error.", getErrorMessage(error))
-	}
+	settleResolveError(error, () => {
+		if (!holdRefusal(error)) setError("Processing error.", getErrorMessage(error))
+	})
 }
 
 const reject = async (end: WindowEnd) => {
@@ -644,11 +641,6 @@ const reject = async (end: WindowEnd) => {
 	cancelAllAuthwitPreviews()
 	await endAndClose(() => rejectViaInteractionService("User rejected", end))
 }
-
-// The notice's OK ends another profile's request as the lock or switch that made it, with the same
-// wait as Reject, so the window's close cannot reach the request first.
-const dismissWrongProfile = () =>
-	requestId.value && !isInteractionCancelled.value ? reject(requestEnd("close", true, profile.value)) : closeWindow()
 
 const signerAccounts = computed(() => uniqueSignerAccounts(operations.value))
 const signerNetworks = computed(() => uniqueSignerNetworks(operations.value))
@@ -828,6 +820,7 @@ onUnmounted(() => {
 							:appFailure="failedFeeEstimates[i] ? appFailures[i] : undefined"
 							@updateFeeSettings="handleFeeUpdate"
 							@retryEstimate="retryFeeEstimate"
+							@feeReread="pauseFeeEstimates"
 							@retryPreview="retryAuthwitPreview"
 							@updatePayer="(index: number, payer: FeePayerPick | null) => (feePayers[index] = payer)"
 							@acknowledgeTokenFlag="acknowledgeTokenFlag"

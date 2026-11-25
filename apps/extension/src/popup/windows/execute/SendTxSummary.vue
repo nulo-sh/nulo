@@ -6,6 +6,7 @@
  * name, short of Nulo's, is only one the person gave the address.
  */
 import type { DiscoveredAuthwit } from "@/wallet/services/execution/client"
+import ArgsPlaceholder from "@/components/composite/ArgsPlaceholder.vue"
 import ContractChip from "@/components/composite/ContractChip.vue"
 import type { ListReader } from "@/utils/contract-level"
 import type { BlockExplorerType } from "@/wallet/constants/explorers"
@@ -196,9 +197,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 								<template v-if="row.surface.kind === 'transfer' && row.surface.sender.kind === 'none'">to <ContractChip v-bind="partyChips[j].to!" testid="execute-op-line-to" />. Caller: none<span :class="$style.chevron_tail">&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span></template>
 								<template v-else>to <span :class="$style.chip_tail"><ContractChip v-bind="partyChips[j].to!" testid="execute-op-line-to" />&nbsp;<Icon name="chevron" size="12" color="secondary" aria-hidden="true" data-testid="execute-op-step-chevron" :class="[$style.chevron, openSteps.has(j) && $style.chevron_open]" /></span></template>
 							</Text>
-							<Text v-else-if="row.surface.kind === 'pending'" :id="part(j, 'note')" data-testid="execute-op-summary-args-pending" variant="body" color="tertiary">
-								Reading arguments…
-							</Text>
+							<ArgsPlaceholder v-else-if="row.surface.kind === 'pending'" :id="part(j, 'note')" data-testid="execute-op-summary-args-pending" />
 						</Flex>
 					</StepRow>
 					<div v-if="openSteps.has(j)" :id="stepPanel(j)" data-testid="execute-op-details" :data-step-index="j" :class="$style.guide">
@@ -276,6 +275,7 @@ const onRetryPreview = (event: MouseEvent): void => {
 							<Text v-if="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf" variant="body" color="secondary" height="130">
 								Already authorized by <AddressDisplay :address="a.onBehalfOf" data-testid="execute-op-summary-authwit-on-behalf-account" />.
 							</Text>
+							<ArgsPlaceholder v-if="surface.kind === 'pending'" data-testid="execute-op-summary-authwit-args-pending" />
 							<Flex v-if="surface.kind === 'raw'" data-testid="execute-op-summary-authwit-unverified-args" :data-reason="surface.reason" direction="column" gap="4">
 								<Text data-testid="execute-op-summary-authwit-unparsed" variant="body" color="tertiary" height="130">{{ UNPARSED_AUTHWIT }}</Text>
 							</Flex>

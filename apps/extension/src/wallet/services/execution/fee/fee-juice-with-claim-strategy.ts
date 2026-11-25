@@ -23,7 +23,7 @@ export class FeeJuiceWithClaimStrategy implements FeeStrategy {
 			throw new Error("FeeJuiceWithClaimStrategy called with non-fjwc payment method")
 		}
 		const { claimAmount, claimSecret, messageLeafIndex } = ctx.feeSettings.paymentMethod
-		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
+		const task = startEstimateTask(this.deps.tasks, ctx)
 		try {
 			ctx.op.actions.unshift(...getFeeJuiceClaimPayload(ctx.op.accountAddress, claimAmount, claimSecret, messageLeafIndex))
 			const built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM, task)

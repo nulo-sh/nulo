@@ -29,6 +29,7 @@ import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { FINISHED_DAPP_ROOTS_KEPT, TaskService } from "@/wallet/services/task/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { TransactionService } from "@/wallet/services/transaction/service"
+import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { rowKeysForEveryProfile } from "@/wallet/storage/sealed-entity-storage.testing"
 import { ExecutionService } from "./service"
 
@@ -111,5 +112,30 @@ describe("a dApp batch against the finished-task bound", () => {
 		expect(answers.filter((answer) => answer.name !== "getChainInfo" || answer.result === undefined)).toEqual([])
 		expect({ created, deleted }).toEqual({ created: legs.length, deleted: 44 })
 		expect(await tasks.getTasks()).toHaveLength(FINISHED_DAPP_ROOTS_KEPT)
+	})
+})
+
+describe("a dApp batch against the call limit", () => {
+	const chainLeg = { name: "getChainInfo", args: [] }
+
+	test.each([
+		["1,025 calls", Array.from({ length: 1_025 }, () => chainLeg)],
+		["a batch inside it", [chainLeg, { name: "batch", args: [[chainLeg]] }]],
+	])("a batch carrying %s is answered with the invalid-arguments reply and starts no task", async (_label, legs) => {
+		const { tasks, batch } = await makeHarness()
+		let created = 0
+		tasks.onTaskCreated.add(() => created++)
+
+		const reply = await batch(legs).then(
+			() => "answered",
+			(error: unknown) => toWalletResponseError(error),
+		)
+
+		expect(reply).toEqual({
+			code: -32602,
+			message: "The request's arguments do not match the wallet API.",
+			data: { walletErrorCode: "INVALID_PARAMS" },
+		})
+		expect(created).toBe(0)
 	})
 })

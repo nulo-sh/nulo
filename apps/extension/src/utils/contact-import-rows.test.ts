@@ -103,11 +103,30 @@ describe("matchSavedContacts / classifyImportRow", () => {
 		["the saved name and address, the name saved with outer spaces", "Tom Becker", ADDR.tom, "unchanged", false],
 		["one saved contact's name and another's address", "Alice", ADDR.tom, "conflict", false],
 		["an address off the curve, whatever else matches", "Alice", OFF_CURVE, "invalid", false],
+		["a name that reads as an address", "0x0c2b7e..4b5c", ADDR.fresh, "name", false],
 	])("%s", (_, name, address, kind, selected) => {
 		const row = classify(name, address)
 		expect(row.kind).toBe(kind)
 		expect(row.selected).toBe(selected)
-		expect(row.importable).toBe(kind !== "conflict" && kind !== "invalid")
+		expect(row.importable).toBe(kind !== "conflict" && kind !== "invalid" && kind !== "name")
+	})
+
+	test("a name that reads as an address is refused even when it is a saved contact's; a word at that contact's address renames it", () => {
+		const saved = [...SAVED, { id: "c4", name: "0x0c2b..4b5c", address: ADDR.priya }]
+		expect(classify("0x0c2b..4b5c", ADDR.priya, saved)).toMatchObject({ kind: "name", importable: false, targetId: null })
+		expect(classify("Priya", ADDR.priya, saved)).toMatchObject({ kind: "name-change", importable: true, targetId: "c4" })
+	})
+
+	test("a row matched by name is judged on the saved spelling it would write, which the file's spelling of that key may not share", () => {
+		// Lunate sigma reads as c; the plain sigma its key folds to does not.
+		const saved = [...SAVED, { id: "c4", name: "0x\u03F2abe", address: ADDR.priya }]
+		expect(classify("0x\u03C3abe", ADDR.fresh, saved)).toMatchObject({
+			kind: "name",
+			importable: false,
+			selected: false,
+			targetId: null,
+		})
+		expect(classify("0x\u03C3abe", ADDR.fresh)).toMatchObject({ kind: "new", importable: true })
 	})
 
 	test.each([

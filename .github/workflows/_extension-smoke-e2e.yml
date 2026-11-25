@@ -40,14 +40,14 @@ on:
         default: chrome
       shard:
         description: |
-          vitest --shard expression (e.g. "1/3"). Empty runs the whole suite. The PR lanes pass
+          vitest --shard expression (e.g. "1/4"). Empty runs the whole suite. The PR lanes pass
           one per matrix entry, so each runner takes its share of the files.
         required: false
         type: string
         default: ""
       shard_label:
         description: |
-          Artifact-safe form of `shard` (e.g. "1-of-3"), since actions/upload-artifact rejects
+          Artifact-safe form of `shard` (e.g. "1-of-4"), since actions/upload-artifact rejects
           `/` in names. Empty for the whole suite.
         required: false
         type: string

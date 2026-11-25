@@ -1,5 +1,5 @@
 /**
- * The one fee-estimation state machine: per-key debounce, monotonic staleness
+ * The one fee-estimation state machine: per-key start timing, monotonic staleness
  * counters, caller-minted cancellation tokens, remote-cancel ownership, and
  * the handed-off set. `useFeeEstimation` (single-slot) and `useFeeEstimationMap`
  * (per-op) are thin adapters over this engine — it owns every lifecycle
@@ -17,7 +17,11 @@ export interface FeeEstimationEngineOptions<TKey extends string | number, TParam
 	 * engine never constructs one. `signal` aborts once the run is superseded, cancelled or disposed.
 	 */
 	run: (params: TParams, estimateToken: string, key: TKey, signal: AbortSignal) => Promise<TResult>
-	/** No default here — each adapter supplies its own documented default. */
+	/**
+	 * The pause an estimate waits when it is asked in a task `pauseThisTask` marked: the person
+	 * typed, or an answer is being handled. Every other estimate starts at the end of the task that
+	 * asked for it. No default here — each adapter supplies its own documented default.
+	 */
 	debounceMs: number
 	/**
 	 * State sinks. Invoked synchronously at exactly the points the transitions
@@ -31,8 +35,8 @@ export interface FeeEstimationEngineOptions<TKey extends string | number, TParam
 	/** Called only for real errors, never for stale-counter or post-dispose settles. */
 	onError?: (key: TKey, err: unknown) => void
 	/**
-	 * Remote cancel. Invoked for a superseded or abandoned token whose RPC actually started — a
-	 * debounce that never fired needs no remote cancel. Never invoked for handed-off tokens
+	 * Remote cancel. Invoked for a superseded or abandoned token whose RPC actually started — an
+	 * estimate that never started needs no remote cancel. Never invoked for handed-off tokens
 	 * (ownership transferred to the execution path, which is about to consume the stashed
 	 * estimate). Only `dispose()` waits for a returned promise, which must never reject: every
 	 * other path drops it.
@@ -41,8 +45,19 @@ export interface FeeEstimationEngineOptions<TKey extends string | number, TParam
 }
 
 export interface FeeEstimationEngine<TKey extends string | number, TParams> {
-	/** Schedule a debounced estimation for `key`, superseding any live one for it. */
+	/**
+	 * Schedule an estimation for `key`, superseding any live one for it. It starts once the task ends,
+	 * or after `debounceMs` when the task is marked; a schedule for `key` within the same task replaces it.
+	 */
 	schedule(key: TKey, params: TParams): void
+	/**
+	 * The person typed in this task: estimates scheduled until the next timer turn wait the pause.
+	 * A settle marks its own task, so a re-ask an answer causes waits too. The mark can also reach a
+	 * change from another task queued before that turn, which then waits as it would have before.
+	 */
+	pauseThisTask(): void
+	/** A pick: starts `key`'s estimate now if one still waits its pause. Never creates one. */
+	startWaiting(key: TKey): void
 	/** Cancel `key`'s pending estimation (if any) and clear its state. Idempotent. */
 	cancel(key: TKey): void
 	/** Cancel every key with any live state. */
@@ -73,25 +88,59 @@ export interface FeeEstimationEngine<TKey extends string | number, TParams> {
 	dispose(): Promise<void>
 }
 
+/**
+ * When each key's estimate starts: once the task that asked for it ends, or after `pauseMs` when that
+ * task was marked. Holds only estimates that have not started; a start removes its own entry, so a
+ * fired timer can never start twice.
+ */
+function createStartClock<TKey>(pauseMs: number) {
+	const waiting = new Map<TKey, { timer: ReturnType<typeof setTimeout>; start: () => void }>()
+	let paused = false
+	let unpause: ReturnType<typeof setTimeout> | undefined
+	const clear = (key: TKey) => {
+		clearTimeout(waiting.get(key)?.timer)
+		waiting.delete(key)
+	}
+	return {
+		pauseThisTask: () => {
+			paused = true
+			unpause ??= setTimeout(() => {
+				paused = false
+				unpause = undefined
+			}, 0)
+		},
+		arm: (key: TKey, run: () => void) => {
+			const start = () => {
+				waiting.delete(key)
+				run()
+			}
+			waiting.set(key, { timer: setTimeout(start, paused ? pauseMs : 0), start })
+		},
+		clear,
+		startWaiting: (key: TKey) => {
+			const entry = waiting.get(key)
+			clear(key)
+			entry?.start()
+		},
+		keys: () => waiting.keys(),
+		clearAll: () => {
+			for (const key of [...waiting.keys()]) clear(key)
+			clearTimeout(unpause)
+		},
+	}
+}
+
 export function createFeeEstimationEngine<TKey extends string | number, TParams, TResult>(
 	options: FeeEstimationEngineOptions<TKey, TParams, TResult>,
 ): FeeEstimationEngine<TKey, TParams> {
 	const { run, debounceMs, onResult, onEstimating, onError, cancelRemote } = options
 
-	const timers = new Map<TKey, ReturnType<typeof setTimeout>>()
+	const clock = createStartClock<TKey>(debounceMs)
 	const counters = new Map<TKey, number>()
 	const inflight = new Map<TKey, { token: string; started: boolean; abort: AbortController }>()
 	const completed = new Map<TKey, string>()
 	const handedOff = new Set<string>()
 	let disposed: Promise<void> | undefined
-
-	const clearTimerFor = (key: TKey) => {
-		const t = timers.get(key)
-		if (t) {
-			clearTimeout(t)
-			timers.delete(key)
-		}
-	}
 
 	/** Remote-cancel every live token still owned for `key`. */
 	const cancelOwnedRemoteFor = (key: TKey): unknown[] => {
@@ -104,7 +153,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 	}
 
 	const cancel = (key: TKey) => {
-		clearTimerFor(key)
+		clock.clear(key)
 		cancelOwnedRemoteFor(key)
 		// Bumping the counter for this key invalidates any in-flight run promise.
 		counters.set(key, (counters.get(key) ?? 0) + 1)
@@ -113,13 +162,13 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 	}
 
 	const cancelAll = () => {
-		const keys = new Set<TKey>([...timers.keys(), ...inflight.keys(), ...completed.keys()])
+		const keys = new Set<TKey>([...clock.keys(), ...inflight.keys(), ...completed.keys()])
 		for (const key of keys) cancel(key)
 	}
 
 	const schedule = (key: TKey, params: TParams) => {
 		if (disposed) return
-		clearTimerFor(key)
+		clock.clear(key)
 		cancelOwnedRemoteFor(key)
 		onResult(key, null)
 		onEstimating(key, true)
@@ -134,11 +183,13 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 		// awaited run.
 		const isStale = () => disposed !== undefined || myCounter !== counters.get(key)
 		const settleSuccess = (r: TResult) => {
+			clock.pauseThisTask()
 			onResult(key, r)
 			completed.set(key, token)
 			inflight.delete(key)
 		}
 		const settleFailure = (err: unknown) => {
+			clock.pauseThisTask()
 			onResult(key, null)
 			// A transport failure (RPC timeout) leaves the SW-side runner
 			// alive with no local owner — without this cancel it would be
@@ -149,7 +200,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 			inflight.delete(key)
 			onError?.(key, err)
 		}
-		const timer = setTimeout(() => {
+		clock.arm(key, () => {
 			void runScheduledEstimate({
 				markStarted: () => {
 					const flight = inflight.get(key)
@@ -161,8 +212,7 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 				settleFailure,
 				clearEstimating: () => onEstimating(key, false),
 			})
-		}, debounceMs)
-		timers.set(key, timer)
+		})
 	}
 
 	const handoffInclusive = (key: TKey): string | null => {
@@ -184,17 +234,17 @@ export function createFeeEstimationEngine<TKey extends string | number, TParams,
 
 	const dispose = (): Promise<void> => {
 		if (disposed) return disposed
-		for (const t of timers.values()) clearTimeout(t)
-		timers.clear()
+		clock.clearAll()
 		const keys = new Set<TKey>([...inflight.keys(), ...completed.keys()])
 		disposed = Promise.allSettled([...keys].flatMap((key) => cancelOwnedRemoteFor(key))).then(() => {})
 		return disposed
 	}
 
-	return { schedule, cancel, cancelAll, handoffInclusive, handoffCompleted, rearm, dispose }
+	const { pauseThisTask, startWaiting } = clock
+	return { schedule, pauseThisTask, startWaiting, cancel, cancelAll, handoffInclusive, handoffCompleted, rearm, dispose }
 }
 
-/** The debounce-fired estimate run, hoisted to module level so the debounced
+/** The timer-fired estimate run, hoisted to module level so the timer's
  *  callback itself carries no branching. The staleness re-checks sit AFTER the
  *  awaited run on every settle path — the positions the engine's counters
  *  contract requires — and the finally-side estimating clear fires only for

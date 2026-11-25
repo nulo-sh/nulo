@@ -56,7 +56,9 @@ export type SendExpiry = { timestamp: number; nullifier: string }
 /** The block a `sent` or `reverted` answer was read in, kept until the finalized chain holds it. */
 export type SendInclusion = { block: number; hash: string }
 
-export type ProveBackend = "presto" | "browser"
+/** Every proving backend. The run-time schemas parse this list, so a new value widens the type and the parse together. */
+export const PROVE_BACKENDS = ["presto", "browser"] as const
+export type ProveBackend = (typeof PROVE_BACKENDS)[number]
 
 /** Who pays a queued send's fee, in the Send page's terms: Fee Juice from the account, or a fee
  *  contract by its row. */

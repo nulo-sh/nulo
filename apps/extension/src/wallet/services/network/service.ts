@@ -856,9 +856,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		// whatever its URL. The lock-guarded re-read below handles the (rare) deletion race.
 		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
-		return await this.lock.withLock(async () => {
-			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-			await this.refuseWhileResetHolds(profile.id, networkId)
+		return await this.withEditableNetwork(profile.id, networkId, async (network) => {
 			assertSameChainIdentity(probed, network)
 			const normalized = normalizeRpcUrl(rpcUrl)
 			if (network.endpoints.some((e) => e.rpcUrl === normalized)) {
@@ -870,9 +868,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				label: trimmedLabel(label),
 			}
 			network.endpoints.push(endpoint)
-			await this.storage.set(network.id, network)
-			this.routes.delete(network.id)
-			this.emit("onNetworkUpdated", network)
+			await this.commitEndpointChangeLocked(network, [], false)
 			return endpoint
 		})
 	}
@@ -895,9 +891,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
 		// Probe outside the lock even for an unchanged URL: the node's chain identity may have drifted.
 		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
-		return await this.lock.withLock(async () => {
-			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-			await this.refuseWhileResetHolds(profile.id, networkId)
+		return await this.withEditableNetwork(profile.id, networkId, async (network) => {
 			assertSameChainIdentity(probed, network)
 			const idx = network.endpoints.findIndex((e) => e.id === endpointId)
 			if (idx < 0) throw new Error("Invalid endpoint id")
@@ -910,10 +904,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				label: trimmedLabel(label),
 			}
 			network.endpoints[idx] = updated
-			await this.storage.set(network.id, network)
-			this.transientNodes.delete(oldUrl)
-			this.routes.delete(network.id)
-			this.emit("onNetworkUpdated", network)
+			await this.commitEndpointChangeLocked(network, [oldUrl], false)
 			return updated
 		})
 	}
@@ -922,9 +913,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		validateParams(NetworkMethodSchemas.deleteEndpoint.params, [networkId, endpointId], "deleteEndpoint")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		return await this.lock.withLock(async () => {
-			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-			await this.refuseWhileResetHolds(profile.id, networkId)
+		return await this.withEditableNetwork(profile.id, networkId, async (network) => {
 			const idx = network.endpoints.findIndex((e) => e.id === endpointId)
 			if (idx < 0) throw new Error("Invalid endpoint id")
 			if (network.endpoints.length === 1) {
@@ -934,10 +923,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 				throw new Error(`${ERR_PRIMARY_ENDPOINT}: Cannot delete the primary endpoint. Make another endpoint primary first.`)
 			}
 			const removed = network.endpoints.splice(idx, 1)[0]!
-			await this.storage.set(network.id, network)
-			this.transientNodes.delete(removed.rpcUrl)
-			this.routes.delete(network.id)
-			this.emit("onNetworkUpdated", network)
+			await this.commitEndpointChangeLocked(network, [removed.rpcUrl], false)
 			return removed
 		})
 	}
@@ -946,9 +932,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		validateParams(NetworkMethodSchemas.setPrimaryEndpoint.params, [networkId, endpointId], "setPrimaryEndpoint")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		return await this.lock.withLock(async () => {
-			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-			await this.refuseWhileResetHolds(profile.id, networkId)
+		return await this.withEditableNetwork(profile.id, networkId, async (network) => {
 			const endpoint = network.endpoints.find((e) => e.id === endpointId)
 			if (!endpoint) throw new Error("Invalid endpoint id")
 			if (network.chainId === 0 && !isLocalNetworkTarget(endpoint.rpcUrl, network.kind)) {
@@ -956,10 +940,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			}
 			if (network.primaryEndpointId === endpointId) return network
 			network.primaryEndpointId = endpointId
-			await this.storage.set(network.id, network)
-			this.routes.delete(network.id)
-			this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId })
-			this.emit("onNetworkUpdated", network)
+			await this.commitEndpointChangeLocked(network, [], true)
 			return network
 		})
 	}
@@ -968,9 +949,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		validateParams(NetworkMethodSchemas.reorderEndpoints.params, [networkId, endpointIds], "reorderEndpoints")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		return await this.lock.withLock(async () => {
-			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
-			await this.refuseWhileResetHolds(profile.id, networkId)
+		return await this.withEditableNetwork(profile.id, networkId, async (network) => {
 			const endpoints = endpointsInOrder(network, endpointIds)
 			const first = endpoints[0]!
 			if (network.chainId === 0 && !isLocalNetworkTarget(first.rpcUrl, network.kind)) {
@@ -980,10 +959,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			const primaryMoved = network.primaryEndpointId !== first.id
 			network.endpoints = endpoints
 			network.primaryEndpointId = first.id
-			await this.storage.set(network.id, network)
-			this.routes.delete(network.id)
-			if (primaryMoved) this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId: first.id })
-			this.emit("onNetworkUpdated", network)
+			await this.commitEndpointChangeLocked(network, [], primaryMoved)
 			return network
 		})
 	}
@@ -1018,6 +994,24 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if ((await this.staleNetworks.getJournal(profileId))?.networkId === networkId) {
 			throw new Error(`${ERR_RESET_PENDING}: Finish the network reset before editing its endpoints.`)
 		}
+	}
+
+	/** Runs `edit` under the network lock on the profile's own row, refused while a reset's journal names it. */
+	private async withEditableNetwork<T>(profileId: string, networkId: string, edit: (network: Network) => Promise<T> | T): Promise<T> {
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), profileId)
+			await this.refuseWhileResetHolds(profileId, networkId)
+			return await edit(network)
+		})
+	}
+
+	/** Caller holds the network lock. The write and the evictions land before any listener hears of the change. */
+	private async commitEndpointChangeLocked(network: Network, evictedUrls: readonly string[], primaryChanged: boolean): Promise<void> {
+		await this.storage.set(network.id, network)
+		for (const url of evictedUrls) this.transientNodes.delete(url)
+		this.routes.delete(network.id)
+		if (primaryChanged) this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId: network.primaryEndpointId })
+		this.emit("onNetworkUpdated", network)
 	}
 
 	// ── Status / node accessors ──────────────────────────────────────────
@@ -1252,12 +1246,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		row.chainId = seed.chainId
 		row.l1ChainId = seed.l1ChainId
 		this.applyResetEndpoint(row, seed, req)
-		await this.storage.set(row.id, row)
-		this.routes.delete(row.id)
-		if (row.primaryEndpointId !== primaryBefore) {
-			this.emit("onPrimaryEndpointChanged", { networkId: row.id, endpointId: row.primaryEndpointId })
-		}
-		this.emit("onNetworkUpdated", row)
+		await this.commitEndpointChangeLocked(row, [], row.primaryEndpointId !== primaryBefore)
 		return row
 	}
 

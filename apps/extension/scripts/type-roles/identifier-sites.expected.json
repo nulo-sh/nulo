@@ -21,7 +21,7 @@
 				}
 			],
 			"digests": {
-				"apps/extension/src/wallet/services/auth-registry/service.ts": "c69c4fa84e81a30da4492088cf62bf47f34421bbd0733dc616847b814984afd6",
+				"apps/extension/src/wallet/services/auth-registry/service.ts": "d873e3e8631a697c7756c4865c4076a79f92ff6fe4a802ecd3bfc4dd3703e508",
 				"apps/extension/src/wallet/services/execution/operation-planner.ts": "3bdb4c1538359fe7d11572c82d19fa07677be5b74a40429ea7cb64e02d47d1ec",
 				"packages/wallet-bridge/src/dispatcher.ts": "a7a81b849e72d78ec910e2d883faac29b117233f98554a7d98f748e5e1443b41"
 			},
@@ -361,7 +361,7 @@
 		{
 			"file": "apps/extension/src/popup/components/modules/send/SendPersonStep.vue",
 			"expression": "trimAddress(r.address, 6, 4, \"…\")",
-			"branch": "recents.length && !(r.name)",
+			"branch": "recents.length",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"send-recent-address\"]",
@@ -844,7 +844,7 @@
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/security/reset.vue",
-			"expression": "trimAddress(account.address, 6, 4, '…')",
+			"expression": "importedRowDescription(account)",
 			"branch": "importedAccounts.length",
 			"ordinal": 0,
 			"role": "meta",

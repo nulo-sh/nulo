@@ -73,7 +73,12 @@ const STUBS = {
 }
 
 // Lazy import after vi.mock calls hoist
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
+import { Input, Text } from "@nulo/design"
 import NewContactPopup from "./NewContactPopup.vue"
+
+const FIELDS_SOURCE = readFileSync(resolve(__dirname, "../modules/settings/contacts/ContactFormFields.vue"), "utf8")
 
 const VALID_ADDRESS = `0x2${"a".repeat(63)}`
 
@@ -196,6 +201,34 @@ describe("NewContactPopup — decoupled from sender registration", () => {
 
 		await fill(w, "Bob", `0x2${"b".repeat(63)}`)
 		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("false")
+	})
+
+	test("a name that reads as an address turns the field red with its sentence in txt-danger, and Add contact stays off", async () => {
+		const w = mount(NewContactPopup, {
+			props: { show: false },
+			global: { stubs: (({ Input: _i, Text: _t, ...rest }) => rest)(STUBS), components: { Input, Text } },
+		})
+		trackedWrappers.push(w)
+		contactServiceMock.getContacts.mockResolvedValueOnce([])
+		await w.setProps({ show: true })
+		await flushPromises()
+		await w.find('[data-testid="address-input"]').setValue(VALID_ADDRESS)
+		const name = w.get('[data-testid="contact-name-input"]')
+		await name.setValue("0x0c2b7e..4b5c")
+		await flushPromises()
+
+		const sentence = w.get('[data-testid="contact-name-address-like"]')
+		expect(sentence.element.textContent?.trim()).toBe("A name can't look like an address. Use a word, like Ana.")
+		expect(FIELDS_SOURCE).toMatch(/\.refusal \{\s*composes: type--body from global;[^}]*color: var\(--txt-danger\);/)
+		expect(name.attributes()).toMatchObject({ "aria-invalid": "true", "aria-describedby": sentence.attributes("id") })
+		expect(w.get('[data-testid="form-submit"]').attributes("disabled")).toBeDefined()
+		await w.get('[data-testid="form-submit"]').trigger("click")
+		expect(contactServiceMock.addContact).not.toHaveBeenCalled()
+
+		await name.setValue("Ana")
+		await flushPromises()
+		expect(w.find('[data-testid="contact-name-address-like"]').exists()).toBe(false)
+		expect(w.get('[data-testid="form-submit"]').attributes("disabled")).toBeUndefined()
 	})
 
 	test("a well-formed address off the curve disables submit and saves nothing", async () => {

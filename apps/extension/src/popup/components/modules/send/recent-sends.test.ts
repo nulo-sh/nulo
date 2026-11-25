@@ -108,10 +108,10 @@ describe("recentRecipients", () => {
 })
 
 describe("isKnownAddress", () => {
-	const known = { contacts: [{ address: BEN }], accounts: [{ address: OWN }], sends: [send(CLO, 1)] }
+	const known = { accounts: [{ address: OWN }], sends: [send(CLO, 1)] }
 
-	test("a contact, an own account or a past send, in any case", () => {
-		for (const address of [BEN, OWN, CLO.toUpperCase().replace("0X", "0x")]) expect(isKnownAddress(address, known), address).toBe(true)
+	test("an own account or a past send, in any case", () => {
+		for (const address of [OWN, CLO.toUpperCase().replace("0X", "0x")]) expect(isKnownAddress(address, known), address).toBe(true)
 	})
 
 	test("an address with no record is unknown", () => {
