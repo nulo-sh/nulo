@@ -1,3 +1,4 @@
+import { RETIRED_CHAINS, retiredChain } from "@/utils/chain-ids"
 import { pluralize } from "@/utils/plural"
 
 /** An imported account a restore kept for a network the new profile lacks, its name cleaned. */
@@ -26,7 +27,24 @@ function heldSubject(names: readonly string[]): string {
 	return listed(names, (count) => `${count} more imported ${pluralize(count, "account", "accounts")}`)
 }
 
+/** One sentence pair per retired network, so the text stays bounded however many accounts it held. */
 function heldAccountsText(held: readonly HeldAccount[]): string {
+	const retired = RETIRED_CHAINS.flatMap((chain) => {
+		const on = held.filter((account) => account.chainId === chain.chainId)
+		return on.length ? [retiredAccountsText(chain.name, on)] : []
+	})
+	const waiting = held.filter((account) => !retiredChain(account.chainId))
+	return [...retired, ...(waiting.length ? [waitingAccountsText(waiting)] : [])].join(" ")
+}
+
+/** No node serves a retired chain, so there is no step to offer. */
+function retiredAccountsText(network: string, held: readonly HeldAccount[]): string {
+	const one = held.length === 1
+	const subject = heldSubject(held.map((account) => `“${account.name}”`))
+	return `${subject} ${one ? "was" : "were"} not restored. ${one ? "It was" : "They were"} on ${network}, which has been retired.`
+}
+
+function waitingAccountsText(held: readonly HeldAccount[]): string {
 	const subject = heldSubject(held.map((account) => `“${account.name}”`))
 	const chains = [...new Set(held.map((account) => account.chainId))].map(String)
 	const network =
@@ -37,6 +55,12 @@ function heldAccountsText(held: readonly HeldAccount[]): string {
 	const it = one ? "it" : "them"
 	const file = one ? "its account file" : "their account files"
 	return `${subject} ${one ? "was" : "were"} not restored. Add ${network} to restore ${it}, or import ${it} again from ${file}. Turn on Developer Mode in Settings to add a network.`
+}
+
+/** The error log's line for a held account. The data viewer does not wrap, so a retired network's name leads. */
+export function heldAccountRestoreError(chainId: number): string {
+	const retired = retiredChain(chainId)
+	return retired ? `${retired.name} has been retired. Not restored.` : `Waiting for a network with chain ID ${chainId}`
 }
 
 /** Home's reminder of the networks a restore left behind. */

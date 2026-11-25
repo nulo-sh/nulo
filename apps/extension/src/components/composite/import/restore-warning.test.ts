@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import {
+	heldAccountRestoreError,
 	RESTORE_AGAIN_OTHER_BACKUP,
 	restoreAgainDoneText,
 	restoreAgainFailedText,
@@ -83,6 +84,42 @@ describe("restoreWarningText — imported accounts held for a network", () => {
 		],
 	])("%s", (_, names, accounts, sentence) => {
 		expect(restoreWarningText(names, true, accounts)).toBe(sentence)
+	})
+})
+
+describe("restoreWarningText — imported accounts on a retired network", () => {
+	const [RC1, RC3, ALPHA_V5] = [2904119610, 3415328944, 4248422646]
+	const held = (name: string, chainId: number) => ({ name, chainId })
+	const opening = "Profile import completed with some errors."
+	const closing = "You can review the details or continue."
+	test.each([
+		[
+			"one account",
+			[held("Trading", RC1)],
+			"The imported account “Trading” was not restored. It was on Testnet V6-RC.1, which has been retired.",
+		],
+		[
+			"two accounts on one retired network",
+			[held("A", RC1), held("B", RC1)],
+			"The imported accounts “A” and “B” were not restored. They were on Testnet V6-RC.1, which has been retired.",
+		],
+		[
+			"accounts on two retired networks, in the order the networks retired",
+			[held("A", RC3), held("B", RC1)],
+			"The imported account “B” was not restored. It was on Testnet V6-RC.1, which has been retired. The imported account “A” was not restored. It was on Testnet V6-RC.3, which has been retired.",
+		],
+		[
+			"more than three accounts on one retired network",
+			["A", "B", "C", "D", "E"].map((name) => held(name, ALPHA_V5)),
+			"“A”, “B”, “C”, and 2 more imported accounts were not restored. They were on Alpha V5, which has been retired.",
+		],
+	])("%s", (_, accounts, sentence) => {
+		expect(restoreWarningText([], true, accounts)).toBe(`${opening} ${sentence} ${closing}`)
+	})
+
+	test("the View Errors line leads with a retired network's name; any other chain keeps waiting for its network", () => {
+		expect(heldAccountRestoreError(RC1)).toBe("Testnet V6-RC.1 has been retired. Not restored.")
+		expect(heldAccountRestoreError(677692)).toBe("Waiting for a network with chain ID 677692")
 	})
 })
 

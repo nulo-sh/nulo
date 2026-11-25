@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { Icon, RowAction, Toggle } from "@nulo/design"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { type DOMWrapper, flushPromises, mount } from "@vue/test-utils"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import {
 	approval,
 	beforeunloadAdds,
@@ -307,6 +308,22 @@ describe("capabilities window — account widening consent (real rows)", () => {
 		expect(resolveInteractionMock).toHaveBeenCalledTimes(1)
 		expect(resolvedArg().selectedAccounts).toEqual([`aztec:1:${A.address}`, `aztec:1:${B.address}`])
 		expect(resolvedArg().granted).toEqual([accountsCap])
+	})
+
+	test("a picker row names its network as the person named it; a held row says SHARED", async () => {
+		const onTestnet = [A, B].map((account) => ({ ...account, chainId: CHAIN_IDS.TESTNET }))
+		approval.appStore.networks = [{ id: "n-testnet", chainId: CHAIN_IDS.TESTNET, name: "Staging" }]
+		approval.payloadToLoad = {
+			params: { delta: [accountsCap], existingGrants: [], availableAccounts: onTestnet, grantedAccounts: [A.address] },
+			session: { chainId: String(CHAIN_IDS.TESTNET) },
+		}
+		w = realRows()
+		await completeInit()
+		const [held, open] = rows()
+		expect(held.text()).toContain("SHARED")
+		expect(held.text()).not.toContain("STAGING")
+		expect(open.text()).toContain("STAGING")
+		expect(open.text()).not.toContain("TESTNET")
 	})
 
 	test("a flag-only request (field-diff) approves with no new row and keeps the held row locked", async () => {

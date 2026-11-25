@@ -60,3 +60,8 @@ export const RETIRED_CHAINS: readonly RetiredChain[] = [
 	// Never pinned: the public Mainnet node served it until the V6 rollup replaced it.
 	{ chainId: 4248422646, l1ChainId: 1, rollupVersion: 4248422647, network: "Alpha", major: 5, name: "Alpha V5" },
 ]
+
+/** The retired chain with this id, if any. */
+export function retiredChain(chainId: number): RetiredChain | undefined {
+	return RETIRED_CHAINS.find((chain) => chain.chainId === chainId)
+}

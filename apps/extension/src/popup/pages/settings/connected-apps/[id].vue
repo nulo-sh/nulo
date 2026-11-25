@@ -13,7 +13,7 @@ import { Dropdown } from "@/components/ui/Dropdown"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 import DetailsTable from "@/components/composite/capabilities/DetailsTable.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
-import { getChainName } from "@/components/ui/utils.js"
+import { getNetworkName } from "@/components/ui/utils.js"
 
 /** Services */
 import { AccountServiceClient } from "@/wallet/services/account/client"
@@ -68,7 +68,7 @@ const events = computed(() => sessionParams.value.events)
 const sessionChainName = computed(() => {
 	const cid = session.value?.chainId
 	if (cid === undefined || cid === null) return ""
-	return getChainName(Number(cid))
+	return getNetworkName(Number(cid), appStore.networks)
 })
 
 const expiryFormatted = computed(() => formatSessionExpiry(session.value?.expiry))
@@ -317,13 +317,16 @@ onBeforeUnmount(() => {
 			<SectionLabel label="Shared accounts" :count="accounts.length" />
 
 			<ItemsContainer v-if="accounts.length">
+				<!-- FSI and PDI isolate the network's name, which a person may write right to left, so its
+				     direction cannot pull the separator or the address's digits into its run. -->
 				<SettingItem
 					v-for="acc in accounts"
 					:key="`${acc.chainId}:${acc.address}`"
 					:title="getAccountAlias(acc)"
 					titleVariant="name"
-					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
+					:description="`⁨${getNetworkName(acc.chainId, appStore.networks).toUpperCase()}⁩ · ${trimAddress(acc.address, 6, 4, '...')}`"
 					descriptionVariant="meta"
+					wrapDescription
 					raw
 					data-testid="connected-app-account-row"
 				>
@@ -349,7 +352,7 @@ onBeforeUnmount(() => {
 
 			<Flex v-if="sessionChainName" align="start" gap="4">
 				<Text variant="label-section" color="secondary">Network:</Text>
-				<Text variant="value" color="secondary" :style="{ lineHeight: '1.2' }">
+				<Text variant="value" color="secondary" :class="$style.network_value" :style="{ lineHeight: '1.2' }">
 					{{ sessionChainName }}
 				</Text>
 			</Flex>
@@ -441,6 +444,11 @@ onBeforeUnmount(() => {
 	.url {
 		overflow-wrap: anywhere;
 	}
+}
+
+/* A network's name, a person's own of up to 25 characters with no space, breaks rather than run past the view. */
+.network_value {
+	overflow-wrap: anywhere;
 }
 
 .icon_btn {

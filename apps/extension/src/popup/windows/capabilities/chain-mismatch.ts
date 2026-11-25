@@ -1,4 +1,4 @@
-import { getChainName } from "@/components/ui/utils"
+import { getNetworkName } from "@/components/ui/utils"
 import type { Network } from "@/wallet/services/network/client"
 
 export interface DappChainView {
@@ -17,7 +17,7 @@ export function resolveDappChain(sessionChainId: string, networks: readonly Netw
 	const network = networks.find((n) => n.chainId === chainId)
 	return {
 		chainId,
-		name: network?.name ?? getChainName(chainId),
+		name: getNetworkName(chainId, networks),
 		network,
 		mismatch: activeChainId !== undefined && activeChainId !== chainId,
 	}

@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { nextTick } from "vue"
+import { declarationsOf, parseSource } from "../../../../scripts/type-roles/source-scan"
 import AccountSelectRow from "./AccountSelectRow.vue"
-
-vi.mock("@/components/ui/utils.js", () => ({
-	getChainName: (chainId: number) => `chain-${chainId}`,
-}))
 
 vi.mock("@/wallet/utils/caip", () => ({
 	formatCaipAccount: (chainId: number, address: string) => `aztec:${chainId}:${address}`,
@@ -25,7 +22,7 @@ const baseAccount = { address: `0x${"0a".repeat(32)}`, name: "Alpha", chainId: 1
 
 const factory = (props: Record<string, unknown> = {}) =>
 	mount(AccountSelectRow, {
-		props: { account: baseAccount, selected: false, ...props },
+		props: { account: baseAccount, chainName: "Staging", selected: false, ...props },
 		attachTo: document.body,
 		global: { stubs: STUBS },
 	})
@@ -48,11 +45,37 @@ describe("AccountSelectRow", () => {
 		expect(root(factory({ selected: true })).attributes("data-selected")).toBe("true")
 	})
 
-	test("shows the name, the uppercased chain and the trimmed address", () => {
-		const w = factory({ account: { ...baseAccount, chainId: 7 } })
+	test("shows the name, the uppercased network name and the trimmed address", () => {
+		const w = factory({ chainName: "My Devnet" })
 		expect(w.text()).toContain("Alpha")
-		expect(w.text()).toContain("CHAIN-7")
+		expect(w.text()).toContain("MY DEVNET")
 		expect(w.text()).toContain("0x0a0a...0a0a")
+	})
+
+	test("the network's name goes under the account's name when the two do not fit and wraps there, never cut; SHARED stays beside it", () => {
+		const classesOf = (w: Row, text: string) => {
+			const label = w.findAll("span").find((span) => span.text() === text)
+			return { label: label?.classes() ?? [], line: label?.element.parentElement?.className ?? "" }
+		}
+		const network = classesOf(factory({ chainName: "W".repeat(25) }), "W".repeat(25))
+		expect(network.label.some((name) => /network_label/.test(name))).toBe(true)
+		expect(network.line).toMatch(/name_line/)
+		const shared = classesOf(factory({ selected: true, locked: true }), "SHARED")
+		expect(shared.label.some((name) => /network_label/.test(name))).toBe(false)
+		expect(shared.line).not.toMatch(/name_line/)
+
+		const parsed = parseSource("apps/extension/src/popup/windows/capabilities/AccountSelectRow.vue")
+		expect(declarationsOf(parsed, ".row_text > .name_line")).toEqual({ "flex-wrap": "wrap", "row-gap": "2px" })
+		expect(declarationsOf(parsed, ".name_line > .network_label")).toEqual({
+			"flex-shrink": "1",
+			"min-width": "0",
+			"overflow-wrap": "anywhere",
+		})
+		expect(declarationsOf(parsed, ".chain_label")).toEqual({
+			composes: "type--meta from global",
+			"flex-shrink": "0",
+			color: "var(--nulo-secondary)",
+		})
 	})
 
 	test("selects through its target: a click toggles, and aria-pressed follows the selection", async () => {
@@ -240,5 +263,6 @@ describe("AccountSelectRow", () => {
 		expect(rename(w).exists()).toBe(false)
 		expect(field(w).exists()).toBe(false)
 		expect(w.text()).toContain("SHARED")
+		expect(w.text()).not.toContain("STAGING")
 	})
 })
