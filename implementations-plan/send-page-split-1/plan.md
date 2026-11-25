@@ -1,7 +1,7 @@
 ---
 plan: send-page-split-1
 tier: mid
-status: approved (final Codex pass approve; orchestrator auto-continue); arc 1 landed (#2014); arc 2 amended at 48ef589bd for #2018
+status: approved (final Codex pass approve; orchestrator auto-continue); arc 1 landed (#2014); arc 2 amended at 48ef589bd for #2018 and landed (#2020); arc 3 re-derived at 5341e818a
 issues: "#1930 (arc 3 closes it)"
 driver: claude-code
 claude_model: opus
@@ -10,7 +10,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); Codex gpt-6.1-sol high + Opus Plan leg; final fresh Codex pass
-base: origin/dev at 6bab0009e (arc 2: 48ef589bd)
+base: origin/dev at 6bab0009e (arc 2: 48ef589bd; arc 3: 5341e818a)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
@@ -82,7 +82,7 @@ post_implementation_hardening: not scheduled
 |---|---|---|---|
 | 1 | `src/composables/useSendData.ts`, `useSendData.test.ts` | `send.vue` (`:125-260`, `:929-1003`, mount, W8, unmount slot), `src/types/auto-imports.d.ts`, `.eslintrc-auto-import.json` | none |
 | 2 | `src/composables/useSendEstimate.ts`, `useSendEstimate.test.ts` | `send.vue` at 48ef589bd (`:442-459`, `:613-667`, `:764-783`, `:850-884`, unmount `:986-987`), the two generated files | none |
-| 3 | `src/composables/useSendFiatGate.ts`, `useSendFiatGate.test.ts` | `send.vue` (`:421-443`, `:682-695`), the two generated files, plan close-out | `popup/pages/send-fiat-gate{,.test}.ts` → `utils/` |
+| 3 | `src/composables/useSendFiatGate.ts`, `useSendFiatGate.test.ts` | `send.vue` at 5341e818a (`:48`, `:394-431`, `:622-635`), the two generated files (the hook, and the helper's exports: the auto-import scans `src/utils/`), plan close-out | `popup/pages/send-fiat-gate{,.test}.ts` → `utils/` |
 
 **Client table** (settled question 3; identical before and after; lines at 6bab0009e).
 
@@ -125,7 +125,17 @@ post_implementation_hardening: not scheduled
 | `snapshotTransfer` `:723` | `handoffFeeEstimate()` when an id exists | `handoff()` under the same name |
 | Unmount `:986-987` | `cancelFeeEstimate()`; `clearTimeout(estimateSlowTimer)`, after the execution disconnect | `estimate.dispose()` does both, same slot |
 
-**Site table, arc 3.** `fiatGate` and its three derivatives: same `evaluateFiatGate` / `requoteReason` calls on the same refs. `canSubmitNow`: `allowsSendNow()` makes today's wall-clock call. `handleRequote` unchanged.
+**Site table, arc 3** (lines at 5341e818a).
+
+| Site | Before | After |
+|---|---|---|
+| `liveQuote`, `proxyTicker` `:409-412` | `prices.quoteFor` / `priceEntryFor` on `activeToken`'s chain and contract | the same calls in the hook; `token` is `activeToken` |
+| `fiatGate` and its three derivatives `:420-431` | `evaluateFiatGate({ fiatMode, guard, liveUsd, now: gateNow ?? Date.now() })`; `requoteReason(frozenUsd, live usd)` | the same expressions verbatim, `now` read last; `now` is `gateNow` |
+| `canSubmitNow` `:622` | two checks, then `evaluateFiatGate({ …, now: Date.now() }).ok` | two checks, then `allowsSendNow()`: the same call at the press |
+| `requestEstimate` `:780` (#2018) | `if (fiatGuard.value?.converting) amountCardRef.value?.convertNow()`, then the hook's `request` | unchanged; `fiatGuard` is the hook's ref |
+| Card writes | `v-model:fiatMode`, `v-model:fiatGuard` assign the page's refs inside the card's emit (a typed USD figure's conversion, the unit switch, `convertNow`) | the same handlers assign the hook's refs in the same task (a destructured binding compiles to `isRef(x) ? x.value = $event : null`) |
+| Readers | `isAllowedToSend` `:457`, `handleRequote` `:432`, the template | the hook's refs, same reads |
+| Setup order | `liveQuote`, `proxyTicker`, `fiatMode`, `fiatGuard`, `amountCardRef`, `gateNow`, the gate | `amountCardRef`, `gateNow`, the hook: lazy computeds and plain refs, so no source is read at setup and no subscription moves (I1) |
 
 **Watcher table** (each watcher created at its old place in the sequence, same getters, same flush, so first-subscription order holds; Before: lines at 48ef589bd).
 
@@ -143,7 +153,7 @@ post_implementation_hardening: not scheduled
 
 **Unmount order.** Unchanged, line for line: debug line; `cancelled`; data `dispose()` (was `identityFetchSeq++`); `closeSheets()`; contact client; `balances.dispose()`; balance client; token client; `prices.dispose()`; price client; `legal.dispose()`; execution unless a submit is in flight; estimate `dispose()` (was cancel, clear timer); the six resets.
 
-**Budget table** (Biome 2.5.13; lines / cognitive complexity; arcs 1 and 2 on their final files).
+**Budget table** (Biome 2.5.13; lines / cognitive complexity; arcs 1 and 2 on their final files, arc 3 on a draft at 5341e818a).
 
 | Function | Lines | Complexity |
 |---|---|---|
@@ -153,7 +163,7 @@ post_implementation_hardening: not scheduled
 | `useSendEstimate` | 67 | under 2 |
 | `transferFeeAsk` (module level) | 13 | under 2 |
 | estimator callback, `onQueued`, `onError`, `request` | 9, under 6, 6, 7 | under 2, 7, 4, 2 |
-| `useSendFiatGate` | 29 | under 2; `proxyTicker` 3, `fiatGate` 2 |
+| `useSendFiatGate` | 23 | under 2; `proxyTicker` 3, `fiatGate` 2, `allowsSendNow` under 2 |
 
 Biome's count skips blank, comment and bracket-only lines (measured; a by-hand count of the same draft gives 80 with closers). Inline in the hook, the RPC call puts `useSendEstimate` near 80 and `fetchIdentity` at 19 complexity: hence the two module-level functions. The implementer re-measures the final typed files; if `useSendEstimate` passes 72, `onQueued` moves to module level beside `transferFeeAsk`. A function over budget is cut differently, never accepted.
 
@@ -191,10 +201,10 @@ None. No template, style, copy, testid, Tab stop or Enter rule changes; no toast
 1. `git mv` `send-fiat-gate.ts` and its test to `src/utils/`; repoint the imports.
 2. Add `useSendFiatGate.ts`; in `send.vue` call it after `gateNow`; `canSubmitNow` calls `allowsSendNow()`.
 3. Add `useSendFiatGate.test.ts`, at least ten cases: the quote and ticker for the token, none without a price, the gate inert outside fiat mode, blocked without a guard, stale needs a requote, moved, the ticker re-evaluates, `allowsSendNow` refuses an expiry between ticks and passes a fresh guard at the live quote, a token change re-reads the quote.
-4. Mutants: `allowsSendNow` on the ticker's time; the reactive gate on `Date.now()` alone, ignoring the ticker.
+4. Mutants: `allowsSendNow` on the ticker's time; the reactive gate on `Date.now()` alone, ignoring the ticker; the page's `convertNow` check reads a ref of its own instead of the hook's `fiatGuard` (red on `send.integration.test.ts` "a side picked starts one estimate at once, for the converted amount").
 5. Close-out per Post-implementation.
 
-**Validation gate**: phase 1's static gates. E2E as phase 1 (retry 0, both browsers): smoke `send-keyboard`; network `fiat-send`.
+**Validation gate**: phase 1's static gates. E2E as phase 1 (retry 0, both browsers): smoke `send-keyboard`; network `fiat-send`, `send-amount-exact` in one invocation: the three specs that reach the fiat testids (the unit switch, the USD field, the converting and derived figures). No spec reaches `send-fiat-requote`; the page suites cover it.
 
 ## Delivery
 
