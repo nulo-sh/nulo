@@ -27,6 +27,7 @@ import { UtilityExecutionResult } from "@aztec-labs/stdlib/tx"
 import { toAppFacingSimulationResult } from "./app-facing-results"
 import { simulationFixture } from "./app-facing-results.fixtures"
 import { ContractResolver } from "./contract-resolver"
+import type { RunReads } from "./run-reads"
 import { ViewExecutor, type ViewExecutorDeps } from "./view-executor"
 
 const fastPathMocks = vi.hoisted(() => ({
@@ -184,6 +185,23 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 		// simulated account is the stubbed pass-through; real signing keys
 		// never enter PXE during a dApp simulateTx.
 		expect(simArgs[2]).toEqual(["0xacct"])
+	})
+
+	test("the standard simulation builds under a run that is closed once it answers, or fails", async () => {
+		const { executor, deps, pxe } = makeHarness()
+		const op = () => makeSimOp({ opts: { from: addr(VALID_ADDR), additionalScopes: [addr(VALID_ADDR)] } })
+		await executor.executeAztecSimulateTx(op())
+		pxe.simulateTx.mockRejectedValueOnce(new Error("simulation failed"))
+		await expect(executor.executeAztecSimulateTx(op())).rejects.toThrowError("simulation failed")
+
+		// A closed run keeps nothing: it fetches an artifact every time it is asked.
+		for (const call of (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls) {
+			const fetch = vi.fn(async (): Promise<[string, never]> => ["class", {} as never])
+			const reads = call[5] as RunReads
+			await reads.artifact("class", fetch)
+			await reads.artifact("class", fetch)
+			expect(fetch).toHaveBeenCalledTimes(2)
+		}
 	})
 
 	test("fast path result=null falls back to the standard path", async () => {

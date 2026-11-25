@@ -21,6 +21,7 @@ import { ContractNotRegisteredError, ScopeViolationError } from "@nulo/extension
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { Action } from "./spec"
 import { ContractResolver, ensureRegistered } from "./contract-resolver"
+import { RunReads } from "./run-reads"
 
 /** Minimal IConfig stand-in — avoids ConfigStore's chrome.storage touch
  *  which fires at construction time, before vitest's chrome stub is installed. */
@@ -184,6 +185,25 @@ describe("ContractResolver.resolveArtifacts", () => {
 		const pxe = fakePxe()
 		const result = await resolver.resolveArtifacts(pxe, new Map())
 		expect(result.size).toBe(0)
+	})
+
+	test("a run fetches a class once across its builds, a failed fetch again, and nothing is kept past the run", async () => {
+		const instances = new Map([["0xAA", fakeInstance("0x01")]])
+		const getContractArtifact = vi.fn(async (): Promise<ContractArtifact | undefined> => ({}) as ContractArtifact)
+		const pxe = fakePxe({ getContractArtifact })
+		const run = new RunReads()
+
+		getContractArtifact.mockResolvedValueOnce(undefined)
+		await expect(resolver.resolveArtifacts(pxe, instances, run)).rejects.toThrowError("Contract artifact not found for class 0x01")
+		const first = await resolver.resolveArtifacts(pxe, instances, run)
+		const second = await resolver.resolveArtifacts(pxe, instances, run)
+		expect(second.get("0x01")).toBe(first.get("0x01"))
+		expect(getContractArtifact).toHaveBeenCalledTimes(2)
+
+		run.close()
+		await resolver.resolveArtifacts(pxe, instances, run)
+		await resolver.resolveArtifacts(pxe, instances)
+		expect(getContractArtifact).toHaveBeenCalledTimes(4)
 	})
 })
 
