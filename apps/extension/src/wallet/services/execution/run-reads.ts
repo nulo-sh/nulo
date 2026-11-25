@@ -47,7 +47,8 @@ export class RunReads {
 	/**
 	 * The node one build reads through, with that build's independent reads already sent. It
 	 * answers them to this build alone and is never handed on: what a build returns carries `node`
-	 * itself. A read that fails here is asked again by the build, which reports it where it always
+	 * itself. A read that has failed by the time the build asks is asked again; one the build joins
+	 * in flight gives the build its own failure. Either way the build reports it where it always
 	 * did. Call it only once the build may read: after its chain identity assert.
 	 */
 	public forBuild(node: AztecNode, reads: BuildReads): AztecNode {

@@ -146,6 +146,27 @@ describe("the node one build reads through", () => {
 		expect(asked.getPredictedMinFees).toHaveBeenCalledTimes(2)
 	})
 
+	test("a build that joins reads in flight gets each read's own outcome, from one request each", async () => {
+		const { node, asked, reads } = setup()
+		let refuse: (error: Error) => void = () => {}
+		asked.getContract.mockImplementationOnce(
+			() =>
+				new Promise((_, reject) => {
+					refuse = reject
+				}),
+		)
+		const build = reads.forBuild(node, {
+			account: account({ witness: false }),
+			contracts: [A.toString(), B.toString()],
+			minFees: false,
+		})
+		const [ofA, ofB] = [build.getContract(A), build.getContract(B)]
+		refuse(new Error("node down"))
+		await expect(ofA).rejects.toThrowError("node down")
+		expect(await ofB).toEqual({ of: B.toString(), fees: 1 })
+		expect(asked.getContract).toHaveBeenCalledTimes(2)
+	})
+
 	test("a closed run sends nothing ahead and hands on the node itself", () => {
 		const { node, asked, reads } = setup()
 		reads.close()
