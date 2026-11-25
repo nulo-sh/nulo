@@ -1,7 +1,7 @@
 ---
 plan: send-page-split-1
 tier: mid
-status: approved (final Codex pass approve; orchestrator auto-continue); arc 1 landed (#2014); arc 2 amended at 48ef589bd for #2018 and landed (#2020); arc 3 re-derived at 5341e818a
+status: completed (arc 1 #2014, arc 2 #2020; arc 3 closes #1930)
 issues: "#1930 (arc 3 closes it)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,14 @@ base: origin/dev at 6bab0009e (arc 2: 48ef589bd; arc 3: 5341e818a)
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-25.
+- **Status:** completed (pending the orchestrator's merge of arc 3's PR, which closes #1930).
+- **Shipped:** three C1 composables in `src/composables/`, beside `useSendReview`: `useSendData` (#2014: identity-scoped reads, their fences, token and contact events), `useSendEstimate` (#2020: the estimator, the queued answer, the slow clock, the failure snack; the pause named `ESTIMATE_PAUSE_MS`), `useSendFiatGate` (arc 3: the live quote, the card's two models, the reactive gate on the page's ticker, `allowsSendNow()` at the wall clock), with `send-fiat-gate.ts` moved to `src/utils/`. `send.vue` went from 1,359 to 1,194 lines. Every client stays page-owned; the unmount order, the watcher order and the template are unchanged; no page-suite edit (only #2018, outside this plan, changed them). No visible change.
+- **Known limits:** #2010 (a port reopened after unmount by a late add-token import or the unmount's cancel), #2019 (a Firefox e2e's 60 s submit wait under real proving). **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` sits at its budget (8,148 of 8,192 bytes) and already holds the C1 `dispose()` line and the Vue model-timing line this lane leaned on; the per-arc detail is in `lessons/`. **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
 # send-page-split-1: Send's data, estimate and fiat gate move into composables; the page keeps orchestration
 
@@ -197,7 +205,7 @@ None. No template, style, copy, testid, Tab stop or Enter rule changes; no toast
 
 **Validation gate**: phase 1's static gates. E2E as phase 1 (retry 0, both browsers): smoke `send-fee-privacy`, `send-keyboard`, `send-picker-add`; network prover-on `fee-methods`, `fee-shortfall-recheck`, `fee-sponsor-funding`, `send-amount-clamp`, `snack-placement`, `send-picker`, `send-amount-exact`, `fiat-send` in one invocation; proverless `NULO_E2E_PROVERLESS=1 ... failed-send-check same-token-concurrent-sends send-chaos` in one, with `NULO_E2E_CHAOS=1` and `NULO_E2E_CHAOS_SEED` set to each of CI's two fixed seeds in turn (`1095865833`, `1960252198`; CI's chaos jobs run both on each browser), the second seed in a run of `send-chaos` alone: unarmed, `send-chaos` skips. `send-picker-add`, `send-picker`, `send-amount-exact` and `fiat-send` drive #2018's bindings (a typed amount, Max, the unit switch, a typed USD figure, the person step's picks).
 
-### Phase 3 (arc 3): `useSendFiatGate` and close-out
+### Phase 3 (arc 3): `useSendFiatGate` and close-out ✓
 1. `git mv` `send-fiat-gate.ts` and its test to `src/utils/`; repoint the imports.
 2. Add `useSendFiatGate.ts`; in `send.vue` call it after `gateNow`; `canSubmitNow` calls `allowsSendNow()`.
 3. Add `useSendFiatGate.test.ts`, at least ten cases: the quote and ticker for the token, none without a price, the gate inert outside fiat mode, blocked without a guard, stale needs a requote, moved, the ticker re-evaluates, `allowsSendNow` refuses an expiry between ticks and passes a fresh guard at the live quote, a token change re-reads the quote.
@@ -236,6 +244,11 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 2 r1 | Codex, gpt-6.1-sol (session 01a21047) | findings: 2 | the slow-clock case now resolves before the deadline and proves an early answer stops the clock (it also reds a dropped W3); a redundant test comment cut; M4 traced equivalent (the engine's own scope dispose sends the same remote cancels in the same unmount) | none |
 | arc 2 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
 | arc 2 | the lead (Opus 5.5), own read | clean | none (deviation: lessons/phase-2.md) | none |
+| arc 3 r1 | Codex, gpt-6.1-sol (session 01a21103) | findings: 1 | a comment that restated its field's name cut | none |
+| arc 3 r2 | Codex, resumed | **clean** | the fix verified | none |
+| arc 3 | Opus 5.5 (general-purpose) | findings: 2, and a nit | `allowsSendNow`'s comment claimed a drift as well as an expiry (the press re-reads the clock only for the snapshot's expiry); the moved helper's header named a page and a sibling it left, with a milestone tag; the conversion case dropped an assertion its own write makes true | none |
+| arc 3 r3 | Codex, resumed | **clean** | the Opus fixes verified; no regression | none |
+| cross-arc | Codex, gpt-6.1-sol, fresh (session 01a2110e) | **clean** | setup order, first subscriptions, the unmount sequence against 6bab0009e and shared-ref timing hold across the three arcs | none |
 
 ## Seeds (not run; orchestrator-owned)
 
