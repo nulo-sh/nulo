@@ -20,7 +20,7 @@ function setup() {
 	const tickers: Record<string, string> = { "1:0xa": "AAA", "1:0xb": "BBB", "1:0xc": "CCC" }
 	const quoteFor = vi.fn((chainId: number | undefined, contract: string | undefined): PriceQuote | undefined => {
 		const key = keyOf(chainId, contract)
-		return key in usd.value ? { coingeckoId: key, usd: usd.value[key], fetchedAt: T0 } : undefined
+		return key in usd.value ? { coingeckoId: key, usd: usd.value[key], fetchedAt: T0, providerUpdatedAt: null } : undefined
 	})
 	const priceEntryFor = vi.fn((chainId: number | undefined, contract: string | undefined): PriceMapEntry | undefined => {
 		const ticker = tickers[keyOf(chainId, contract)]
