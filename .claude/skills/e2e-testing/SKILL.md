@@ -287,10 +287,12 @@ runtime env var can never arm a build-time flag.
 - **Shard timings** — both suites' `--shard` splits by `apps/extension/tests/e2e/shard-timings.json`
   (README § CI sharding). Refresh it with `bun scripts/ci-cd/e2e-timings.ts` from the repo root: it needs a `gh` login,
   reads each PR lane's latest green runs (one per branch) in about a minute, and prints each run's shard
-  spread. Do it when a lane's shards end more than 2 minutes apart, after adding or removing a file over a
-  minute long, or after an Aztec, browser or harness change; commit the record alone after reading its
-  diff. A run it drops says why (a file line beyond vitest's count, a file in two shards). Never edit the
-  record by hand; a new file needs no entry.
+  spread. Do it when a lane's longest shard leads the median of that lane's shards by more than 2 minutes
+  in two consecutive PR runs, after adding or removing a file over a minute long, or after an Aztec,
+  browser or harness change. The gap from the median is the trigger, not the longest-minus-shortest spread
+  the script prints: at seven shards, two shards running short already spread a run past 2 minutes.
+  Commit the record alone after reading its diff. A run it drops says why (a file line beyond vitest's
+  count, a file in two shards). Never edit the record by hand; a new file needs no entry.
 - **Nightly** (`nightly.yml`, scheduled daily) mirrors the lanes on both browsers with config-default
   retries, plus the seeded `send-chaos` run on each, and publishes a prerelease only when every one is
   green; it builds `dev` only, so it is never a branch soak. **Soak** (`extension-network-e2e-soak.yml`)
