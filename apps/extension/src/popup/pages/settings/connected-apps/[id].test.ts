@@ -8,6 +8,7 @@ import DetailsTable from "@/components/composite/capabilities/DetailsTable.vue"
 import PermissionRow from "@/components/composite/capabilities/PermissionRow.vue"
 import { useAppStore } from "@/stores/app.store"
 import { CHAIN_IDS } from "@/utils/chain-ids"
+import { declarationsOf, parseSource } from "../../../../../scripts/type-roles/source-scan"
 import ConnectedApp from "./[id].vue"
 
 const mocks = vi.hoisted(() => ({
@@ -419,9 +420,14 @@ describe("Settings › Connected app › the Network line", () => {
 		useAppStore().networks = [{ chainId, name }] as never
 		await flushPromises()
 		expect(network(w)).toBe(name)
+		const value = w.findAll("span").find((span) => span.text() === "Network:")?.element.nextElementSibling
+		// A name with no space breaks on both lines rather than run past the view.
+		expect(value?.className).toMatch(/network_value/)
+		const parsed = parseSource("apps/extension/src/popup/pages/settings/connected-apps/[id].vue")
+		expect(declarationsOf(parsed, ".network_value")).toEqual({ "overflow-wrap": "anywhere" })
 		const accountRow = w.get('[data-testid="connected-app-account-row"]')
 		expect(accountRow.attributes("description")).toBe(`${row} · 0x2a2a...2a2a`)
-		// Wrapping, the address goes under a name too long for one line with it, and a short one reads as before.
+		// Wrapping puts the address under a name too long to share its line; a short one reads as before.
 		expect(accountRow.attributes("wrapdescription")).toBeDefined()
 	})
 })

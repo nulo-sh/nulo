@@ -350,7 +350,7 @@ onBeforeUnmount(() => {
 
 			<Flex v-if="sessionChainName" align="start" gap="4">
 				<Text variant="label-section" color="secondary">Network:</Text>
-				<Text variant="value" color="secondary" :style="{ lineHeight: '1.2' }">
+				<Text variant="value" color="secondary" :class="$style.network_value" :style="{ lineHeight: '1.2' }">
 					{{ sessionChainName }}
 				</Text>
 			</Flex>
@@ -442,6 +442,11 @@ onBeforeUnmount(() => {
 	.url {
 		overflow-wrap: anywhere;
 	}
+}
+
+/* A network's name, a person's own of up to 25 characters with no space, breaks rather than run past the view. */
+.network_value {
+	overflow-wrap: anywhere;
 }
 
 .icon_btn {
