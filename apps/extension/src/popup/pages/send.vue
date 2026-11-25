@@ -45,7 +45,6 @@ import { sentenceName } from "@/utils/string"
 import { isKnownAddress, lastSendTo, parseSends, recentRecipients, sendWords, sentAgo } from "@/popup/components/modules/send/recent-sends"
 import { sendButtonLabel } from "@/popup/pages/send-labels"
 import { validateSendAmount } from "@/popup/pages/send-amount"
-import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide, sideBalanceText } from "@/components/composite/send/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
@@ -61,6 +60,7 @@ import { usePrices } from "@/composables/usePrices"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useSendData } from "@/composables/useSendData"
 import { useSendEstimate } from "@/composables/useSendEstimate"
+import { useSendFiatGate } from "@/composables/useSendFiatGate"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
@@ -391,8 +391,6 @@ const feeWaitsFor = computed(() => {
  *  balance recompute, and a deep watch runs on any change it subscribes to, so only a flip re-asks. */
 const amountSendable = computed(() => amountValidation.value.valid)
 
-/** C3 live pricing. The card freezes a session quote when fiat mode starts;
- *  the SUBMIT GATE lives here (this page owns handleSend) and fails closed. */
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 
@@ -406,29 +404,14 @@ const legalBannerAction = {
 	testId: "send-legal-review",
 	callback: () => chrome.storage.session.remove(LEGAL_DISMISSED_KEY),
 }
-const liveQuote = computed(() => prices.quoteFor(activeToken.value?.chainId, activeToken.value?.contract) ?? null)
-const proxyTicker = computed(() =>
-	liveQuote.value ? (prices.priceEntryFor(activeToken.value?.chainId, activeToken.value?.contract)?.ticker ?? null) : null,
-)
-
-const fiatMode = ref(false)
-const fiatGuard = ref(null)
 const amountCardRef = useTemplateRef("amountCardRef")
 
-/** Pure, unit-tested gate (send-fiat-gate.ts) — fail-closed by construction. */
 const gateNow = useTicker(30_000)
-const fiatGate = computed(() =>
-	evaluateFiatGate({
-		fiatMode: fiatMode.value,
-		guard: fiatGuard.value,
-		liveUsd: liveQuote.value?.usd ?? null,
-		now: gateNow.value ?? Date.now(),
-	}),
-)
-const fiatQuoteBlocked = computed(() => !fiatGate.value.ok)
-/** Distinguishes "needs explicit re-confirmation" from "just converting". */
-const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
-const fiatQuoteMoved = computed(() => requoteReason(fiatGuard.value?.frozenUsd, liveQuote.value?.usd) === "moved")
+const { liveQuote, proxyTicker, fiatMode, fiatGuard, fiatQuoteBlocked, fiatNeedsRequote, fiatQuoteMoved, allowsSendNow } = useSendFiatGate({
+	prices,
+	token: activeToken,
+	now: gateNow,
+})
 const handleRequote = (e) => {
 	// Re-freezes at the current quote and re-derives the token amount — the
 	// user sees the NEW derived amount on the card before confirming.
@@ -622,16 +605,7 @@ let cancelled = false
 const canSubmitNow = () => {
 	if (!isAllowedToSend.value || isSending.value) return false
 	if (!amountValidation.value.valid) return false
-	// The reactive gate runs on a 30s ticker — re-evaluate at TRUE wall-clock
-	// on the actual click so a snapshot cannot slip through expiry/drift by up
-	// to one tick.
-	const submitGate = evaluateFiatGate({
-		fiatMode: fiatMode.value,
-		guard: fiatGuard.value,
-		liveUsd: liveQuote.value?.usd ?? null,
-		now: Date.now(),
-	})
-	return submitGate.ok
+	return allowsSendNow()
 }
 
 /**
