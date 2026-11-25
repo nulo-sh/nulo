@@ -1,7 +1,7 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 /** Composables */
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { isRepeatOrComposing, refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
 import { clampDecimals, formatBaseUnits, parseAmountToBaseUnits, readAmountText } from "@/utils/amount"
@@ -41,8 +41,10 @@ const props = defineProps({
  *  from the page, and the card's own rest, re-clamp or clear, never emit it.
  *  `typed`: the card wrote typing into the model in this task (a keystroke, its rest on blur, or a typed
  *  USD figure's conversion), so a fee estimate it causes waits for more.
- *  `picked`: Max, the USD Max or the unit switch, which may leave the amount as it was. */
-const emit = defineEmits(["edit", "typed", "picked"])
+ *  `picked`: Max, the USD Max or the unit switch, which may leave the amount as it was.
+ *  `done`: the person left a field, after its rest or conversion is written, or pressed Enter in it, so
+ *  the estimate their typing asked waits no longer. A window losing focus is not leaving. */
+const emit = defineEmits(["edit", "typed", "picked", "done"])
 
 /** Token amount string — ALWAYS the value that validates + sends, in both
  *  modes. In fiat mode it is derived (round-DOWN, bigint) at the FROZEN
@@ -183,8 +185,17 @@ const handleAmountFocus = () => {
 	if (props.tokenBalanceByType) isFocused.value = true
 	fieldScale.value = 1
 }
-const handleAmountBlur = () => {
+/** A window losing focus blurs the field but leaves it the document's active element: the person may
+ *  come back to type. */
+const leftField = (e) => document.activeElement !== e.target
+
+const handleAmountBlur = (e) => {
 	isFocused.value = false
+	restAmount()
+	if (leftField(e)) emit("done")
+}
+
+function restAmount() {
 	if (!model.value) readHint.value = null
 	if (!model.value || tokenDecimals.value === undefined) return
 	const read = readAmountText(String(model.value), { rested: rested.value })
@@ -198,9 +209,34 @@ const handleAmountBlur = () => {
 	emit("typed")
 }
 
-const handleFiatBlur = () => {
+/** Whether leaving would rewrite the text: one that reads, which its rest regroups or trims. */
+function restRewrites() {
+	if (!model.value || tokenDecimals.value === undefined) return false
+	const read = readAmountText(String(model.value), { rested: rested.value })
+	return read.ok && restingAmount(read.plain, tokenDecimals.value) !== String(model.value)
+}
+
+// Enter leaves the text as typed, and a rest that rewrites it later asks the estimate again, so Enter
+// starts it only on a text the field already rests on; leaving rests the text and then starts it.
+const handleAmountEnter = (e) => {
+	if (isRepeatOrComposing(e) || restRewrites()) return
+	emit("done")
+}
+
+const handleFiatBlur = (e) => {
 	isFocused.value = false
 	if (!fiatTerm.value || readAmountText(fiatTerm.value, { currency: "$" }).ok) readHint.value = null
+	if (leftField(e)) finishFiat()
+}
+
+const handleFiatEnter = (e) => {
+	if (!isRepeatOrComposing(e)) finishFiat()
+}
+
+/** The figure typed last reaches the amount before the estimate starts, not the one before it. */
+function finishFiat() {
+	landConversion()
+	emit("done")
 }
 
 /** The amount field's type, token or USD, as a fraction of its 40 px: full with focus, and at rest
@@ -348,6 +384,13 @@ function convert(typed) {
 	fiatGuard.value = { ...guard, converting: false }
 }
 
+/** Lands a pending conversion now, as no keystroke. */
+function landConversion() {
+	if (!fiatGuard.value?.converting) return
+	clearTimeout(convertTimer)
+	convert(false)
+}
+
 const handleFiatInput = (e) => {
 	const next = nextAmountText({
 		prior: fiatLastText,
@@ -466,11 +509,7 @@ defineExpose({
 	},
 	/** Lands a pending conversion now, as no keystroke: an estimate that starts at once must read the
 	 *  amount of the figure typed last, not the one before it. */
-	convertNow: () => {
-		if (!fiatGuard.value?.converting) return
-		clearTimeout(convertTimer)
-		convert(false)
-	},
+	convertNow: landConversion,
 })
 
 onBeforeUnmount(() => {
@@ -537,6 +576,7 @@ const handleFiatBalanceAction = (divisor) => {
 						ref="inputEl"
 						v-model="fiatTerm"
 						@input="handleFiatInput"
+						@keydown.enter="handleFiatEnter"
 						@focus="handleAmountFocus"
 						@blur="handleFiatBlur"
 						:disabled="!tokenBalanceByType"
@@ -553,6 +593,7 @@ const handleFiatBalanceAction = (divisor) => {
 						ref="inputEl"
 						:value="model"
 						@input="handleAmountInput"
+						@keydown.enter="handleAmountEnter"
 						@focus="handleAmountFocus"
 						@blur="handleAmountBlur"
 						:disabled="!tokenBalanceByType"

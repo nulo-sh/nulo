@@ -1493,3 +1493,137 @@ describe("composite/AmountCard — every refusal takes the line under the field"
 		expect(slotOf(w).find("[data-testid='send-amount-derived']").exists()).toBe(true)
 	})
 })
+
+describe("composite/AmountCard — leaving a field, or Enter in it, ends the typing", () => {
+	const TOKEN = { symbol: "cUSD", decimals: 6 }
+	const QUOTE = { usd: 0.999857, fetchedAt: Date.now() }
+	/** The card's amount writes and its `typed` and `done`, in the order it made them. */
+	let log: string[][]
+	// Attached and really focused: a leave is read off which element has the focus.
+	const mountLive = () => {
+		const w: ReturnType<typeof mountCard> = mount(AmountCard, {
+			props: {
+				tokenBalanceByType: 1000,
+				balanceState: "read",
+				balanceRawByType: "1000000000",
+				token: TOKEN,
+				liveQuote: QUOTE,
+				modelValue: "",
+				"onUpdate:modelValue": (v: unknown) => {
+					log.push(["model", String(v)])
+					void w.setProps({ modelValue: v })
+				},
+				"onUpdate:fiatMode": (v: unknown) => w.setProps({ fiatMode: v }),
+				"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
+				onTyped: () => log.push(["typed"]),
+				onDone: () => log.push(["done"]),
+			},
+			global: { stubs: STUBS },
+			attachTo: document.body,
+		})
+		return w
+	}
+	const field = (w: ReturnType<typeof mountCard>, testid = "send-amount-input") => w.get(`[data-testid='${testid}']`)
+	const el = (w: ReturnType<typeof mountCard>, testid?: string) => field(w, testid).element as HTMLInputElement
+
+	beforeEach(() => {
+		vi.restoreAllMocks()
+		log = []
+	})
+
+	test("leaving the token field writes its rest, marks it typing, then emits done; a window losing focus rests it and emits none", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("1.50")
+		log = []
+		// The field stays the document's active element, as when the window loses focus.
+		await field(w).trigger("blur")
+		expect(document.activeElement).toBe(el(w))
+		expect(log).toEqual([["model", "1.5"], ["typed"]])
+
+		await field(w).setValue("2.50")
+		log = []
+		el(w).blur()
+		await nextTick()
+		expect(log).toEqual([["model", "2.5"], ["typed"], ["done"]])
+
+		// A field left empty has nothing to rest, and is still left.
+		el(w).focus()
+		await field(w).setValue("")
+		log = []
+		el(w).blur()
+		await nextTick()
+		expect(log).toEqual([["done"]])
+		w.unmount()
+	})
+
+	test("keystrokes, a paste and a deletion are typing, never done", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("1")
+		el(w).value = "1.25"
+		await field(w).trigger("input", { inputType: "insertFromPaste" })
+		el(w).value = "1.2"
+		await field(w).trigger("input", { inputType: "deleteContentBackward" })
+		expect(log).toEqual([["model", "1"], ["typed"], ["model", "1.25"], ["typed"], ["model", "1.2"], ["typed"]])
+		w.unmount()
+	})
+
+	test("Enter emits done on a text the field rests on; a repeat or composing Enter emits none, nor does Enter on a text its rest rewrites, which leaving then ends", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("5")
+		log = []
+		await field(w).trigger("keydown", { key: "Enter", repeat: true })
+		await field(w).trigger("keydown", { key: "Enter", isComposing: true })
+		await field(w).trigger("keydown", { key: "Enter", keyCode: 229 })
+		expect(log).toEqual([])
+		await field(w).trigger("keydown", { key: "Enter" })
+		expect(log).toEqual([["done"]])
+
+		await field(w).setValue("1.50")
+		log = []
+		await field(w).trigger("keydown", { key: "Enter" })
+		expect(log).toEqual([])
+		expect(el(w).value).toBe("1.50")
+		el(w).blur()
+		await nextTick()
+		expect(log).toEqual([["model", "1.5"], ["typed"], ["done"]])
+		w.unmount()
+	})
+
+	test("the USD field: leaving or Enter lands a pending conversion first, as no keystroke, then emits done; a window losing focus leaves it pending", async () => {
+		vi.useFakeTimers()
+		try {
+			const w = mountLive()
+			await field(w, "send-amount-fiat-toggle").trigger("click")
+			const USD = "send-amount-fiat-input"
+			el(w, USD).focus()
+			await field(w, USD).setValue("125")
+			await field(w, USD).trigger("blur")
+			expect(document.activeElement).toBe(el(w, USD))
+			expect(log).toEqual([])
+			await vi.advanceTimersByTimeAsync(300)
+			expect(log).toEqual([["model", "125.017877"], ["typed"]])
+
+			await field(w, USD).setValue("50")
+			log = []
+			el(w, USD).blur()
+			await nextTick()
+			expect(log).toEqual([["model", "50.007151"], ["done"]])
+			await vi.advanceTimersByTimeAsync(300)
+			expect(log).toHaveLength(2)
+
+			el(w, USD).focus()
+			await field(w, USD).setValue("10")
+			log = []
+			await field(w, USD).trigger("keydown", { key: "Enter", repeat: true })
+			expect(log).toEqual([])
+			await field(w, USD).trigger("keydown", { key: "Enter" })
+			expect(log).toEqual([["model", "10.00143"], ["done"]])
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})

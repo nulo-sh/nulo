@@ -948,6 +948,7 @@ onBeforeUnmount(() => {
 						@edit="spendSendAgain"
 						@typed="pauseFeeEstimate"
 						@picked="startWaitingFeeEstimate"
+						@done="startWaitingFeeEstimate"
 						v-model:rested="amountRested"
 						v-model:usdFigure="amountFiat"
 						v-model:fiatMode="fiatMode"
