@@ -750,7 +750,9 @@ describe("the payer's balance read", () => {
 		},
 	]
 
-	test.each(ROWS)("$name: started once, as the simulation that decides the estimate starts", async ({ path, opts, events, payer }) => {
+	// A probed first simulation may not decide the estimate: its read starts once its effects show it
+	// did, before the fee cap read, or as the re-simulation that does starts.
+	test.each(ROWS)("$name: started once, for the simulation that decides the estimate", async ({ path, opts, events, payer }) => {
 		const h = await harness(path, opts)
 		await h.strategy.buildAndEstimate(h.ctx)
 		expect(h.events).toEqual(events)
