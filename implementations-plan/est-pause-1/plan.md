@@ -1,7 +1,7 @@
 ---
 plan: est-pause-1
 tier: light
-status: implementing
+status: completed
 issues: none (decision page 209, question 2 = B)
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,15 @@ base: origin/dev at 1608de2b0
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-11-25.
+- **Status:** completed (pending the orchestrator's merge). Draft PR against `dev` from `est-pause-1-a1`, never marked ready; it closes no issue.
+- **Shipped:** the engine's start rule (an estimate starts once its task ends, after the pause only when typing or an answer marked the task) with `pauseThisTask` and `startWaiting` on the adapters; Send's typing marks (the amount, its blur normalization, a typed USD figure's conversion, the recipient field) and picks (Max, USD Max, the unit switch, a person-step choice, a suggestion by press or Enter); `convertNow`, so a change during a USD conversion estimates the typed figure once; the fee card's `reread`; the registry popup's settings dropped on hide.
+- **Measured** (local network, Chrome, n = 10 per case and build, base vs branch): the estimate request leaves 800 → 5 ms after a fee pick on Send, 1200 → 499 ms after an app's `sendTx` (929 → 450 app-paid) and 515 → 21 ms after the registry popup opens; a typed amount still waits 805 ms; one estimate per action on every case and both builds. Figures: fee pick 1539 → 649 ms, approval window 2834 → 1754 ms (app-paid 1557 → 1202), popup 1514 → 1308 ms.
+- **Known limits:** none (#2017, filed during review, was then built here). **Open items:** none.
+- **Lessons:** none promoted: `lessons.md` sits at its budget, and its Vue line already holds the gotcha that bit here (a bound `defineModel` reads the host's value a render late; see Audit verdicts, Codex verify round 1). **Seeds retired:** the `/goal` and `/loop` seeds below; they are not instructions.
 
 # est-pause-1: a pick starts the fee estimate at once; typing keeps its pause
 
