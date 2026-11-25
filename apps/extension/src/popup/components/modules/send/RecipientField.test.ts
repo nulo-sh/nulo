@@ -73,6 +73,7 @@ describe("modules/send/RecipientField", () => {
 		await w.find("input").trigger("focus")
 		await w.get('[role="option"]').trigger("click")
 		expect(choices(w)).toEqual([alice.address])
+		expect(w.emitted("picked")).toHaveLength(1)
 		expect(w.find("input").exists()).toBe(true)
 	})
 
@@ -147,6 +148,8 @@ describe("modules/send/RecipientField", () => {
 			const w = real({ candidates: [bob] })
 			await typeAndLeave(w, `${rlo}${address}${zwsp}`)
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([bob])
+			// Recognized by the blur, not picked: a typed address's estimate keeps its pause.
+			expect(w.emitted("picked")).toBeUndefined()
 		})
 
 		describe("and an address keeps no white space or joiner at its two ends", () => {
@@ -234,6 +237,7 @@ describe("modules/send/RecipientField", () => {
 			input.element.dispatchEvent(enter())
 			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([alice.address])
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
+			expect(w.emitted("picked")).toHaveLength(1)
 		})
 
 		test("an Enter on the first characters of an address picks nothing, though a name holds them", async () => {

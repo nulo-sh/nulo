@@ -11,7 +11,7 @@
 #     -v nulo-aztec:/root/.aztec \
 #     -e NULO_E2E_PROVERLESS=1 \
 #     ubuntu:24.04 \
-#     bash -lc './apps/extension/scripts/e2e/docker-ci-like.sh 5/5'
+#     bash -lc './apps/extension/scripts/e2e/docker-ci-like.sh 7/7'
 #
 # `--cpus` + `--memory` constraints are deliberately tight to approximate the
 # GitHub-hosted ubuntu-latest runner profile (4 vCPU, 16GB; we leave 4GB headroom
@@ -24,12 +24,12 @@
 #   nulo-bun-cache    — preserves bun's npm cache across runs (~few minutes saved)
 #   nulo-aztec        — preserves aztec CLI install (~5 minutes saved)
 #
-# Arg 1: vitest --shard expression (e.g. "5/5") over the whole network suite;
-#        CI's pool shards also exclude the dedicated jobs' files. Default "5/5".
+# Arg 1: vitest --shard expression (e.g. "7/7") over the whole network suite;
+#        CI's pool shards also exclude the dedicated jobs' files. Default "7/7".
 
 set -euo pipefail
 
-SHARD="${1:-5/5}"
+SHARD="${1:-7/7}"
 
 echo "::group::apt deps"
 export DEBIAN_FRONTEND=noninteractive

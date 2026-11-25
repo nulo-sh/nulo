@@ -89,7 +89,8 @@ const props = defineProps({
 	estimateSlow: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(["retryEstimate"])
+/** `reread`: the settings this card publishes next re-ask after an answer, so their estimate waits the pause. */
+const emit = defineEmits(["retryEstimate", "reread"])
 
 const settings = defineModel()
 
@@ -278,7 +279,10 @@ watch(
 		rereadFor.add(estimate)
 		balancesStore
 			.ensure(liveFeeScope(props), { legs: ["gas"] })
-			.then(() => snapshot.refreshGas())
+			.then(() => {
+				emit("reread")
+				snapshot.refreshGas()
+			})
 			.catch((error) => console.debug("Fee Juice re-read failed", { error }))
 	},
 )

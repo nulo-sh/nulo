@@ -3328,17 +3328,21 @@ describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () 
 			props: ["feeJuiceBalanceFormatted"],
 			template: '<div data-testid="fee-method-row" :data-balance="feeJuiceBalanceFormatted" />',
 		}
-		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: { ...STUBS, FeeMethodRow: row } } })
+		const order: string[] = []
+		const props = { ...baseProps(), onReread: () => order.push("reread"), "onUpdate:modelValue": () => order.push("settings") }
+		const w = mount(FeeSettingsCard, { props, global: { stubs: { ...STUBS, FeeMethodRow: row } } })
 		await flushPromises()
 		await w.get('[data-testid="pick-fj"]').trigger("click")
 		expect(w.get('[data-testid="fee-method-row"]').attributes("data-balance")).toBe("38.1638")
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
 		const confirmed = { maxFee: "4160515300000000000", feeJuiceShortfall: { maxFee: "4160515300000000000", balance: "0" } }
 		const before = mocks.getGasBalances.mock.calls.length
+		const mark = order.length
 		await w.setProps({ feeEstimate: confirmed })
 		await flushPromises()
 		await w.setProps({ feeEstimate: { ...confirmed } })
 		await flushPromises()
+		expect(order.slice(mark), "the page hears of the re-read before the settings it publishes").toEqual(["reread", "settings"])
 		const rereads = mocks.getGasBalances.mock.calls.slice(before)
 		expect(rereads).toHaveLength(1)
 		expect(rereads[0]?.[2], "the re-read takes the reader's figure the worker's recheck just wrote").toBeFalsy()

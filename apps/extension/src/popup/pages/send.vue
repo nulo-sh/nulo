@@ -37,8 +37,6 @@ import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { isAddressShapedName } from "@/utils/contact-name"
-import { entityListReducers } from "@/utils/entity-list"
-import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { feeJuiceBridgeUrl, feePayerOf } from "@/utils/fee/fee-helpers"
 import { formatBaseUnits } from "@/utils/amount"
 import { isValidDecimals } from "@/utils/token-amount"
@@ -47,26 +45,26 @@ import { sentenceName } from "@/utils/string"
 import { isKnownAddress, lastSendTo, parseSends, recentRecipients, sendWords, sentAgo } from "@/popup/components/modules/send/recent-sends"
 import { sendButtonLabel } from "@/popup/pages/send-labels"
 import { validateSendAmount } from "@/popup/pages/send-amount"
-import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { canSwitchReceiver, canSwitchSender, forcedSide, openingSendSide, sideBalanceText } from "@/components/composite/send/send-sides"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHandoff } from "@/popup/pages/send-fee-gate"
 import { feeWarning, NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/utils/fee/publish-facts"
 import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
-import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { useFeeEstimation } from "@/composables/useFeeEstimation"
 import { useLegalAcceptance } from "@/composables/useLegalAcceptance"
 import { usePrices } from "@/composables/usePrices"
 import { vSnackFooter } from "@/composables/snackInset"
+import { useSendData } from "@/composables/useSendData"
+import { useSendEstimate } from "@/composables/useSendEstimate"
+import { useSendFiatGate } from "@/composables/useSendFiatGate"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
-const { openToast, toast, closeToast } = useToast()
+const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -125,32 +123,49 @@ const openFeeJuiceBridge = () => {
 const awaitingNewToken = ref(false)
 
 const tokenService = new TokenServiceClient()
+const tokenBalances = ref([])
+/** `loaded` once the snapshot has landed a read since the identity fetch began. */
+const balancesState = ref("loading")
+const tokenBalanceService = new TokenBalanceServiceClient()
+const balances = useTokenBalanceSnapshot({
+	client: tokenBalanceService,
+	live: appStore,
+	rows: tokenBalances,
+	state: balancesState,
+})
+tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
+tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
+const contactService = new ContactServiceClient()
+const {
+	tokens,
+	tokensLoading,
+	tokensFailed,
+	contacts,
+	contactEvents,
+	journalOps,
+	onTokensChanged,
+	onReadFailed,
+	reloadTokens,
+	refetch,
+	retry: retryTokens,
+	dispose: disposeSendData,
+} = useSendData({
+	tokenService,
+	contactService,
+	balances,
+	tokenBalances,
+	balancesState,
+	live: appStore,
+	readPastSends,
+	onLoaded: onIdentityLoaded,
+})
 tokenService.onTokenAdded.add(onTokensChanged)
 tokenService.onTokenUpdated.add(onTokensChanged)
 tokenService.onTokenDeleted.add(onTokenDeleted)
-let tokensChangedDuringLoad = false
-/** Fires for any profile's or chain's add or update, so it re-reads the current identity's tokens
- *  rather than patching one: an amount integerizes with the decimals the list holds. A change during
- *  an identity fetch makes that fetch read them again, and one after a refused fetch retries it,
- *  since its balances and contacts are missing too. */
-function onTokensChanged() {
-	if (tokensLoading.value) {
-		tokensChangedDuringLoad = true
-		return
-	}
-	if (tokensFailed.value) return retryTokens()
-	reloadTokens().catch(onReadFailed)
-}
-/** Bumped by each token re-read and identity fetch; a re-read lands only if none began after it. */
-let tokenReadSeq = 0
-async function reloadTokens() {
-	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) return
-	const myRead = ++tokenReadSeq
-	const list = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
-	if (myRead !== tokenReadSeq) return
-	tokens.value = list
-}
-const onReadFailed = (error) => console.debug("send page read failed", { error })
+contactService.onContactAdded.add(contactEvents.onAdded)
+contactService.onContactUpdated.add(contactEvents.onUpdated)
+contactService.onContactDeleted.add(contactEvents.onDeleted)
 function onTokenDeleted(token) {
 	const idx = tokens.value.findIndex((t) => t.id === token.id)
 	if (idx === -1) return
@@ -168,27 +183,9 @@ function onTokenDeleted(token) {
 	leaveSend()
 }
 
-const tokens = ref([])
-/** True while the current identity's tokens are being read; the token card waits on it. */
-const tokensLoading = ref(true)
-/** The current identity's fetch was refused; the token card offers a Retry. */
-const tokensFailed = ref(false)
 const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore.activeTokenIdx))
 const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
 
-const tokenBalances = ref([])
-/** `loaded` once the hook has landed a read since the identity fetch began. */
-const balancesState = ref("loading")
-const tokenBalanceService = new TokenBalanceServiceClient()
-const balances = useTokenBalanceSnapshot({
-	client: tokenBalanceService,
-	live: appStore,
-	rows: tokenBalances,
-	state: balancesState,
-})
-tokenBalanceService.onTokenBalanceAdded.add(balances.onBalanceAdded)
-tokenBalanceService.onTokenBalanceUpdated.add(balances.onBalanceUpdated)
-tokenBalanceService.onTokenBalanceDeleted.add(balances.onBalanceDeleted)
 const tokenBalance = computed(() => {
 	return tokenBalances.value?.find((b) => b?.token.id === cacheStore.activeTokenIdx)
 })
@@ -221,13 +218,6 @@ const initReceiverType = (keepSide = false) => {
 	if (forced) selectedReceiverType.value = forced
 }
 
-const contacts = ref([])
-const contactService = new ContactServiceClient()
-const contactList = entityListReducers(contacts)
-contactService.onContactAdded.add(contactList.onAdded)
-contactService.onContactUpdated.add(contactList.onUpdated)
-contactService.onContactDeleted.add(contactList.onDeleted)
-
 const selectedContact = ref()
 const searchTerm = ref("")
 /** Contacts whose names may stand for their addresses: one that reads as an address names nothing
@@ -237,8 +227,6 @@ const recipientCandidates = computed(() => [...namedContacts.value, ...appStore.
 /** Who is paid is asked first, as page state: a history entry would sit behind the review's Send now. */
 const personChosen = ref(false)
 
-/** This account's journal, read with each identity load and parsed against the token list. */
-const journalOps = shallowRef([])
 const sendScope = computed(() => ({
 	profileId: appStore.profile?.id,
 	networkId: appStore.network?.id,
@@ -403,8 +391,6 @@ const feeWaitsFor = computed(() => {
  *  balance recompute, and a deep watch runs on any change it subscribes to, so only a flip re-asks. */
 const amountSendable = computed(() => amountValidation.value.valid)
 
-/** C3 live pricing. The card freezes a session quote when fiat mode starts;
- *  the SUBMIT GATE lives here (this page owns handleSend) and fails closed. */
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 
@@ -418,29 +404,14 @@ const legalBannerAction = {
 	testId: "send-legal-review",
 	callback: () => chrome.storage.session.remove(LEGAL_DISMISSED_KEY),
 }
-const liveQuote = computed(() => prices.quoteFor(activeToken.value?.chainId, activeToken.value?.contract) ?? null)
-const proxyTicker = computed(() =>
-	liveQuote.value ? (prices.priceEntryFor(activeToken.value?.chainId, activeToken.value?.contract)?.ticker ?? null) : null,
-)
-
-const fiatMode = ref(false)
-const fiatGuard = ref(null)
 const amountCardRef = useTemplateRef("amountCardRef")
 
-/** Pure, unit-tested gate (send-fiat-gate.ts) — fail-closed by construction. */
 const gateNow = useTicker(30_000)
-const fiatGate = computed(() =>
-	evaluateFiatGate({
-		fiatMode: fiatMode.value,
-		guard: fiatGuard.value,
-		liveUsd: liveQuote.value?.usd ?? null,
-		now: gateNow.value ?? Date.now(),
-	}),
-)
-const fiatQuoteBlocked = computed(() => !fiatGate.value.ok)
-/** Distinguishes "needs explicit re-confirmation" from "just converting". */
-const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
-const fiatQuoteMoved = computed(() => requoteReason(fiatGuard.value?.frozenUsd, liveQuote.value?.usd) === "moved")
+const { liveQuote, proxyTicker, fiatMode, fiatGuard, fiatQuoteBlocked, fiatNeedsRequote, fiatQuoteMoved, allowsSendNow } = useSendFiatGate({
+	prices,
+	token: activeToken,
+	now: gateNow,
+})
 const handleRequote = (e) => {
 	// Re-freezes at the current quote and re-derives the token amount — the
 	// user sees the NEW derived amount on the card before confirming.
@@ -449,24 +420,6 @@ const handleRequote = (e) => {
 	if (liveQuote.value && e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
 }
 
-/** The wallet answered that an earlier send holds this transfer's chain state; set until the
- *  estimate's run starts, lands, fails or stops, so nothing the person pays goes out on a fee they
- *  have not seen. */
-const feeQueued = ref(false)
-/** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
-const queuedCap = ref(null)
-const estimateFailed = ref(false)
-/** The snack that reported the failure: the next question closes it unless another replaced it. */
-let failureSnackId
-const clearEstimateFailure = () => {
-	estimateFailed.value = false
-	if (failureSnackId !== undefined && toast.value?.id === failureSnackId) closeToast()
-	failureSnackId = undefined
-}
-const clearQueued = () => {
-	feeQueued.value = false
-	queuedCap.value = null
-}
 const feeState = computed(() => ({
 	queued: feeQueued.value,
 	queuedCap: queuedCap.value,
@@ -595,6 +548,10 @@ const feeTxShape = computed(() =>
 	JSON.stringify([activeToken.value?.id, transferType.value, searchTerm.value, amountValidation.value.integerized?.toString()]),
 )
 
+watch(accountUnusable, (unusable) => {
+	if (unusable) leaveUnusable()
+})
+
 const executionService = new ExecutionServiceClient()
 // ExecutionService opens a live SW port as soon as fee estimation runs
 // (before any submit). Its ONLY disconnect used to live in executeTransfer's
@@ -620,58 +577,24 @@ let submitInFlight = false
 // dApp re-request, etc).
 const sendInstanceId = Math.random().toString(36).slice(2, 8)
 
-/** What the running estimate was asked: a requeue repeats it with a fresh token. */
-let lastEstimateParams
-
 const {
-	result: feeEstimate,
+	feeEstimate,
 	isEstimating,
-	estimate: scheduleFeeEstimate,
-	cancel: cancelFeeEstimate,
+	feeQueued,
+	queuedCap,
+	estimateFailed,
+	estimateSlow,
+	request: requestFeeEstimate,
 	handoff: handoffFeeEstimate,
-} = useFeeEstimation({
-	debounceMs: 800,
-	estimate: (params, estimateToken, signal) => {
-		const { networkId, accountAddress, tokenId, tokenContract, transferType: tt, destination, amount, settings } = params
-		lastEstimateParams = params
-		console.debug(`[send:${sendInstanceId}] estimateTransferFee firing`)
-		return estimateWhenClear(
-			() =>
-				executionService.estimateTransferFee(
-					networkId,
-					accountAddress,
-					tokenId,
-					tokenContract,
-					tt,
-					destination,
-					amount,
-					settings,
-					estimateToken,
-				),
-			signal,
-			{
-				onQueued: (answer) => {
-					if (signal.aborted) return
-					feeQueued.value = true
-					// A spent token's answer carries no cap; the requeue's own answer will.
-					if (!answer.tokenSpent) queuedCap.value = answer.cap ?? null
-				},
-				start: { events: executionService.onEstimateStarted, estimateToken, onStarted: clearQueued },
-			},
-		)
-	},
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
-	onError: (err) => {
-		// Rescheduled before the engine's settle clears `isEstimating`, so the queued row never drops.
-		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(lastEstimateParams)
-		clearQueued()
-		if (err instanceof ImportedAccountUnusableError) return leaveUnusable()
-		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
-		estimateFailed.value = true
-		failureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
-	},
+	pauseThisTask: pauseFeeEstimate,
+	startWaiting: startWaitingFeeEstimate,
+	dispose: disposeFeeEstimate,
+} = useSendEstimate({
+	executionService,
+	instanceId: sendInstanceId,
+	ready: estimateReady,
+	params: estimateParams,
+	onUnusable: leaveUnusable,
 })
 const isSending = ref(false)
 
@@ -682,16 +605,7 @@ let cancelled = false
 const canSubmitNow = () => {
 	if (!isAllowedToSend.value || isSending.value) return false
 	if (!amountValidation.value.valid) return false
-	// The reactive gate runs on a 30s ticker — re-evaluate at TRUE wall-clock
-	// on the actual click so a snapshot cannot slip through expiry/drift by up
-	// to one tick.
-	const submitGate = evaluateFiatGate({
-		fiatMode: fiatMode.value,
-		guard: fiatGuard.value,
-		liveUsd: liveQuote.value?.usd ?? null,
-		now: Date.now(),
-	})
-	return submitGate.ok
+	return allowsSendNow()
 }
 
 /**
@@ -769,27 +683,6 @@ const submitDeps = {
 	},
 }
 
-watch(accountUnusable, (unusable) => {
-	if (unusable) leaveUnusable()
-})
-
-// The queued flag outlives requeues (the engine stays estimating) but never the estimate itself.
-watch(isEstimating, (estimating) => {
-	if (!estimating) clearQueued()
-})
-
-/** How long one question may run before the fee card and the review say so and offer to ask again. */
-const ESTIMATE_SLOW_MS = 20_000
-const estimateSlow = ref(false)
-let estimateSlowTimer
-/** Every new question restarts it: a reschedule leaves `isEstimating` true, so the watch alone misses it. */
-function restartSlowClock() {
-	clearTimeout(estimateSlowTimer)
-	estimateSlow.value = false
-	if (isEstimating.value) estimateSlowTimer = setTimeout(() => (estimateSlow.value = true), ESTIMATE_SLOW_MS)
-}
-watch(isEstimating, restartSlowClock)
-
 /** The refusals the amount card shows; an amount it cannot weigh yet refuses nothing. */
 const amountRefused = computed(
 	() => exceedsBalance.value || amountValidation.value.reason === "invalid" || amountValidation.value.reason === "tooManyDecimals",
@@ -856,26 +749,24 @@ watch(
 )
 
 function requestEstimate() {
-	clearEstimateFailure()
+	// A change during a USD conversion would start an estimate for the amount before the typed figure.
+	// The page's guard, not the card's: the card reads a write it made in this task only after its render.
+	if (fiatGuard.value?.converting) amountCardRef.value?.convertNow()
+	requestFeeEstimate()
+}
+
+/** The estimate's checks, in order: a refused one cancels it. */
+function estimateReady() {
 	// An estimate simulates against the node: no work for a send the wall would refuse.
-	if (!legal.isCurrent.value) {
-		cancelFeeEstimate()
-		return
-	}
+	if (!legal.isCurrent.value) return false
 	// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
 	// or Private → Private is silently dropped here before estimation.
-	if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
-		cancelFeeEstimate()
-		return
-	}
-	if (!amountValidation.value.valid) {
-		cancelFeeEstimate()
-		return
-	}
+	if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) return false
+	return amountValidation.value.valid
+}
 
-	// New input asks a new question: it is queued only once the wallet says so again.
-	clearQueued()
-	scheduleFeeEstimate({
+function estimateParams() {
+	return {
 		networkId: appStore.network.id,
 		accountAddress: appStore.account.address,
 		tokenId: activeToken.value.id,
@@ -884,8 +775,7 @@ function requestEstimate() {
 		destination: searchTerm.value,
 		amount: amountValidation.value.integerized,
 		settings: feeSettings.value,
-	})
-	restartSlowClock()
+	}
 }
 
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
@@ -926,80 +816,19 @@ function applyQueryContact() {
 	else searchTerm.value = preselected.address
 }
 
-// A newer identity fetch supersedes an older one, and only the current fetch ends `tokensLoading`
-// or marks the fetch failed.
 // `activeTokenIdx` is global (cache store): a new token set without it moves it to the first token,
 // or `activeToken` resolves to nothing. The send and receiver types are then re-validated for it.
-let identityFetchSeq = 0
-async function refetchIdentityScopedState() {
-	const mySeq = ++identityFetchSeq
-	const isCurrent = () => mySeq === identityFetchSeq
-	// A reconnect's re-read or retry begun for the previous identity must not land after this.
-	balances.invalidate()
-	balancesState.value = "loading"
-	tokenReadSeq++
-	tokensFailed.value = false
-	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) {
-		if (isCurrent()) {
-			tokens.value = []
-			tokenBalances.value = []
-			contacts.value = []
-			journalOps.value = []
-			tokensLoading.value = false
-		}
-		return
+function onIdentityLoaded(t) {
+	// The tokens watch makes the first token added to an empty list the active one. A refused
+	// load must not arm it, or the Retry's list would lose the active or requested token.
+	awaitingNewToken.value = t.length === 0
+	applyQueryContact()
+	if (!t.some((tok) => tok.id === cacheStore.activeTokenIdx)) {
+		cacheStore.activeTokenIdx = t[0]?.id ?? undefined
 	}
-	const profileId = appStore.profile.id
-	const chainId = appStore.network.chainId
-	// Cleared before the read, so a switch never shows the previous identity's token or balance.
-	tokens.value = []
-	tokenBalances.value = []
-	journalOps.value = []
-	tokensLoading.value = true
-	tokensChangedDuringLoad = false
-	try {
-		const [first, , c, ops] = await Promise.all([
-			tokenService.getTokens(profileId, chainId),
-			readBalances(),
-			contactService.getContacts(),
-			readPastSends(profileId, appStore.account.address),
-		])
-		let t = first
-		while (tokensChangedDuringLoad && isCurrent()) {
-			tokensChangedDuringLoad = false
-			t = await tokenService.getTokens(profileId, chainId)
-		}
-		if (!isCurrent()) return
-		tokens.value = t
-		contacts.value = c
-		journalOps.value = ops
-		// The tokens watch makes the first token added to an empty list the active one. A refused
-		// load must not arm it, or the Retry's list would lose the active or requested token.
-		awaitingNewToken.value = t.length === 0
-		applyQueryContact()
-		if (!t.some((tok) => tok.id === cacheStore.activeTokenIdx)) {
-			cacheStore.activeTokenIdx = t[0]?.id ?? undefined
-		}
-		applyQueryToken()
-		initSendType()
-		initReceiverType()
-	} catch (error) {
-		if (isCurrent()) tokensFailed.value = true
-		throw error
-	} finally {
-		if (isCurrent()) tokensLoading.value = false
-	}
-}
-
-/** Through the snapshot, so an event that outlives the read is never overwritten by it. A refused
- *  read fails the identity fetch at once, as a refused token or contact read does. */
-async function readBalances() {
-	if (!(await balances.fetchTokenBalances())) throw new Error("token balance read refused")
-}
-
-/** The token card's Retry: all three reads again, since the page cannot send without any of them. */
-function retryTokens() {
-	refetchIdentityScopedState().catch(onReadFailed)
+	applyQueryToken()
+	initSendType()
+	initReceiverType()
 }
 
 // `?tokenId=` survives the unmount of tokens/[id], which clears `activeTokenIdx`. It is consumed by
@@ -1017,7 +846,7 @@ watch(
 	() => [appStore.profile?.id, appStore.network?.id, appStore.account?.address],
 	() => {
 		closeSheets()
-		refetchIdentityScopedState().catch(onReadFailed)
+		refetch().catch(onReadFailed)
 	},
 	{ immediate: false },
 )
@@ -1028,14 +857,14 @@ onMounted(async () => {
 	// Route mount fetch through the shared refetch so it inherits the
 	// sequence guard AND the null-triple defense AND the
 	// activeTokenIdx-rebind logic.
-	await refetchIdentityScopedState().catch(onReadFailed)
+	await refetch().catch(onReadFailed)
 })
 
 onBeforeUnmount(() => {
 	console.debug(`[send:${sendInstanceId}] unmounting`)
 	cancelled = true
 	// A load still out ends here: its late reads must not write the shared token selection.
-	identityFetchSeq++
+	disposeSendData()
 	closeSheets()
 
 	contactService.disconnect()
@@ -1049,8 +878,7 @@ onBeforeUnmount(() => {
 	// owns the disconnect, and tearing down here would abort the pending RPC.
 	if (!submitInFlight) disconnectExecution()
 
-	cancelFeeEstimate()
-	clearTimeout(estimateSlowTimer)
+	disposeFeeEstimate()
 
 	amountTerm.value = null
 
@@ -1074,13 +902,17 @@ onBeforeUnmount(() => {
 		</Banner>
 
 		<div v-if="!personChosen" :class="$style.top">
+			<!-- Capture: the field writes its model in its own listener, and Vue's flush, which asks the
+			     estimate, runs before a bubbling listener would mark the keystroke as typing. -->
 			<SendPersonStep
+				@input.capture="pauseFeeEstimate"
 				v-model:searchTerm="searchTerm"
 				v-model:selectedContact="selectedContact"
 				:candidates="recipientCandidates"
 				:recents="recentRows"
 				:accounts="appStore.accounts"
 				@choose="choosePerson"
+				@picked="startWaitingFeeEstimate"
 			/>
 		</div>
 
@@ -1114,6 +946,8 @@ onBeforeUnmount(() => {
 						ref="amountCardRef"
 						v-model="amountTerm"
 						@edit="spendSendAgain"
+						@typed="pauseFeeEstimate"
+						@picked="startWaitingFeeEstimate"
 						v-model:rested="amountRested"
 						v-model:usdFigure="amountFiat"
 						v-model:fiatMode="fiatMode"
@@ -1226,6 +1060,7 @@ onBeforeUnmount(() => {
 					v-model:notices="feeNotices"
 					v-model:remedy="feeRemedy"
 					@retryEstimate="requestEstimate"
+					@reread="pauseFeeEstimate"
 				/>
 			</Teleport>
 		</div>

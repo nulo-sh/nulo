@@ -318,6 +318,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-fees-ux](send-fees-ux/plan.md) — completed — the sponsor forms' "Already added", "Refused before sending" for a capped app send, the app-set fee legend kept while estimating, a sponsored send queued behind an earlier one, and Send's fee card drawn as a skeleton while it reads balances
 - [send-fixes-1](send-fixes-1/plan.md) — completed — start finishes on a custom node that does not answer, a paused reset's imported accounts export as account files, the re-ask button reads Send (#498 #710; #112 held for the owner)
 - [send-followups-1](send-followups-1/plan.md) — completed — the queued cap from a like send (#412), a row for a long USD line (#408), the fee card without its dead override path (#406)
+- [send-page-split-1](send-page-split-1/plan.md) — completed — Send's data loading, fee estimate and fiat gate move into three composables; the page keeps orchestration (#1930)
 - [send-publish-ledger](send-publish-ledger/plan.md) — completed — Send says what a send puts on the public chain
 - [send-queue-activity](send-queue-activity/plan.md) — completed — dApp sends ordered behind earlier sends, fee spender kept across restarts; send outcome states, feed surfaces; Send's amount card and keyboard reach; a queued send held to a fee cap, asked again above it
 - [send-states](send-states/plan.md) — completed — a sponsor funding check on the fee card and a load error on Send's token card
@@ -626,3 +627,5 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [contact-names-build-1](contact-names-build-1/plan.md) — completed — a contact name written like an address is refused at entry, edit and contacts-file import and never printed for an address; Send matches a typed address only whole, shows the short address under each Recent name, and the not-paid line for a contact never paid
 - [task-owner-1](task-owner-1/plan.md) — completed — every root task names its profile, and the task registry inserts only its own profile's; a scan pins the creators
 - [css-recipes-home-1](css-recipes-home-1/plan.md) — completed — the accent and muted text actions, visually hidden, form sections and the filled auth tabs get one home each; a scan stops cross-feature `composes`
+- [ci-shards-1](ci-shards-1/plan.md) — completed — seven network shards, four smoke shards and the unit tests three ways: pr-quick 14 → ~5–6 min, network Firefox 26 → ~16–18 min, for eight more jobs per PR
+- [est-pause-1](est-pause-1/plan.md) — completed — a pick starts the fee estimate at once, typing and an answer's re-ask keep the pause: the request leaves ~0.8 s sooner on Send, ~0.5 s in the approval window and the authorization popups
