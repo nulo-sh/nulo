@@ -143,7 +143,7 @@ post_implementation_hardening: not scheduled
 
 **Unmount order.** Unchanged, line for line: debug line; `cancelled`; data `dispose()` (was `identityFetchSeq++`); `closeSheets()`; contact client; `balances.dispose()`; balance client; token client; `prices.dispose()`; price client; `legal.dispose()`; execution unless a submit is in flight; estimate `dispose()` (was cancel, clear timer); the six resets.
 
-**Budget table** (Biome 2.5.13; lines / cognitive complexity; arc 1 on its final file, arc 2 on a draft at 48ef589bd).
+**Budget table** (Biome 2.5.13; lines / cognitive complexity; arcs 1 and 2 on their final files).
 
 | Function | Lines | Complexity |
 |---|---|---|
@@ -151,7 +151,7 @@ post_implementation_hardening: not scheduled
 | `fetchIdentity` (module level) | 41 | 12 |
 | `onTokensChanged`, `reloadTokens` | under 6 each | 4, 5 |
 | `useSendEstimate` | 67 | under 2 |
-| `transferFeeAsk` (module level) | under 6 | under 2 |
+| `transferFeeAsk` (module level) | 13 | under 2 |
 | estimator callback, `onQueued`, `onError`, `request` | 9, under 6, 6, 7 | under 2, 7, 4, 2 |
 | `useSendFiatGate` | 29 | under 2; `proxyTicker` 3, `fiatGate` 2 |
 
@@ -179,7 +179,7 @@ None. No template, style, copy, testid, Tab stop or Enter rule changes; no toast
 
 **Validation gate**: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run audit:vue`, `bun run test:ci-gating`, one at a time, exit 0 at retry 0; `send.test.ts` and `send.integration.test.ts` unedited; every mutant red, then restored; `bun run --cwd apps/extension build-storybook` exit 0. E2E at retry 0 (`NULO_E2E_RETRY=0` on every invocation; the network config otherwise retries twice, `vite.shared.ts` `e2eRetry`), Chrome, then the same with `NULO_E2E_BROWSER=firefox`: smoke `cd apps/extension && NULO_E2E_RETRY=0 bun run test:e2e -- tests/e2e/send-picker-add.test.ts tests/e2e/token-list.test.ts tests/e2e/home-links.test.ts tests/e2e/rows.test.ts --retry=0`; network, from the root, `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/send-picker.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/send-amount-exact.test.ts`. A red is run alone at the base on the same host; both outcomes are reported.
 
-### Phase 2 (arc 2): `useSendEstimate`
+### Phase 2 (arc 2): `useSendEstimate` ✓
 1. Add `useSendEstimate.ts` with `transferFeeAsk` at module level and both constants.
 2. In `send.vue`, move W1 above the execution client; replace the estimator block with the hook call and the page's `ready()` and `params()`; destructure the template's names; point `snapshotTransfer` and the unmount slot at the hook.
 3. Add `useSendEstimate.test.ts`, at least ten cases: a request starts at the end of its task with the params, and waits `ESTIMATE_PAUSE_MS` in a task `pauseThisTask` marked; `startWaiting` passes through (starts a waiting estimate before its pause ends); not ready cancels; a failure toasts, logs and marks failed; the next request closes only its own toast; a queued answer sets the flag and cap, a spent token keeps the cap, the start event clears it; an aborted attempt's queued answer is ignored; a requeue re-asks the same params; an unusable account calls `onUnusable` with no toast; the slow clock fires at 20 s and restarts on a request; `handoff` keeps the remote cancel off; `dispose` cancels and clears the clock.
@@ -223,6 +223,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | arc 1 | Opus 5.5 (general-purpose) | findings: 3 | `dispose`'s doc overclaimed (the balance read is fenced by the snapshot's own `dispose()`); the no-identity case pins the resets before the guard and both skipped reads; the refused-balance half asserts the reset before awaiting; `onLoaded`, `readPastSends` and the page's snapshot comment state their contracts | none |
 | arc 1 r3 | Codex, resumed | **clean** | the Opus fixes verified; no regression | none |
 | arc 2 amendment | Codex, gpt-6.1-sol (session 01a2102f) | approve with changes: 4 | both fixed `send-chaos` seeds on each browser, as CI runs them; the person step's `@picked` (five bindings, not four); the estimator keeps destructure before the save and the line (`transferFeeAsk`); the Opus-leg note dropped from the plan, not a #2018 change (lessons/phase-2.md) | none |
+| arc 2 r1 | Codex, gpt-6.1-sol (session 01a21047) | findings: 2 | the slow-clock case now resolves before the deadline and proves an early answer stops the clock (it also reds a dropped W3); a redundant test comment cut; M4 traced equivalent (the engine's own scope dispose sends the same remote cancels in the same unmount) | none |
+| arc 2 r2 | Codex, resumed | **clean** | the fixes verified; no regression | none |
+| arc 2 | the lead (Opus 5.5), own read | clean | none (deviation: lessons/phase-2.md) | none |
 
 ## Seeds (not run; orchestrator-owned)
 
