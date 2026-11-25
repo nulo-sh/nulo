@@ -9,7 +9,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-budget: recon by the lead; one Codex pass (gpt-6.1-sol high) over the plan, resumed once to verify the redesign, and one over the completed diff; one Opus Plan lens
+budget: recon by the lead; one Codex pass (gpt-6.1-sol high) over the plan, resumed once to verify the redesign; one over the completed diff, resumed three times to verify its fixes (the first at xhigh, the resume default); one Opus Plan lens
 base: origin/dev at 1608de2b0
 trunk: dev
 post_implementation_hardening: not scheduled
@@ -43,7 +43,7 @@ One arc, one draft PR against `dev`; it closes no issue. The plan is archived in
 
 **Inferences**
 - I1 Marking picks instead (the first draft) keeps every unlisted non-typing change on the pause, against the brief's "every other change starts at once", and needs a call at about 20 pick controls. High confidence (Codex, round 1).
-- I2 A non-typing change that lands during a typing pause (a balance read, the card's first settings, a pick while a typed USD figure converts) starts the last estimate input at once, as the brief's rule says for a pick: at most one superseded estimate, never a figure for an input older than the one shown. Moderate confidence.
+- I2 A non-typing change that lands during a typing pause (a balance read, the card's first settings) starts the last estimate input at once, as the brief's rule says for a pick: the waiting estimate is replaced before it starts, so no extra estimate. During a typed USD figure's conversion the last input has not reached the amount yet, so the change lands the conversion first (`convertNow`). Moderate confidence.
 
 **Asks:** none open. The re-read's re-ask (F5, last clause) is built, not asked (Codex, round 2).
 
@@ -55,10 +55,11 @@ One arc, one draft PR against `dev`; it closes no issue. The plan is archived in
 
 **Callers.**
 - Adapters: `useFeeEstimation` and `useFeeEstimationMap` expose `pauseThisTask`; `useFeeEstimation` also `startWaiting`, deferred with `nextTick` so the change a pick wrote is scheduled first; `useWalletTxEstimates` passes `pauseThisTask` through.
-- `AmountCard`: emits `typed` after a typed token amount, its blur normalization and a conversion typing started (`scheduleConvert` learns who started it; Refresh quote stays a press); emits `picked` from Max, the USD Max and the unit switch, the picks that can leave every estimate input as it was.
+- `AmountCard`: emits `typed` after a typed token amount, its blur normalization and a conversion typing started (`scheduleConvert` learns who started it; Refresh quote stays a press); emits `picked` from Max, the USD Max and the unit switch, the picks that can leave every estimate input as it was; exposes `convertNow`, which lands a pending conversion at once, unmarked.
+- `SendPersonStep` emits `picked` from Pay this address, Enter on a pasted address, a recent and an own account, and forwards `RecipientField`'s `picked` (a suggestion taken by press or Enter); a blur that recognizes a typed address emits only `choose`.
 - `FeeSettingsCard`: emits `reread` in the Fee Juice re-read's continuation, before the settings it publishes; `OperationCard` forwards it.
-- Send: `@typed` on `AmountCard` and a capture-phase `@input` on `SendPersonStep` (its one text field) call `pauseThisTask`; `@picked` calls `startWaiting`; the card's `@reread` calls `pauseThisTask`. No new page state; `requestEstimate` and the requeue are untouched.
-- The approval window and both popups: only the card's `reread` binding. Their first estimate, the app-paid ask, a fee pick and a retry start at once; a re-ask after an answer keeps 500 ms.
+- Send: `@typed` on `AmountCard` and a capture-phase `@input` on `SendPersonStep` (its one text field) call `pauseThisTask`; both `@picked` call `startWaiting`; the card's `@reread` calls `pauseThisTask`; `requestEstimate` first calls the card's `convertNow`. No new page state; the requeue is untouched.
+- The approval window and both popups: only the card's `reread` binding. Their first estimate, the app-paid ask, a fee pick and a retry start at once; a re-ask after an answer keeps 500 ms. `ChangeAuthwitsRegistryPopup` drops its fee settings on hide: `Popup` remounts the card on each open, which publishes them again.
 
 **Alternatives not taken.** A1 two watches split by source: Max and a recipient pick write the typed fields. A2 mark picks, default pause (I1). A3 classify by focus or `window.event`: heuristics. A4 a mark that waits for the next schedule: outlives a change that schedules nothing. A5 a microtask clear: a capture-phase mark would clear before the field writes.
 
@@ -86,8 +87,13 @@ No trust boundary moves: params, guards, tokens, cancels and handoffs are unchan
 
 - **Codex round 1** (approve with changes), on the pick-marking draft: it narrowed the brief: adopted, the design flipped to the literal rule. A blur-recognized recipient read as a list pick, and Refresh quote and picks before the card's first snapshot still waited: gone under the literal rule. A fired timer could start twice: `startWaiting` consumes it. The sponsor re-ask was missing from the facts: F5.
 - **Opus lens** (same draft): the `nextTick` carrier was sound but the draft did not build the brief; Refresh quote was missing; a pick while a typed USD figure converts starts its older amount (I2).
-- **Codex round 2** (approve with changes), on the literal rule: (1) the 0 ms clear leaks into the next timer turn: documented and accepted (Mechanics). (2) A bubbling recipient listener marks after the flush: capture phase. (3) Max and a recipient re-picked unchanged keep a typing pause: Max emits `picked`; re-picking the same recipient while its pasted address waits is a known limit (#TBD). (4) Blur normalization would add an estimate before a Max press: it emits `typed`. (5) The `converting` rule did not stop an older estimate: dropped; the gap it named predates this plan (I2). (6) The re-read's re-ask must keep its pause: built (`reread`).
+- **Codex round 2** (approve with changes), on the literal rule: (1) the 0 ms clear leaks into the next timer turn: documented and accepted (Mechanics). (2) A bubbling recipient listener marks after the flush: capture phase. (3) Max and a recipient re-picked unchanged keep a typing pause: Max emits `picked`; re-picking the same recipient while its pasted address waits was filed as a known limit (#2017), then built after the diff pass. (4) Blur normalization would add an estimate before a Max press: it emits `typed`. (5) The `converting` rule did not stop an older estimate: dropped; the gap it named predates this plan (I2). (6) The re-read's re-ask must keep its pause: built (`reread`).
+
+- **Codex diff pass** (approve with changes), on the completed diff at f2eb74062: (1) a pick during a typed USD conversion started an estimate for the amount before the typed figure, one more than today: `convertNow`. (2) Pay this address on the address just pasted kept its pause: the person step's `picked`, the field's for suggestions; blur recognition stays unmarked. (3) The re-read tests stubbed the emit they relied on: the card's order (`reread` before its settings) and `OperationCard`'s forward now tested. (4) Two test-helper comments corrected; the execute banner cut to one line, kept by that file's convention. Each binding proven by mutation.
+
+- **Codex verify** (resumed, three rounds). Round 1 (approve with changes): fixes 2–4 hold; `convertNow` regressed Max during a conversion, since the card reads its own `fiatGuard` write only after its render and Send's pre-flush watcher reconverted Max's rounded dollars (one base unit over a 1.234567 balance at $0.50): the page's guard now gates the call, proven on the real card. Round 2: approve. Round 3, on the measurement's finding below: approve; no other surface keeps state across mounts.
+- **Measurement** (local network, Chrome, n = 10 per case and build): at 0d76309a0, 4 of 10 reopens of the registry popup started two estimates where the base started one. The popup kept the last open's settings, so the registry status landing first started an estimate the remounted card's publication then replaced; the 500 ms pause had merged the two. Fixed (D7), re-measured: one estimate per action on every case.
 
 ## Decision ledger
 
-- D1 The literal rule, typing and answers marked (A2 rejected after Codex round 1). D2 Task-scoped mark cleared by a 0 ms timer (A4, A5 rejected). D3 `startWaiting` for the picks that can change no input, deferred past the flush.
+- D1 The literal rule, typing and answers marked (A2 rejected after Codex round 1). D2 Task-scoped mark cleared by a 0 ms timer (A4, A5 rejected). D3 `startWaiting` for the picks that can change no input, deferred past the flush. D4 A change during a USD conversion lands it first (`convertNow`), rather than marking it typing, which would make a pick wait. D5 Person-step picks emit `picked`; blur recognition does not. D6 The page's own `fiatGuard` gates `convertNow`: the card reads its own model writes a render late. D7 The registry popup clears its settings on hide rather than the engine skipping an estimate whose params repeat, which would also skip a re-read's re-ask.
