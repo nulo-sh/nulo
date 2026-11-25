@@ -249,12 +249,14 @@ describe("capabilities window — chain mismatch banner and switch", () => {
 		expect(approveBtn()?.text()).toBe("Allow")
 	})
 
-	test("a first grant on a chain with no row gets the same warning over Grant access", async () => {
+	test("a first grant on a chain with no row gets the warning over Grant access, its sentence opening on that word", async () => {
 		appStoreMock.networks = [TESTNET]
 		await open(payloadFor("0", oneAccount))
 		expect(banner()?.attributes("data-variant")).toBe("warning")
 		expect(banner()?.find('[data-testid="banner-title"]').text()).toBe("No network for Sandbox")
-		expect(banner()?.find('[data-testid="banner-desc"]').text()).toBe(UNSERVED)
+		expect(banner()?.find('[data-testid="banner-desc"]').text()).toBe(
+			"Granting access saves these permissions, but your wallet refuses this app's requests there. Reject, then switch the app to another network if it offers one.",
+		)
 		expect(banner()?.find('[data-testid="cap-switch-network-btn"]').exists()).toBe(false)
 		expect(approveBtn()?.text()).toBe("Grant access")
 	})

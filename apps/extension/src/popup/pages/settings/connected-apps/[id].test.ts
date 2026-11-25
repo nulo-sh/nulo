@@ -400,6 +400,8 @@ describe("Settings › Connected app › the Network line", () => {
 		{ chainId: CHAIN_IDS.TESTNET, name: "Staging", row: "STAGING" },
 		{ chainId: 31337, name: "My Devnet", row: "MY DEVNET" },
 		{ chainId: CHAIN_IDS.SANDBOX, name: "Local Network", row: "LOCAL NETWORK" },
+		{ chainId: 31337, name: "Mainnet Fork Wide Network", row: "MAINNET FORK WIDE NETWORK" },
+		{ chainId: 31337, name: "W".repeat(25), row: "W".repeat(25) },
 	])("a session on a network named $name reads it on the Network line and $row on its account rows", async ({ chainId, name, row }) => {
 		const address = `0x${"2a".repeat(32)}`
 		mocks.getNetworks.mockImplementation(async (id: number) => [{ chainId: id }])
@@ -417,7 +419,10 @@ describe("Settings › Connected app › the Network line", () => {
 		useAppStore().networks = [{ chainId, name }] as never
 		await flushPromises()
 		expect(network(w)).toBe(name)
-		expect(w.get('[data-testid="connected-app-account-row"]').attributes("description")).toBe(`${row} · 0x2a2a...2a2a`)
+		const accountRow = w.get('[data-testid="connected-app-account-row"]')
+		expect(accountRow.attributes("description")).toBe(`${row} · 0x2a2a...2a2a`)
+		// Wrapping, the address goes under a name too long for one line with it, and a short one reads as before.
+		expect(accountRow.attributes("wrapdescription")).toBeDefined()
 	})
 })
 

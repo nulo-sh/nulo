@@ -224,6 +224,8 @@ const heldCount = computed(() => rows.value.filter((row) => !row.isNew).length)
 
 const asksForMore = computed(() => heldCount.value > 0)
 const confirmWord = computed(() => (asksForMore.value ? "Allow" : "Grant access"))
+// The no-network warning opens on what the confirm button does, in the button's own word.
+const CONFIRMING = { Allow: "Allowing", "Grant access": "Granting access" } as const
 
 const setSwitch = (key: string, on: boolean) => {
 	const row = rows.value.find((candidate) => candidate.isNew && candidate.entry.key === key)
@@ -408,7 +410,7 @@ onUnmounted(disposeWindow)
 					<template v-else #title>Connecting on {{ dappChain.name }}</template>
 					<template v-if="chainBannerState === 'switched'" #description>Balances and activity now follow {{ dappChain.name }}.</template>
 					<template v-else-if="unservedChainTitle" #description>
-						Allowing saves these permissions, but your wallet refuses this app's requests there. Reject, then switch the app to another network if it offers one.
+						{{ CONFIRMING[confirmWord] }} saves these permissions, but your wallet refuses this app's requests there. Reject, then switch the app to another network if it offers one.
 					</template>
 					<template v-else #description>
 						Your wallet is on {{ appStore.network?.name }}. {{ confirmWord }} as is, or switch to see {{ dappChain.name }} balances.

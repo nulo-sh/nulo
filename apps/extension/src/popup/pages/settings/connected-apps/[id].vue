@@ -324,6 +324,7 @@ onBeforeUnmount(() => {
 					titleVariant="name"
 					:description="`${getNetworkName(acc.chainId, appStore.networks).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
 					descriptionVariant="meta"
+					wrapDescription
 					raw
 					data-testid="connected-app-account-row"
 				>
