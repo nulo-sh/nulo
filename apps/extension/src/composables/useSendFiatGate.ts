@@ -5,7 +5,6 @@ import { evaluateFiatGate, type FiatGuard, requoteReason } from "@/utils/send-fi
 interface SendFiatGateDeps {
 	/** The page's live pricing, which it connects and disposes. */
 	prices: Pick<ReturnType<typeof usePrices>, "quoteFor" | "priceEntryFor">
-	/** The token being sent. */
 	token: Readonly<Ref<PricedToken | undefined>>
 	/** A ticker: the gate re-evaluates on each tick, so a snapshot's expiry flips it. */
 	now: Readonly<Ref<number | undefined>>
