@@ -36,7 +36,7 @@ export function useSendFiatGate({ prices, token, now }: SendFiatGateDeps) {
 	const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
 	const fiatQuoteMoved = computed(() => requoteReason(fiatGuard.value?.frozenUsd, liveQuote.value?.usd) === "moved")
 
-	/** The gate at the true wall clock, for the press: the ticker can lag an expiry or a drift by one tick. */
+	/** The gate at the true wall clock, for the press: the ticker can lag the snapshot's expiry by one tick. */
 	const allowsSendNow = () =>
 		evaluateFiatGate({
 			fiatMode: fiatMode.value,

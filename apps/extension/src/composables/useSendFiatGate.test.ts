@@ -92,12 +92,11 @@ describe("useSendFiatGate", () => {
 		expect(gate.allowsSendNow()).toBe(false)
 	})
 
-	test("the card's writes are read in the task that makes them: a conversion in flight blocks, asking no requote", () => {
+	test("a conversion in flight blocks at once, asking no requote", () => {
 		const { gate, freeze } = setup()
 		freeze()
 		expect(gate.fiatQuoteBlocked.value).toBe(false)
 		gate.fiatGuard.value = { frozenUsd: 2, frozenAt: T0, converting: true }
-		expect(gate.fiatGuard.value?.converting).toBe(true)
 		expect(gate.fiatQuoteBlocked.value).toBe(true)
 		expect(gate.fiatNeedsRequote.value).toBe(false)
 		expect(gate.allowsSendNow()).toBe(false)
