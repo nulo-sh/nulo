@@ -312,7 +312,7 @@ describe("useFeeEstimationMap", () => {
 		scope.stop()
 	})
 
-	it("debounces back-to-back estimate(key, ...) calls for the same key", async () => {
+	it("coalesces back-to-back estimate(key, ...) calls from marked tasks for the same key", async () => {
 		const estimator = vi.fn(async (n: number) => n * 2)
 		const scope = effectScope()
 		const result = scope.run(() =>
@@ -321,10 +321,13 @@ describe("useFeeEstimationMap", () => {
 				debounceMs: 100,
 			}),
 		)!
+		result.pauseThisTask()
 		result.estimate(0, 1)
 		await vi.advanceTimersByTimeAsync(50)
+		result.pauseThisTask()
 		result.estimate(0, 2)
 		await vi.advanceTimersByTimeAsync(50)
+		result.pauseThisTask()
 		result.estimate(0, 3)
 		await vi.advanceTimersByTimeAsync(100)
 		await flush()
@@ -334,7 +337,7 @@ describe("useFeeEstimationMap", () => {
 		scope.stop()
 	})
 
-	it("debounces are independent per key", async () => {
+	it("pauses are independent per key", async () => {
 		const estimator = vi.fn(async (n: number) => n)
 		const scope = effectScope()
 		const result = scope.run(() =>
@@ -343,9 +346,11 @@ describe("useFeeEstimationMap", () => {
 				debounceMs: 100,
 			}),
 		)!
+		result.pauseThisTask()
 		result.estimate(0, 1)
-		// re-trigger key 0 mid-debounce; key 1 starts later but with its own clock
+		// re-trigger key 0 mid-pause; key 1 starts later but with its own clock
 		await vi.advanceTimersByTimeAsync(50)
+		result.pauseThisTask()
 		result.estimate(0, 2)
 		result.estimate(1, 5)
 		await vi.advanceTimersByTimeAsync(100)
@@ -511,7 +516,7 @@ describe("useFeeEstimationMap", () => {
 		expect(estimator).not.toHaveBeenCalled()
 	})
 
-	it("default debounce is 500ms", async () => {
+	it("a marked task's estimate waits the default 500ms; an unmarked one starts once its task ends", async () => {
 		const estimator = vi.fn(async (n: number) => n)
 		const scope = effectScope()
 		const result = scope.run(() =>
@@ -519,6 +524,12 @@ describe("useFeeEstimationMap", () => {
 				estimate: estimator,
 			}),
 		)!
+		result.estimate(1, 1)
+		expect(estimator).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(estimator).toHaveBeenCalledOnce()
+		estimator.mockClear()
+		result.pauseThisTask()
 		result.estimate(0, 1)
 		await vi.advanceTimersByTimeAsync(499)
 		await flush()

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { effectScope, nextTick } from "vue"
+import { effectScope, nextTick, ref, watch } from "vue"
 import { useFeeEstimation } from "./useFeeEstimation"
 
 describe("useFeeEstimation — remote cancellation + handoff", () => {
@@ -47,8 +47,9 @@ describe("useFeeEstimation — remote cancellation + handoff", () => {
 
 	it("refire before the RPC started: no remote cancel (nothing to cancel server-side)", async () => {
 		const { scope, composable, cancelRemote } = make()
+		composable.pauseThisTask()
 		composable.estimate(1)
-		await vi.advanceTimersByTimeAsync(100) // debounce still pending
+		await vi.advanceTimersByTimeAsync(100) // pause still pending
 		composable.estimate(2)
 		expect(cancelRemote).not.toHaveBeenCalled()
 		scope.stop()
@@ -252,7 +253,7 @@ describe("useFeeEstimation", () => {
 		scope.stop()
 	})
 
-	it("debounces back-to-back estimate() calls", async () => {
+	it("coalesces back-to-back typed estimate() calls", async () => {
 		const estimator = vi.fn(async (n: number) => n * 2)
 		const scope = effectScope()
 		const result = scope.run(() =>
@@ -261,10 +262,13 @@ describe("useFeeEstimation", () => {
 				debounceMs: 100,
 			}),
 		)!
+		result.pauseThisTask()
 		result.estimate(1)
 		await vi.advanceTimersByTimeAsync(50)
+		result.pauseThisTask()
 		result.estimate(2)
 		await vi.advanceTimersByTimeAsync(50)
+		result.pauseThisTask()
 		result.estimate(3)
 		await vi.advanceTimersByTimeAsync(100)
 		await flush()
@@ -570,7 +574,7 @@ describe("useFeeEstimation", () => {
 		expect(estimator).not.toHaveBeenCalled()
 	})
 
-	it("default debounce is 800ms", async () => {
+	it("a typed change waits the default 800ms", async () => {
 		const estimator = vi.fn(async (n: number) => n)
 		const scope = effectScope()
 		const result = scope.run(() =>
@@ -578,6 +582,7 @@ describe("useFeeEstimation", () => {
 				estimate: estimator,
 			}),
 		)!
+		result.pauseThisTask()
 		result.estimate(1)
 		await vi.advanceTimersByTimeAsync(799)
 		await flush()
@@ -604,6 +609,148 @@ describe("useFeeEstimation", () => {
 		await vi.advanceTimersByTimeAsync(50)
 		await flush()
 		expect(result.result.value).toBe(8)
+		scope.stop()
+	})
+})
+
+describe("useFeeEstimation — when an estimate starts", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	/** A never-settling estimator: each call is one started estimate, counted. */
+	const make = (estimator = vi.fn((_n: number, _token: string, _signal: AbortSignal) => new Promise<number>(() => {}))) => {
+		const cancelRemote = vi.fn()
+		const scope = effectScope()
+		const fee = scope.run(() => useFeeEstimation<number, number>({ estimate: estimator, cancelRemote }))!
+		return { scope, fee, estimator, cancelRemote }
+	}
+	const startedWith = (estimator: ReturnType<typeof vi.fn>) => estimator.mock.calls.map(([n]) => n)
+
+	it("typing waits the pause; a change in an unmarked task starts once that task ends", async () => {
+		const { scope, fee, estimator } = make()
+		fee.pauseThisTask()
+		fee.estimate(1)
+		await vi.advanceTimersByTimeAsync(799)
+		expect(estimator).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(1)
+		expect(startedWith(estimator)).toEqual([1])
+
+		fee.estimate(2)
+		expect(startedWith(estimator)).toEqual([1])
+		await vi.advanceTimersByTimeAsync(0)
+		expect(startedWith(estimator)).toEqual([1, 2])
+		scope.stop()
+	})
+
+	it("a pick during a typing pause starts at once with the latest input, and the pause is dropped", async () => {
+		const { scope, fee, estimator, cancelRemote } = make()
+		fee.pauseThisTask()
+		fee.estimate(1)
+		await vi.advanceTimersByTimeAsync(300)
+		fee.estimate(2)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(startedWith(estimator)).toEqual([2])
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(startedWith(estimator)).toEqual([2])
+		// The typed estimate never started, so nothing needs a remote cancel.
+		expect(cancelRemote).not.toHaveBeenCalled()
+		scope.stop()
+	})
+
+	it("several changes in one task start one estimate, for the last of them", async () => {
+		const { scope, fee, estimator } = make()
+		fee.estimate(1)
+		fee.estimate(2)
+		fee.estimate(3)
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(startedWith(estimator)).toEqual([3])
+		scope.stop()
+	})
+
+	it("a typed change after a pick supersedes the pick's estimate and waits the pause", async () => {
+		const { scope, fee, estimator, cancelRemote } = make()
+		fee.estimate(1)
+		await vi.advanceTimersByTimeAsync(0)
+		const pickToken = estimator.mock.calls[0][1]
+		fee.pauseThisTask()
+		fee.estimate(2)
+		expect(cancelRemote).toHaveBeenCalledExactlyOnceWith(pickToken)
+		await vi.advanceTimersByTimeAsync(799)
+		expect(startedWith(estimator)).toEqual([1])
+		await vi.advanceTimersByTimeAsync(1)
+		expect(startedWith(estimator)).toEqual([1, 2])
+		scope.stop()
+	})
+
+	it("a mark lasts until the next timer turn: a later task's change starts at once", async () => {
+		const { scope, fee, estimator } = make()
+		fee.pauseThisTask()
+		await vi.advanceTimersByTimeAsync(0)
+		fee.estimate(1)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(startedWith(estimator)).toEqual([1])
+		scope.stop()
+	})
+
+	it("a re-ask an answer causes waits the pause, from its error handler or from a watcher of its result", async () => {
+		const estimator = vi.fn((n: number) => (n === 1 ? Promise.reject(new Error("requeue")) : Promise.resolve(n)))
+		const scope = effectScope()
+		const asked = ref(0)
+		const fee = scope.run(() => {
+			const f = useFeeEstimation<number, number>({ estimate: estimator, onError: () => f.estimate(2) })
+			// Stands for the fee card: a landed answer that sets a payer aside re-asks through a watcher.
+			watch(f.result, (r) => {
+				if (r === 2 && asked.value++ === 0) f.estimate(3)
+			})
+			return f
+		})!
+		fee.estimate(1)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(startedWith(estimator)).toEqual([1])
+		await vi.advanceTimersByTimeAsync(799)
+		expect(startedWith(estimator)).toEqual([1])
+		await vi.advanceTimersByTimeAsync(1)
+		expect(startedWith(estimator)).toEqual([1, 2])
+		await vi.advanceTimersByTimeAsync(799)
+		expect(startedWith(estimator)).toEqual([1, 2])
+		await vi.advanceTimersByTimeAsync(1)
+		expect(startedWith(estimator)).toEqual([1, 2, 3])
+		scope.stop()
+	})
+
+	it("startWaiting starts the estimate still waiting its pause once, and creates none", async () => {
+		const { scope, fee, estimator } = make()
+		fee.startWaiting()
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(estimator).not.toHaveBeenCalled()
+
+		fee.pauseThisTask()
+		fee.estimate(1)
+		fee.startWaiting()
+		expect(estimator).not.toHaveBeenCalled()
+		await nextTick()
+		expect(startedWith(estimator)).toEqual([1])
+		fee.startWaiting()
+		await nextTick()
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(startedWith(estimator)).toEqual([1])
+		scope.stop()
+	})
+
+	it("after dispose neither a schedule nor startWaiting starts anything", async () => {
+		const { scope, fee, estimator } = make()
+		fee.pauseThisTask()
+		fee.estimate(1)
+		fee.dispose()
+		fee.estimate(2)
+		fee.startWaiting()
+		await nextTick()
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(estimator).not.toHaveBeenCalled()
 		scope.stop()
 	})
 })

@@ -619,6 +619,8 @@ const {
 	estimate: scheduleFeeEstimate,
 	cancel: cancelFeeEstimate,
 	handoff: handoffFeeEstimate,
+	pauseThisTask: pauseFeeEstimate,
+	startWaiting: startWaitingFeeEstimate,
 } = useFeeEstimation({
 	debounceMs: 800,
 	estimate: (params, estimateToken, signal) => {
@@ -846,6 +848,9 @@ watch(
 )
 
 function requestEstimate() {
+	// A change during a USD conversion would start an estimate for the amount before the typed figure.
+	// The page's guard, not the card's: the card reads a write it made in this task only after its render.
+	if (fiatGuard.value?.converting) amountCardRef.value?.convertNow()
 	clearEstimateFailure()
 	// An estimate simulates against the node: no work for a send the wall would refuse.
 	if (!legal.isCurrent.value) {
@@ -1003,13 +1008,17 @@ onBeforeUnmount(() => {
 		</Banner>
 
 		<div v-if="!personChosen" :class="$style.top">
+			<!-- Capture: the field writes its model in its own listener, and Vue's flush, which asks the
+			     estimate, runs before a bubbling listener would mark the keystroke as typing. -->
 			<SendPersonStep
+				@input.capture="pauseFeeEstimate"
 				v-model:searchTerm="searchTerm"
 				v-model:selectedContact="selectedContact"
 				:candidates="recipientCandidates"
 				:recents="recentRows"
 				:accounts="appStore.accounts"
 				@choose="choosePerson"
+				@picked="startWaitingFeeEstimate"
 			/>
 		</div>
 
@@ -1043,6 +1052,8 @@ onBeforeUnmount(() => {
 						ref="amountCardRef"
 						v-model="amountTerm"
 						@edit="spendSendAgain"
+						@typed="pauseFeeEstimate"
+						@picked="startWaitingFeeEstimate"
 						v-model:rested="amountRested"
 						v-model:usdFigure="amountFiat"
 						v-model:fiatMode="fiatMode"
@@ -1155,6 +1166,7 @@ onBeforeUnmount(() => {
 					v-model:notices="feeNotices"
 					v-model:remedy="feeRemedy"
 					@retryEstimate="requestEstimate"
+					@reread="pauseFeeEstimate"
 				/>
 			</Teleport>
 		</div>

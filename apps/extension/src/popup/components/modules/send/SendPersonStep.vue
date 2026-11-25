@@ -15,7 +15,9 @@ const props = defineProps<{
 	recents: RecentRow[]
 	accounts: Candidate[]
 }>()
-const emit = defineEmits<{ choose: [address: string, candidate: Candidate | null] }>()
+/** `picked`: the person chose, as a press or Enter does; a blur that recognizes the typed address
+ *  emits only `choose`. */
+const emit = defineEmits<{ choose: [address: string, candidate: Candidate | null]; picked: [] }>()
 const searchTerm = defineModel<string>("searchTerm", { default: "" })
 const selectedContact = defineModel<Candidate | null>("selectedContact", { default: null })
 
@@ -26,6 +28,7 @@ const candidateFor = (address: string): Candidate | null =>
 
 function choose(address: string) {
 	emit("choose", address, candidateFor(address))
+	emit("picked")
 }
 
 /** The field names a candidate once its pick may be shown: that is the choice, unless its address is
@@ -46,7 +49,7 @@ function onEnter(e: KeyboardEvent) {
 <template>
 	<div :class="$style.step" data-testid="send-person-step" @keydown.enter="onEnter">
 		<h2 :class="$style.ask">Who are you paying?</h2>
-		<RecipientField v-model:searchTerm="searchTerm" v-model:selectedContact="selectedContact" :candidates="candidates" @choose="chooseCandidate" />
+		<RecipientField v-model:searchTerm="searchTerm" v-model:selectedContact="selectedContact" :candidates="candidates" @choose="chooseCandidate" @picked="emit('picked')" />
 		<Button v-if="pasted" variant="primary_outline" wide data-testid="send-pay-address" @click="choose(pasted)">Pay this address</Button>
 
 		<template v-if="recents.length">

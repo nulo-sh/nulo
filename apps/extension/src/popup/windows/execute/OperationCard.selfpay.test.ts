@@ -95,3 +95,14 @@ describe("OperationCard — a dApp-requested self-pay", () => {
 		expect(w.find('[data-testid="fee-card"]').attributes("data-locked")).toBe("")
 	})
 })
+
+describe("OperationCard — the fee card's re-read", () => {
+	test("is forwarded with the operation's index", async () => {
+		const w = mount(OperationCard, {
+			props: { op: sendTxOp({}) as never, index: 2 },
+			global: { stubs, mocks: { trimAddress: (a: string) => a, parseTransferIntent: () => ({ kind: "unverified" }) } },
+		})
+		w.findComponent(stubs.FeeSettingsCard).vm.$emit("reread")
+		expect(w.emitted("feeReread")).toEqual([[2]])
+	})
+})

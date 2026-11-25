@@ -26,7 +26,8 @@ const props = defineProps({
 	candidates: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(["choose"])
+/** `picked`: a suggestion taken by press or Enter, never by the blur that recognizes a typed address. */
+const emit = defineEmits(["choose", "picked"])
 const searchTerm = defineModel("searchTerm", { type: String, default: "" })
 const selectedContact = defineModel("selectedContact", { default: null })
 
@@ -76,6 +77,11 @@ const chosen = computed(() => (selectedContact.value && !holdView.value ? select
 const handleSelectContact = (contact) => {
 	selectedContact.value = contact
 	searchTerm.value = contact.address
+}
+
+const pickContact = (contact) => {
+	handleSelectContact(contact)
+	emit("picked")
 }
 
 const handleSearchBlur = () => {
@@ -181,7 +187,7 @@ const pickHighlighted = (e) => {
 	if (e.repeat) return
 	e.preventDefault()
 	if (highlightTaken) return
-	handleSelectContact(shownContacts.value[Math.max(activeIndex.value, 0)])
+	pickContact(shownContacts.value[Math.max(activeIndex.value, 0)])
 	e.target.blur()
 }
 
@@ -264,7 +270,7 @@ onBeforeUnmount(() => {
 						<Flex
 							v-for="(c, i) in shownContacts"
 							:key="rowKey(c)"
-							@click="handleSelectContact(c)"
+							@click="pickContact(c)"
 							align="center"
 							gap="10"
 							:class="[$style.contact, i === activeIndex && $style.active]"

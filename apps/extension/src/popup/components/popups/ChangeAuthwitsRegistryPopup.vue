@@ -113,6 +113,9 @@ usePopupEntity(() => props.show, {
 	onHide: () => {
 		runs.invalidate()
 		registry.reset()
+		// The card remounts and publishes again on the next open; the last open's settings would
+		// start an estimate that publication then replaces.
+		feeSettings.value = undefined
 		stage.stop()
 		estimates.cancelAll()
 		authwitsService.disconnect()
@@ -165,6 +168,7 @@ onBeforeUnmount(() => {
 					fallsBack
 					v-model="feeSettings"
 					@retryEstimate="estimates.refresh(0)"
+					@reread="estimates.pauseThisTask"
 				/>
 
 				<Flex v-snack-footer align="center" direction="column" gap="12">
