@@ -30,6 +30,7 @@ import { CollectingDiscoveryProbe } from "./discovery-probe"
 import type { FeeEstimate, FeeStrategyContext, OnBuilt } from "./fee/fee-strategy"
 import { throwIfAborted } from "./rpc-cancel"
 import type { Action, AddPrivateAuthwitAction, FeeOptions, FeeSettings, Operation } from "./spec"
+import type { PayerBalanceRead } from "./sponsor-funding"
 import type { DiscoveredAuthwit } from "@nulo/wallet-bridge"
 
 /** The simulated build a probe reads: the live node and network the hashing is asserted against,
@@ -54,6 +55,7 @@ export interface DiscoveryAwareEstimatorDeps {
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		onBuilt?: OnBuilt,
+		payerBalance?: PayerBalanceRead,
 	): Promise<FeeEstimate>
 	/** The FOLDED pipeline — same strategy dispatch with `ctx.probe` set, so a
 	 *  probe-aware strategy runs its first sim stubbed and discovery collapses
@@ -66,6 +68,7 @@ export interface DiscoveryAwareEstimatorDeps {
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		onBuilt?: OnBuilt,
+		payerBalance?: PayerBalanceRead,
 	): Promise<FeeEstimate>
 	/** Discovery's throwaway build (hardcoded PREEXISTING_FEE_JUICE inside),
 	 *  run under the same fence as the estimate it serves. */
@@ -121,6 +124,7 @@ export class DiscoveryAwareEstimator {
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		onBuilt?: OnBuilt,
+		payerBalance?: PayerBalanceRead,
 	): Promise<DiscoveryEstimateResult> {
 		const hasPreAttachedAuthwit = actions.some((a) => a.kind === "add_private_authwit")
 		const foldableKind = feeSettings.paymentMethod.kind === "fpc" || feeSettings.paymentMethod.kind === "fj"
@@ -136,6 +140,7 @@ export class DiscoveryAwareEstimator {
 				parentTask,
 				signal,
 				onBuilt,
+				payerBalance,
 			)
 			return { built, discoveredActions: [...probe.collected], discovered: [...probe.discovered] }
 		}
@@ -148,7 +153,15 @@ export class DiscoveryAwareEstimator {
 		// during discovery must not start the sizing pipeline.
 		throwIfAborted(signal)
 		const finalActions = discoveredActions.length ? [...actions, ...discoveredActions] : actions
-		const built = await this.deps.buildAndEstimateValidated(withActions(finalActions), feeSettings, fence, parentTask, signal, onBuilt)
+		const built = await this.deps.buildAndEstimateValidated(
+			withActions(finalActions),
+			feeSettings,
+			fence,
+			parentTask,
+			signal,
+			onBuilt,
+			payerBalance,
+		)
 		return { built, discoveredActions, discovered }
 	}
 }

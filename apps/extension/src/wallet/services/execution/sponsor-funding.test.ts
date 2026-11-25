@@ -12,6 +12,7 @@ import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { FeeEstimate } from "./fee/fee-strategy"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import {
+	PayerBalanceRead,
 	SPONSOR_PROBE_TIMEOUT_MS,
 	callsFeeJuice,
 	ownFeeJuiceShortfall,
@@ -127,6 +128,80 @@ describe("probeOwnFeeJuice", () => {
 		expect(read).toHaveBeenCalledTimes(2)
 		expect(reads.peekPublicFeeJuice).toHaveBeenCalledExactlyOnceWith(NETWORK.id, ACCOUNT.toString())
 		expect(reads.rereadPublicFeeJuice).toHaveBeenCalledExactlyOnceWith(NETWORK.id, ACCOUNT.toString())
+	})
+})
+
+describe("a read started while the simulation runs", () => {
+	const ACCOUNT = AztecAddress.fromNumberUnsafe(0xacc)
+	const ownFeeJuice = () =>
+		({
+			...built(false),
+			account: { address: ACCOUNT },
+			feePaymentMethod: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE,
+		}) as unknown as FeeEstimate
+
+	test("the probe decides on the read started for its payer on its build's network, and reads nothing more", async () => {
+		const early = reader(FEE_LIMIT - 1n)
+		const fresh = reader(FEE_LIMIT)
+		const log = vi.fn()
+		const started = new PayerBalanceRead(early)
+		const build = built()
+		started.start(build.network, SPONSOR.toString())
+
+		expect(await probeSponsorFunding(build, fresh, log, started)).toEqual({
+			fpcId: "fpc-1",
+			address: SPONSOR.toString(),
+			funded: false,
+		})
+
+		expect(fresh).not.toHaveBeenCalled()
+		expect(early).toHaveBeenCalledTimes(1)
+		const [network, , slot, timeoutMs] = early.mock.calls[0] ?? []
+		expect(network).toBe(NETWORK)
+		expect(slot?.equals(await computeFeePayerBalanceStorageSlot(SPONSOR))).toBe(true)
+		expect(timeoutMs).toBe(SPONSOR_PROBE_TIMEOUT_MS)
+		expect(log.mock.calls).toEqual([["sponsor probe", { outcome: "short" }]])
+	})
+
+	test("a started read that fails is a failed probe, logged as one, with no second read", async () => {
+		const fresh = reader(FEE_LIMIT)
+		const log = vi.fn()
+		const started = new PayerBalanceRead(reader(new Error("Error 500 from server https://rpc.example")))
+		started.start(NETWORK as never, ACCOUNT.toString())
+
+		expect(await probeOwnFeeJuice(ownFeeJuice(), fresh, log, started)).toBeUndefined()
+
+		expect(fresh).not.toHaveBeenCalled()
+		expect(log.mock.calls).toEqual([["own fee juice probe", { outcome: "failed" }]])
+	})
+
+	test.each([
+		{ other: "payer", network: NETWORK, payer: ACCOUNT.toString() },
+		{ other: "network", network: { ...NETWORK }, payer: SPONSOR.toString() },
+	])("a read started for another $other is never taken: the probe reads afresh", async ({ network, payer }) => {
+		const early = reader(0n)
+		const fresh = reader(FEE_LIMIT)
+		const started = new PayerBalanceRead(early)
+		started.start(network as never, payer)
+
+		expect(await probeSponsorFunding(built(), fresh, vi.fn(), started)).toEqual({
+			fpcId: "fpc-1",
+			address: SPONSOR.toString(),
+			funded: true,
+		})
+		expect(fresh).toHaveBeenCalledTimes(1)
+	})
+
+	test("the shortfall's recheck reads the slot afresh: two reads, as with no started read", async () => {
+		const early = reader(0n)
+		const fresh = reader(0n)
+		const started = new PayerBalanceRead(early)
+		started.start(NETWORK as never, ACCOUNT.toString())
+		const reads = { readPublicStorageOnce: fresh, peekPublicFeeJuice: () => "900", rereadPublicFeeJuice: async () => "900" }
+
+		expect(await ownFeeJuiceShortfall(ownFeeJuice(), reads, vi.fn(), started)).toEqual({ maxFee: "800", balance: "0", lastRead: "900" })
+		expect(early).toHaveBeenCalledTimes(1)
+		expect(fresh).toHaveBeenCalledTimes(1)
 	})
 })
 

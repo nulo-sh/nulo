@@ -14,6 +14,7 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import type { Action } from "../spec"
+import type { BuiltStandardTx } from "../tx-request-builder"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
 import {
 	buildFor,
@@ -26,6 +27,12 @@ import {
 	validatedSimOpts,
 } from "./fee-strategy"
 
+/** Starts the estimate's read of the account's own Fee Juice, which pays for `built`, unless the
+ *  estimate is already cancelled. */
+function readOwnBalance(ctx: FeeStrategyContext, built: BuiltStandardTx): void {
+	if (!ctx.signal?.aborted) ctx.payerBalance?.start(built.network, built.account.address.toString())
+}
+
 export class FeeJuiceStrategy implements FeeStrategy {
 	public readonly kind = "fj" as const
 
@@ -36,6 +43,8 @@ export class FeeJuiceStrategy implements FeeStrategy {
 		try {
 			let built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 			suggestGasLimits(built.txRequest, ctx.op.fee)
+			// Under a probe, whether this simulation decides the estimate is known only once its effects are read.
+			if (!ctx.probe) readOwnBalance(ctx, built)
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
 			let discovered: Action[] = []
 			if (ctx.probe) {
@@ -49,8 +58,9 @@ export class FeeJuiceStrategy implements FeeStrategy {
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
+					readOwnBalance(ctx, built)
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
-				}
+				} else readOwnBalance(ctx, built)
 			}
 			await finalizeGasLimits(built.node, built.txRequest, simulatedTx, {
 				gasPadding: ctx.gasPadding,

@@ -83,6 +83,7 @@ import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { fpcIdentityOf, FpcType } from "@/wallet/services/fpc/spec"
 import type { Action, FeeOptions } from "../spec"
+import type { BuiltStandardTx } from "../tx-request-builder"
 import { feeCapFor, type FeeCapRule } from "./fee-cap"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
 import {
@@ -106,6 +107,13 @@ function sponsorOf(fpc: Fpc, simulatedTx: TxSimulationResult): Pick<FeeEstimate,
 	const payer = simulatedTx.publicInputs?.feePayer
 	if (info?.type !== FpcType.DefaultSponsoredFpc || !payer || !sameFieldAddress(payer.toString(), info.address)) return {}
 	return { sponsor: { fpcId: info.id, address: payer } }
+}
+
+/** Starts the estimate's read of a sponsor row's own Fee Juice, the only row balance a probe reads
+ *  ({@link sponsorOf}), for `built`, unless the estimate is already cancelled. */
+function readSponsorBalance(ctx: FeeStrategyContext, fpc: Fpc, built: BuiltStandardTx): void {
+	const info = fpc.infoData
+	if (info?.type === FpcType.DefaultSponsoredFpc && !ctx.signal?.aborted) ctx.payerBalance?.start(built.network, info.address)
 }
 
 /** Private fee juice charges the whole cap, so its row's cap ignores the speed level. */
@@ -165,6 +173,8 @@ export class FpcStrategy implements FeeStrategy {
 				return this.buildAndEstimateTwoPass(ctx, fpc)
 			}
 			suggestGasLimits(built.txRequest, ctx.op.fee)
+			// Under a probe, whether this simulation decides the estimate is known only once its effects are read.
+			if (!ctx.probe) readSponsorBalance(ctx, fpc, built)
 			let simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, probedFirstSimOpts(ctx.probe, built), task)
 			// Folded discovery: the probed sim doubles as the discovery pass, and a run with no
 			// authorization request on a DEPLOYED account ends there (stub gas == validated gas).
@@ -180,8 +190,9 @@ export class FpcStrategy implements FeeStrategy {
 					if (ctx.signal?.aborted) throw new JobCancelledSentinel("")
 					built = await buildFor(this.deps.txBuilder, ctx, AccountFeePaymentMethodOptions.EXTERNAL, task)
 					suggestGasLimits(built.txRequest, ctx.op.fee)
+					readSponsorBalance(ctx, fpc, built)
 					simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
-				}
+				} else readSponsorBalance(ctx, fpc, built)
 			}
 			const baseFees = await feeCapFor(built.node, capRuleOf(fpc, multiplier, ctx.op.fee))
 			const maxFee = simulatedTx.gasUsed.totalGas.mul(ctx.gasPadding).computeFee(baseFees)
@@ -265,6 +276,7 @@ export class FpcStrategy implements FeeStrategy {
 				baseFees,
 				built.txRequest.txContext.gasSettings.maxPriorityFeesPerGas,
 			)
+			readSponsorBalance(ctx, fpc, built)
 			simulatedTx = await this.deps.simulateTxTask(built.pxe, built.txRequest, validatedSimOpts(built.scopes), task)
 			maxFee = simulatedTx.gasUsed.totalGas.mul(ctx.gasPadding).computeFee(baseFees)
 			ctx.op.actions.splice(
