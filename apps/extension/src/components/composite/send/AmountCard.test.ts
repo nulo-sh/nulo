@@ -1499,6 +1499,8 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 	const QUOTE = { usd: 0.999857, fetchedAt: Date.now() }
 	/** The card's amount writes and its `typed` and `done`, in the order it made them. */
 	let log: string[][]
+	/** Unmounted after each test, a failed one included, so no attached card keeps the focus. */
+	let live: ReturnType<typeof mountCard> | undefined
 	// Attached and really focused: a leave is read off which element has the focus.
 	const mountLive = () => {
 		const w: ReturnType<typeof mountCard> = mount(AmountCard, {
@@ -1521,6 +1523,7 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 			global: { stubs: STUBS },
 			attachTo: document.body,
 		})
+		live = w
 		return w
 	}
 	const field = (w: ReturnType<typeof mountCard>, testid = "send-amount-input") => w.get(`[data-testid='${testid}']`)
@@ -1529,6 +1532,10 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 	beforeEach(() => {
 		vi.restoreAllMocks()
 		log = []
+	})
+	afterEach(() => {
+		live?.unmount()
+		live = undefined
 	})
 
 	test("leaving the token field writes its rest, marks it typing, then emits done; a window losing focus rests it and emits none", async () => {
@@ -1554,7 +1561,6 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 		el(w).blur()
 		await nextTick()
 		expect(log).toEqual([["done"]])
-		w.unmount()
 	})
 
 	test("keystrokes, a paste and a deletion are typing, never done", async () => {
@@ -1566,7 +1572,6 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 		el(w).value = "1.2"
 		await field(w).trigger("input", { inputType: "deleteContentBackward" })
 		expect(log).toEqual([["model", "1"], ["typed"], ["model", "1.25"], ["typed"], ["model", "1.2"], ["typed"]])
-		w.unmount()
 	})
 
 	test("Enter emits done on a text the field rests on; a repeat or composing Enter emits none, nor does Enter on a text its rest rewrites, which leaving then ends", async () => {
@@ -1589,7 +1594,6 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 		el(w).blur()
 		await nextTick()
 		expect(log).toEqual([["model", "1.5"], ["typed"], ["done"]])
-		w.unmount()
 	})
 
 	test("the USD field: leaving or Enter lands a pending conversion first, as no keystroke, then emits done; a window losing focus leaves it pending", async () => {
@@ -1621,7 +1625,6 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 			expect(log).toEqual([])
 			await field(w, USD).trigger("keydown", { key: "Enter" })
 			expect(log).toEqual([["model", "10.00143"], ["done"]])
-			w.unmount()
 		} finally {
 			vi.useRealTimers()
 		}
