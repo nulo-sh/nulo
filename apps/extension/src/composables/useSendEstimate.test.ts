@@ -58,22 +58,23 @@ describe("useSendEstimate", () => {
 		vi.restoreAllMocks()
 	})
 
-	test("a request starts at the end of its task with the params; in a task pauseThisTask marked it waits 800 ms", async () => {
+	test("in a task pauseThisTask marked a request waits 800 ms; unmarked, it starts at the end of its task, with the params", async () => {
 		const h = setup()
+		h.estimate.pauseThisTask()
 		h.estimate.request()
+		await vi.advanceTimersByTimeAsync(799)
 		expect(h.estimateTransferFee).not.toHaveBeenCalled()
-		await nextTask()
+		await vi.advanceTimersByTimeAsync(1)
 		expect(h.estimateTransferFee).toHaveBeenCalledExactlyOnceWith("n1", "0xa", 1, "0xc", 0, "0xd", 5n, SETTINGS, expect.any(String))
 		expect(console.debug).toHaveBeenCalledWith("[send:abc123] estimateTransferFee firing")
 		expect(h.estimate.feeEstimate.value).toEqual(LANDED)
 		expect(h.estimate.isEstimating.value).toBe(false)
 
-		await nextTask()
-		h.estimate.pauseThisTask()
-		h.estimate.request()
-		await vi.advanceTimersByTimeAsync(799)
-		expect(h.estimateTransferFee).toHaveBeenCalledTimes(1)
+		// The answer marked its own task; a 0 ms timer set during a fake tick runs 1 ms later.
 		await vi.advanceTimersByTimeAsync(1)
+		h.estimate.request()
+		expect(h.estimateTransferFee).toHaveBeenCalledTimes(1)
+		await nextTask()
 		expect(h.estimateTransferFee).toHaveBeenCalledTimes(2)
 		expect(h.params).toHaveBeenCalledTimes(2)
 		h.scope.stop()
@@ -156,6 +157,20 @@ describe("useSendEstimate", () => {
 		h.onEstimateStarted.invoke({ estimateToken: "another-token" })
 		expect(h.estimate.feeQueued.value).toBe(true)
 		h.onEstimateStarted.invoke({ estimateToken: h.tokenOf(0) })
+		expect(h.estimate.feeQueued.value).toBe(false)
+		expect(h.estimate.queuedCap.value).toBeNull()
+		h.scope.stop()
+	})
+
+	test("a new question clears the queued flag and its cap at once, while the engine stays estimating", async () => {
+		const h = setup()
+		h.estimateTransferFee.mockResolvedValueOnce(QUEUED_WITH_CAP).mockReturnValue(pending())
+		h.estimate.request()
+		await nextTask()
+		expect(h.estimate.feeQueued.value).toBe(true)
+
+		h.estimate.request()
+		expect(h.estimate.isEstimating.value).toBe(true)
 		expect(h.estimate.feeQueued.value).toBe(false)
 		expect(h.estimate.queuedCap.value).toBeNull()
 		h.scope.stop()
