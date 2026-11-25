@@ -38,21 +38,23 @@ REQUIRED_WORKFLOWS=("Quality" "Extension smoke e2e" "Extension network e2e")
 # tests having run at all. Certification is a claim that the suites RAN and were
 # green, so label the PR to force them rather than accepting a skip.
 declare -A REQUIRED_JOBS=(
-	["Quality"]="Unit tests / Vitest|Lint + Typecheck / Biome + vue-tsc"
-	["Extension smoke e2e"]="Run / shard 1/3 / Vitest + Puppeteer|Run / shard 2/3 / Vitest + Puppeteer|Run / shard 3/3 / Vitest + Puppeteer"
+	["Quality"]="Unit tests / Vitest (shard 1/3)|Unit tests / Vitest (shard 2/3)|Unit tests / Vitest (shard 3/3)|Lint + Typecheck / Biome + vue-tsc"
+	["Extension smoke e2e"]="Run / shard 1/4 / Vitest + Puppeteer|Run / shard 2/4 / Vitest + Puppeteer|Run / shard 3/4 / Vitest + Puppeteer|Run / shard 4/4 / Vitest + Puppeteer"
 )
 
-# The exact network suite job set: 5 sharded jobs + 3 heavies + the prover-ON
+# The exact network suite job set: 7 sharded jobs + 3 heavies + the prover-ON
 # canary + the two fixed chaos seeds. Checking names rather than a count means a
 # missing shard cannot be offset by an extra job elsewhere. behavior-gating.test.ts
 # derives this list from the workflows, so a renamed job or a rotated seed fails a
 # test instead of this check.
 EXPECTED_NETWORK_JOBS=(
-	"Run / shard 1/5 / network suite (shard 1/5)"
-	"Run / shard 2/5 / network suite (shard 2/5)"
-	"Run / shard 3/5 / network suite (shard 3/5)"
-	"Run / shard 4/5 / network suite (shard 4/5)"
-	"Run / shard 5/5 / network suite (shard 5/5)"
+	"Run / shard 1/7 / network suite (shard 1/7)"
+	"Run / shard 2/7 / network suite (shard 2/7)"
+	"Run / shard 3/7 / network suite (shard 3/7)"
+	"Run / shard 4/7 / network suite (shard 4/7)"
+	"Run / shard 5/7 / network suite (shard 5/7)"
+	"Run / shard 6/7 / network suite (shard 6/7)"
+	"Run / shard 7/7 / network suite (shard 7/7)"
 	"Run / heavy / fee-methods + selfpay-phase / network suite"
 	"Run / heavy / concurrent-confirm / network suite"
 	"Run / heavy / snack-placement + failed-send-check / network suite"
@@ -84,6 +86,14 @@ violation() {
 	echo "VIOLATION: $1"
 	FAILED=1
 }
+
+# gh 2.103 and later refuse to write a response holding terminal escape sequences, as every
+# coloured job log does, unless allowed: exit 1 and an empty file. An older gh has no such flag
+# and writes the log as is. The log only ever lands in a file that grep counts, never on a terminal.
+LOG_ESCAPES=""
+case "$(gh api --help 2>&1)" in
+	*--allow-escape-sequences*) LOG_ESCAPES=--allow-escape-sequences ;;
+esac
 
 # --slurp wraps the paginated pages in an array, so one jq pass sees them all.
 RUNS="$TMP/runs.json"
@@ -148,7 +158,7 @@ for WF in "${REQUIRED_WORKFLOWS[@]}"; do
 					;;
 			esac
 			L="$TMP/job-$JOB_ID.txt"
-			if ! gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" >"$L" 2>/dev/null; then
+			if ! gh api ${LOG_ESCAPES:+"$LOG_ESCAPES"} "repos/$REPO/actions/jobs/$JOB_ID/logs" >"$L" 2>/dev/null; then
 				violation "could not fetch logs for job $JOB_ID ($JOB_NAME) — cannot prove it consumed no retries"
 				continue
 			fi
