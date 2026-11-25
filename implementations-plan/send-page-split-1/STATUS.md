@@ -7,3 +7,4 @@
 - 2026-11-24: arc 1 phase 1: lint, typecheck:all, test:all, audit:vue, test:ci-gating, build-storybook green at retry 0; page suites unedited (212 pass); 14 hook cases; mutants M1-M5 red; KL-1/KL-2 filed as #2010 (closed known-limit).
 - 2026-11-24: arc 1 e2e at retry 0: smoke Chrome 15/15, Firefox 15/15; network Chrome 4/4, Firefox 4/4 (code at f85c5430c; later commits change comments and the hook's suite only). Codex r1 2 findings, r2 clean; Opus 3 findings applied; Codex r3 clean.
 - 2026-11-24: final head gates: lint, typecheck:all green; test:all red on 3 timeouts in scripts/e2e/profile-chaos-model.test.ts at load 623/188 cores (file untouched; 280/280 alone), retried once after load fell to 183: green.
+- 2026-11-25: arc 2 branched off `origin/dev` at 48ef589bd; the plan amended for #2018 (D9, D12, D13, F7, arc 2 site and watcher tables, budgets, Phase 2 tests, mutants and e2e list); Codex approve with changes (4), all applied.
