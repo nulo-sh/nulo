@@ -627,3 +627,4 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [task-owner-1](task-owner-1/plan.md) — completed — every root task names its profile, and the task registry inserts only its own profile's; a scan pins the creators
 - [css-recipes-home-1](css-recipes-home-1/plan.md) — completed — the accent and muted text actions, visually hidden, form sections and the filled auth tabs get one home each; a scan stops cross-feature `composes`
 - [ci-shards-1](ci-shards-1/plan.md) — completed — seven network shards, four smoke shards and the unit tests three ways: pr-quick 14 → ~5–6 min, network Firefox 26 → ~16–18 min, for eight more jobs per PR
+- [est-pause-1](est-pause-1/plan.md) — completed — a pick starts the fee estimate at once, typing and an answer's re-ask keep the pause: the request leaves ~0.8 s sooner on Send, ~0.5 s in the approval window and the authorization popups
