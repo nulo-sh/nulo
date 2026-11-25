@@ -317,12 +317,14 @@ onBeforeUnmount(() => {
 			<SectionLabel label="Shared accounts" :count="accounts.length" />
 
 			<ItemsContainer v-if="accounts.length">
+				<!-- FSI and PDI isolate the network's name, which a person may write right to left, so its
+				     direction cannot pull the separator or the address's digits into its run. -->
 				<SettingItem
 					v-for="acc in accounts"
 					:key="`${acc.chainId}:${acc.address}`"
 					:title="getAccountAlias(acc)"
 					titleVariant="name"
-					:description="`${getNetworkName(acc.chainId, appStore.networks).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
+					:description="`⁨${getNetworkName(acc.chainId, appStore.networks).toUpperCase()}⁩ · ${trimAddress(acc.address, 6, 4, '...')}`"
 					descriptionVariant="meta"
 					wrapDescription
 					raw

@@ -403,6 +403,7 @@ describe("Settings › Connected app › the Network line", () => {
 		{ chainId: CHAIN_IDS.SANDBOX, name: "Local Network", row: "LOCAL NETWORK" },
 		{ chainId: 31337, name: "Mainnet Fork Wide Network", row: "MAINNET FORK WIDE NETWORK" },
 		{ chainId: 31337, name: "W".repeat(25), row: "W".repeat(25) },
+		{ chainId: 31337, name: "شبكة الاختبار الخاصة", row: "شبكة الاختبار الخاصة" },
 	])("a session on a network named $name reads it on the Network line and $row on its account rows", async ({ chainId, name, row }) => {
 		const address = `0x${"2a".repeat(32)}`
 		mocks.getNetworks.mockImplementation(async (id: number) => [{ chainId: id }])
@@ -426,7 +427,9 @@ describe("Settings › Connected app › the Network line", () => {
 		const parsed = parseSource("apps/extension/src/popup/pages/settings/connected-apps/[id].vue")
 		expect(declarationsOf(parsed, ".network_value")).toEqual({ "overflow-wrap": "anywhere" })
 		const accountRow = w.get('[data-testid="connected-app-account-row"]')
-		expect(accountRow.attributes("description")).toBe(`${row} · 0x2a2a...2a2a`)
+		// FSI and PDI keep the name's direction inside it, so a right-to-left name cannot pull the address's
+		// leading digit into its run; neither draws a glyph.
+		expect(accountRow.attributes("description")).toBe(`\u2068${row}\u2069 · 0x2a2a...2a2a`)
 		// Wrapping puts the address under a name too long to share its line; a short one reads as before.
 		expect(accountRow.attributes("wrapdescription")).toBeDefined()
 	})
