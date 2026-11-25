@@ -63,6 +63,7 @@ import { carriedHashes } from "../decode-authwit-effects"
 import type { DiscoveryProbe, DiscoveryProbeContext } from "../discovery-aware-estimator"
 import { throwIfAborted } from "../rpc-cancel"
 import type { RunReads } from "../run-reads"
+import type { PayerBalanceRead } from "../sponsor-funding"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
 import type { PartialGasSettingsRPC } from "@nulo/aztec-runtime/account"
@@ -170,6 +171,9 @@ export type FeeStrategyContext = {
 	onBuilt?: OnBuilt
 	/** What this run's builds fetch once and send together. Absent, every build reads one by one. */
 	reads?: RunReads
+	/** Set only by an estimate, which probes its payer: a strategy whose estimate is paid from a
+	 *  probed balance starts that read as the simulation that decides the estimate starts. */
+	payerBalance?: PayerBalanceRead
 }
 
 /** Dependencies injected once at construction. */

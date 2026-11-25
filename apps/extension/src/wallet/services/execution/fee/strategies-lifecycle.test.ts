@@ -19,6 +19,7 @@ import { FpcType } from "@/wallet/services/fpc/service"
 import { StepContent, type Task, TaskStatus } from "@/wallet/services/task/service"
 import { startedTaskService } from "@/wallet/services/task/test-task-service"
 import type { Action } from "../spec"
+import type { PayerBalanceRead } from "../sponsor-funding"
 import { EmbeddedStrategy } from "./embedded-strategy"
 import { FeeJuiceStrategy } from "./fee-juice-strategy"
 import { FeeJuiceWithClaimStrategy } from "./fee-juice-with-claim-strategy"
@@ -35,7 +36,8 @@ type BuildOpts = { initWrapped?: boolean; chainId?: number; txsLimits?: Gas }
 type Built = ReturnType<typeof makeBuilt>
 
 let buildSeq = 0
-function makeBuilt(opts: BuildOpts) {
+/** `events` records each fee cap read as `cap`. */
+function makeBuilt(opts: BuildOpts, events: string[] = []) {
 	const n = ++buildSeq
 	const address = { toString: () => "0xaccount", build: n }
 	return {
@@ -46,7 +48,12 @@ function makeBuilt(opts: BuildOpts) {
 				gasSettings: new GasSettings(new Gas(11_000, 22_000), new Gas(3_300, 4_400), new GasFees(555n, 666n), new GasFees(7n, 8n)),
 			},
 		},
-		node: { getCurrentMinFees: vi.fn(async () => new GasFees(555n, 666n)) },
+		node: {
+			getCurrentMinFees: vi.fn(async () => {
+				events.push("cap")
+				return new GasFees(555n, 666n)
+			}),
+		},
 		pxe: { build: n },
 		account: { address },
 		// An additional scope per build: a simulation that rebuilt its own list from the account drops it.
@@ -72,7 +79,7 @@ function makeFpc(path: PathName, chainId?: number, twoPassRow: TwoPassRow = "pri
 	const sponsor = path === "fpc fast path" || twoPassRow === "hand-added sponsor"
 	const type = sponsor ? FpcType.DefaultSponsoredFpc : FpcType.PrivateFpc
 	return {
-		infoData: { type, isProtocol: path === "fpc fast path" || !sponsor, chainId },
+		infoData: { type, isProtocol: path === "fpc fast path" || !sponsor, chainId, address: "0xsponsor" },
 		getTotalGas: () => new Gas(1_000, 2_000),
 		getTeardownGas: () => new Gas(100, 200),
 		getFeePayload: vi.fn((_account: string, _maxFee: unknown) => [PAYLOAD]),
@@ -94,8 +101,10 @@ type HarnessOpts = {
 
 async function harness(path: PathName, opts: HarnessOpts = {}) {
 	const builds: Built[] = []
+	/** In call order: each simulation (`sim`), fee cap read (`cap`) and payer read started (`read`). */
+	const events: string[] = []
 	const buildStandard = vi.fn(async (...args: unknown[]) => {
-		const built = makeBuilt(opts.build ?? {})
+		const built = makeBuilt(opts.build ?? {}, events)
 		// As the entrypoint completes them: the priority fee the build is given, else the fixture's.
 		const priority = (args[4] as { maxPriorityFeesPerGas?: { feePerDaGas: string; feePerL2Gas: string } } | undefined)
 			?.maxPriorityFeesPerGas
@@ -114,6 +123,7 @@ async function harness(path: PathName, opts: HarnessOpts = {}) {
 	})
 	const controller = new AbortController()
 	const simulateTxTask = vi.fn(async (..._args: unknown[]) => {
+		events.push("sim")
 		if (opts.abortOnFirstSim && simulateTxTask.mock.calls.length === 1) controller.abort()
 		return sentinelSim()
 	})
@@ -137,7 +147,23 @@ async function harness(path: PathName, opts: HarnessOpts = {}) {
 		extractEffects: vi.fn(async () => ({ actions: opts.effects ?? [], requested: opts.requested ?? (opts.effects ?? []).length > 0 })),
 	}
 	const ctx = makeCtx(path, opts.probe ? probe : undefined, controller.signal)
-	return { deps, ctx, builds, buildStandard, simulateTxTask, tasks, created, log, fpc, probe, strategy: strategyFor(path, deps) }
+	const payerBalance = { start: vi.fn((_network: unknown, _payer: string) => void events.push("read")) }
+	ctx.payerBalance = payerBalance as unknown as PayerBalanceRead
+	return {
+		deps,
+		ctx,
+		builds,
+		buildStandard,
+		simulateTxTask,
+		tasks,
+		created,
+		log,
+		fpc,
+		probe,
+		events,
+		payerBalance,
+		strategy: strategyFor(path, deps),
+	}
 }
 
 function makeCtx(path: PathName, probe: unknown, signal: AbortSignal): FeeStrategyContext {
@@ -676,5 +702,60 @@ describe("embedded: the app's own fee contract", () => {
 	test("a claim to the sender names no app payer: the sender pays itself", async () => {
 		const { strategy, ctx } = await withKernel("fjwc", call(APP_PAYER))
 		expect((await strategy.buildAndEstimate(ctx)).appPayer).toBeUndefined()
+	})
+})
+
+describe("the payer's balance read", () => {
+	const ROWS: Array<{ name: string; path: PathName; opts: HarnessOpts; events: string[]; payer?: string }> = [
+		{ name: "fj", path: "fj", opts: {}, events: ["read", "sim", "cap"], payer: "0xaccount" },
+		{ name: "fpc fast path", path: "fpc fast path", opts: {}, events: ["read", "sim", "cap"], payer: "0xsponsor" },
+		{
+			name: "fpc two-pass, a sponsor added by hand",
+			path: "fpc two-pass",
+			opts: { twoPassRow: "hand-added sponsor" },
+			events: ["sim", "cap", "read", "sim"],
+			payer: "0xsponsor",
+		},
+		{ name: "fj folded, no request", path: "fj", opts: foldOpts("none"), events: ["sim", "read", "cap"], payer: "0xaccount" },
+		{ name: "fj folded, a request", path: "fj", opts: foldOpts("effects"), events: ["sim", "read", "sim", "cap"], payer: "0xaccount" },
+		{
+			name: "fj folded, first transaction",
+			path: "fj",
+			opts: foldOpts("init"),
+			events: ["sim", "read", "sim", "cap"],
+			payer: "0xaccount",
+		},
+		{
+			name: "fpc fast path folded, no request",
+			path: "fpc fast path",
+			opts: foldOpts("none"),
+			events: ["sim", "read", "cap"],
+			payer: "0xsponsor",
+		},
+		{
+			name: "fpc fast path folded, a request",
+			path: "fpc fast path",
+			opts: foldOpts("effects"),
+			events: ["sim", "read", "sim", "cap"],
+			payer: "0xsponsor",
+		},
+		{ name: "fpc two-pass, private fee juice", path: "fpc two-pass", opts: {}, events: ["sim", "cap", "sim"] },
+		{ name: "fjwc", path: "fjwc", opts: {}, events: ["sim", "cap"] },
+		{ name: "embedded", path: "embedded", opts: {}, events: ["cap", "sim"] },
+		{
+			name: "fj folded, cancelled during its one simulation",
+			path: "fj",
+			opts: foldOpts("none", { abortOnFirstSim: true }),
+			events: ["sim", "cap"],
+		},
+	]
+
+	// A probed first simulation may not decide the estimate: its read starts once its effects show it
+	// did, before the fee cap read, or as the re-simulation that does starts.
+	test.each(ROWS)("$name: started once, for the simulation that decides the estimate", async ({ path, opts, events, payer }) => {
+		const h = await harness(path, opts)
+		await h.strategy.buildAndEstimate(h.ctx)
+		expect(h.events).toEqual(events)
+		expect(h.payerBalance.start.mock.calls).toEqual(payer ? [[h.builds.at(-1)?.network, payer]] : [])
 	})
 })

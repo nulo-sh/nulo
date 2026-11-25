@@ -31,6 +31,7 @@ import { ChainTipGate } from "./chain-tip-gate"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import type { TransferFeeEstimate } from "./spec"
+import type { PayerBalanceRead } from "./sponsor-funding"
 import type { SendFeeFigure } from "./fee-reask"
 import { QueuedFeeAnswers } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
@@ -770,6 +771,59 @@ describe("TransferExecutor.estimateFee sponsor funding", () => {
 		expect(result.maxFee).toBe("800")
 		expect(result.estimateId).toBeDefined()
 		expect(readPublicStorageOnce).toHaveBeenCalledTimes(reads)
+	})
+
+	/** `buildAndEstimate` as a strategy runs it: the estimate's payer read is sent while the build
+	 *  simulates, then the build ends as `settle` says. */
+	function startingRead(h: ReturnType<typeof sponsorHarness>, settle: () => Promise<unknown>) {
+		;(h.deps.buildAndEstimate as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+			;(args[6] as PayerBalanceRead).start(h.built.network as never, SPONSOR.toString())
+			await new Promise((resolve) => setTimeout(resolve, 0))
+			expect(h.readPublicStorageOnce).toHaveBeenCalledTimes(1)
+			return settle()
+		})
+	}
+
+	test("the probe decides on the read its build started, and reads nothing after it", async () => {
+		const h = sponsorHarness()
+		h.readPublicStorageOnce.mockResolvedValueOnce(new Fr(799n)).mockResolvedValue(new Fr(800n))
+		startingRead(h, async () => h.built)
+
+		const result = (await h.executor.estimateFee(makeReq({ feeSettings: FPC_SETTINGS }))) as TransferFeeEstimate
+
+		expect(result.sponsorFunding).toEqual({ fpcId: "fpc-9", address: SPONSOR.toString(), funded: false })
+		expect(h.readPublicStorageOnce).toHaveBeenCalledTimes(1)
+		expect(h.deps.logDebug).toHaveBeenCalledWith("sponsor probe", { outcome: "short" })
+	})
+
+	test("a failed simulation rejects with its own error, never the failed read's, and probes nothing", async () => {
+		const h = sponsorHarness({ balance: new Error("read refused") })
+		const reverted = new Error("simulation reverted")
+		startingRead(h, async () => Promise.reject(reverted))
+
+		await expect(h.executor.estimateFee(makeReq({ feeSettings: FPC_SETTINGS }))).rejects.toBe(reverted)
+		expect(h.deps.logDebug).not.toHaveBeenCalledWith("sponsor probe", expect.anything())
+	})
+
+	test("a cancel during the simulation drops its read: nothing probed, nothing stashed", async () => {
+		const controller = new AbortController()
+		const h = sponsorHarness()
+		startingRead(h, async () => {
+			controller.abort()
+			return h.built
+		})
+
+		await expect(h.executor.estimateFee(makeReq({ feeSettings: FPC_SETTINGS }), controller.signal)).rejects.toThrow(
+			JobCancelledSentinel,
+		)
+		expect(h.deps.logDebug).not.toHaveBeenCalledWith("sponsor probe", expect.anything())
+		expect(h.deps.estimateReuse.stash).not.toHaveBeenCalled()
+	})
+
+	test("a send's own build is given no payer read", async () => {
+		const { executor, deps } = makeHarness()
+		await executor.execute(makeReq(), undefined, FENCE)
+		expect((deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.calls[0]?.[6]).toBeUndefined()
 	})
 
 	test("a cancel landing during the probe rejects and stashes nothing", async () => {

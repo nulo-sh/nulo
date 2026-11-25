@@ -26,7 +26,6 @@ import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import type { FpcService } from "@/wallet/services/fpc/service"
 import { FPC_SERVICE_NAME, FpcType } from "@/wallet/services/fpc/spec"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
-import type { Fpc } from "@/wallet/services/fpc/fpc"
 import type { TransactionService, TransferType, LocalTxOrigin } from "@/wallet/services/transaction/service"
 import { TRANSACTION_SERVICE_NAME, OriginType, TxStatus } from "@/wallet/services/transaction/spec"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
@@ -104,7 +103,7 @@ import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor, type TransferExecutorDeps, type TransferSequence } from "./transfer-executor"
 import { DappSendExecutor } from "./dapp-send-executor"
 import { DappSendEstimation, type DappSendEstimationDeps } from "./dapp-send-estimation"
-import { DiscoveryAwareEstimator, type DiscoveryProbe } from "./discovery-aware-estimator"
+import { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { ViewExecutor } from "./view-executor"
 import { RegistrationExecutor } from "./registration-executor"
 import { ExecutionLane } from "./execution-lane"
@@ -116,7 +115,7 @@ import { getViewSimulationDeps } from "./helpers/get-view-simulation-deps"
 import { AuthwitDiscoverer } from "./authwit-discoverer"
 import { TxRequestBuilder } from "./tx-request-builder"
 import { RunReads } from "./run-reads"
-import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps, OnBuilt } from "./fee/fee-strategy"
+import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee/fee-strategy"
 import { appPriorityOf } from "./fee/fee-strategy"
 import { buildFeeStrategies } from "./fee/build-fee-strategies"
 import { ExecutionCoordinator, type PickedEndpoint } from "./execution-coordinator"
@@ -514,8 +513,8 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			chainTip: this.chainTipGate,
 			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
 			transactionsOf: (account, profileId) => this.transactionService.transactionsOf(account, profileId),
-			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
+			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc, payerBalance) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, { parentTask, signal, fpc, payerBalance }),
 			createJournalOperation: (input) => this.operationJournal.createOperation(input),
 			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
 			answers: this.queuedFeeAnswers,
@@ -527,10 +526,10 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 	private wireDappSendAndViewExecutors(shared: SharedSendDeps): void {
 		const estimateWithDiscovery = new DiscoveryAwareEstimator({
 			authwit: this.authwit,
-			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt),
-			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal, onBuilt) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, probe, undefined, onBuilt),
+			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal, onBuilt, payerBalance) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, { parentTask, signal, onBuilt, payerBalance }),
+			buildAndEstimateFolded: (op, feeSettings, fence, probe, parentTask, signal, onBuilt, payerBalance) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, { probe, parentTask, signal, onBuilt, payerBalance }),
 			buildForDiscovery: async (op, method, fence, onBuilt) => {
 				const sendOp = op as SendTransactionOperation
 				// An app's private call may read its gas settings, so discovery simulates with its priority too.
@@ -553,7 +552,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			signal,
 			onBuilt,
 			observer,
-		) => this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, undefined, onBuilt, observer)
+		) => this.buildAndEstimateTxRequest(op, feeSettings, fence, { parentTask, signal, onBuilt, observer })
 		// No spread of `shared`: the estimation gets the reads it names, never a send's.
 		const estimation = new DappSendEstimation({
 			getActiveProfile: shared.getActiveProfile,
@@ -1283,12 +1282,7 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		inputOp: FeeStrategyContext["op"],
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
-		parentTask?: WrappedTask,
-		signal?: AbortSignal,
-		probe?: DiscoveryProbe,
-		fpc?: Fpc,
-		onBuilt?: OnBuilt,
-		observer?: DiscoveryProbe,
+		run: RunOptions = {},
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
@@ -1308,13 +1302,14 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 			feeSettings,
 			feeMultiplier,
 			gasPadding,
-			parentTask,
-			signal,
-			probe,
-			observer,
-			fpc,
-			onBuilt,
+			parentTask: run.parentTask,
+			signal: run.signal,
+			probe: run.probe,
+			observer: run.observer,
+			fpc: run.fpc,
+			onBuilt: run.onBuilt,
 			reads,
+			payerBalance: run.payerBalance,
 		}
 		try {
 			return await strategy.buildAndEstimate(ctx)
@@ -1323,6 +1318,9 @@ export class ExecutionService extends Service<Methods, Events> implements Servic
 		}
 	}
 }
+
+/** What one strategy run carries besides its operation, fee choice and fence. */
+type RunOptions = Pick<FeeStrategyContext, "parentTask" | "signal" | "probe" | "fpc" | "onBuilt" | "observer" | "payerBalance">
 
 /** A contract revert keeps `Error`'s name, and the minifier mangles class names, so it is named here. */
 function failureName(error: unknown): string {

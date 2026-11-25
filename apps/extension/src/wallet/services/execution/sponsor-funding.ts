@@ -8,7 +8,8 @@
 
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { PrivateExecutionResult } from "@aztec-labs/stdlib/tx"
-import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import type { Network } from "@/wallet/services/network/spec"
 import { feeJuiceAddress } from "@/wallet/utils/fee-juice"
 import { type PublicStorageReader, readPublicFeeJuiceBalance } from "@/wallet/utils/fee-juice-balance"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
@@ -21,6 +22,34 @@ export const SPONSOR_PROBE_TIMEOUT_MS = 5_000
 type ProbeOutcome = "funded" | "short" | "failed"
 type ProbeLog = (msg: string, data: { outcome: ProbeOutcome }) => void
 
+/**
+ * One estimate's read of its payer's public Fee Juice, sent while the simulation that decides the
+ * estimate runs instead of after it. The strategy starts it once, as that simulation starts; the
+ * estimate's first probe of that payer on that build's network takes it, and every other read is
+ * made afresh. An estimate that fails or is cancelled before its probe abandons it unlogged.
+ */
+export class PayerBalanceRead {
+	private started: { network: Network; payer: string; balance: Promise<bigint> } | undefined
+
+	public constructor(private readonly read: PublicStorageReader) {}
+
+	public start(network: Network, payer: string): void {
+		const balance = (async () =>
+			readPublicFeeJuiceBalance(this.read, network, AztecAddress.fromStringUnsafe(payer), SPONSOR_PROBE_TIMEOUT_MS))()
+		// Only the probe that takes it reports its failure.
+		balance.catch(() => {})
+		this.started = { network, payer, balance }
+	}
+
+	/** The read started for `payer` on `network`, once; `undefined` when none was. */
+	public take(network: Network, payer: AztecAddress): Promise<bigint> | undefined {
+		const { started } = this
+		this.started = undefined
+		if (!started || started.network !== network || !sameFieldAddress(started.payer, payer.toString())) return undefined
+		return started.balance
+	}
+}
+
 /** `payer`'s public Fee Juice and `built`'s fee limit, or `undefined` when the read fails. Logs one
  *  fixed line per probe: an RPC error can carry addresses, figures or the endpoint URL. */
 async function readCoverage(
@@ -29,10 +58,12 @@ async function readCoverage(
 	read: PublicStorageReader,
 	log: ProbeLog,
 	label: string,
+	started?: PayerBalanceRead,
 ): Promise<{ balance: bigint; limit: bigint } | undefined> {
 	let coverage: { balance: bigint; limit: bigint }
 	try {
-		const balance = await readPublicFeeJuiceBalance(read, built.network, payer, SPONSOR_PROBE_TIMEOUT_MS)
+		const balance = await (started?.take(built.network, payer) ??
+			readPublicFeeJuiceBalance(read, built.network, payer, SPONSOR_PROBE_TIMEOUT_MS))
 		coverage = { balance, limit: feeLimitOf(built.txRequest) }
 	} catch {
 		log(label, { outcome: "failed" })
@@ -53,9 +84,10 @@ export async function probeOwnFeeJuice(
 	built: FeeEstimate,
 	read: PublicStorageReader,
 	log: ProbeLog,
+	started?: PayerBalanceRead,
 ): Promise<FeeJuiceShortfall | undefined> {
 	if (built.feePaymentMethod !== AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE) return undefined
-	const coverage = await readCoverage(built, built.account.address, read, log, "own fee juice probe")
+	const coverage = await readCoverage(built, built.account.address, read, log, "own fee juice probe", started)
 	if (!coverage || coverage.balance >= coverage.limit) return undefined
 	return { maxFee: coverage.limit.toString(), balance: coverage.balance.toString() }
 }
@@ -99,8 +131,9 @@ export async function ownFeeJuiceShortfall(
 	built: FeeEstimate,
 	reads: OwnFeeJuiceReads,
 	log: ProbeLog,
+	started?: PayerBalanceRead,
 ): Promise<FeeJuiceShortfall | undefined> {
-	const short = await probeOwnFeeJuice(built, reads.readPublicStorageOnce, log)
+	const short = await probeOwnFeeJuice(built, reads.readPublicStorageOnce, log, started)
 	if (!short) return undefined
 	const networkId = built.network.id
 	const payer = built.account.address.toString()
@@ -117,10 +150,11 @@ export async function probeSponsorFunding(
 	built: FeeEstimate,
 	read: PublicStorageReader,
 	log: ProbeLog,
+	started?: PayerBalanceRead,
 ): Promise<SponsorFunding | undefined> {
 	const { sponsor } = built
 	if (!sponsor) return undefined
-	const funded = await coversFeeLimit(built, sponsor.address, read, log, "sponsor probe")
+	const funded = await coversFeeLimit(built, sponsor.address, read, log, "sponsor probe", started)
 	return funded === undefined ? undefined : { fpcId: sponsor.fpcId, address: sponsor.address.toString(), funded }
 }
 

@@ -44,7 +44,7 @@ import type {
 	SendTransactionOperation,
 	TransferFeeEstimate,
 } from "./spec"
-import { ownFeeJuiceShortfall, probeAppPayerFunding, probeSponsorFunding } from "./sponsor-funding"
+import { ownFeeJuiceShortfall, PayerBalanceRead, probeAppPayerFunding, probeSponsorFunding } from "./sponsor-funding"
 import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import type { TxRequestBuilder } from "./tx-request-builder"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
@@ -139,13 +139,14 @@ export class DappSendEstimation {
 		// choreography for dApp sends; stage-boundary cancellation preserved
 		// inside it).
 		throwIfAborted(signal)
-		const { built, discovered } = await this.buildForEstimate(operation, actions, detectedFee, feeSettings, fence, signal)
+		const payerBalance = new PayerBalanceRead(this.deps.readPublicStorageOnce)
+		const { built, discovered } = await this.buildForEstimate(operation, actions, detectedFee, feeSettings, fence, signal, payerBalance)
 		const { txRequest } = built
 		throwIfAborted(signal)
 		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
-		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
+		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log, payerBalance)
 		const appPayerFunding = await probeAppPayerFunding(built, this.deps.readPublicStorageOnce, log)
-		const feeJuiceShortfall = await ownFeeJuiceShortfall(built, this.deps, log)
+		const feeJuiceShortfall = await ownFeeJuiceShortfall(built, this.deps, log, payerBalance)
 		throwIfAborted(signal)
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
@@ -197,11 +198,22 @@ export class DappSendEstimation {
 		detectedFee: FeeOptions | undefined,
 		feeSettings: FeeSettings,
 		fence: ExecutionFence,
-		signal?: AbortSignal,
+		signal: AbortSignal | undefined,
+		payerBalance: PayerBalanceRead,
 	): Promise<{ built: FeeEstimate; discovered: readonly DiscoveredAuthwit[] }> {
 		const fee = detectedFee ?? (operation as SendTransactionOperation).fee
 		if (!fee?.embeddedFeePayment) {
-			return this.deps.estimateWithDiscovery.estimate(operation, actions, detectedFee, feeSettings, fence, undefined, signal)
+			return this.deps.estimateWithDiscovery.estimate(
+				operation,
+				actions,
+				detectedFee,
+				feeSettings,
+				fence,
+				undefined,
+				signal,
+				undefined,
+				payerBalance,
+			)
 		}
 		const op = { ...(operation as SendTransactionOperation), actions: [...actions], fee }
 		const probe = new CollectingDiscoveryProbe()
