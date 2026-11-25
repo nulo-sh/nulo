@@ -1622,6 +1622,7 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 			await field(w, USD).setValue("10")
 			log = []
 			await field(w, USD).trigger("keydown", { key: "Enter", repeat: true })
+			await field(w, USD).trigger("keydown", { key: "Enter", isComposing: true })
 			expect(log).toEqual([])
 			await field(w, USD).trigger("keydown", { key: "Enter" })
 			expect(log).toEqual([["model", "10.00143"], ["done"]])

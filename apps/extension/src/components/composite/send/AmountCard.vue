@@ -210,11 +210,12 @@ function restAmount() {
 	emit("typed")
 }
 
-/** Whether leaving would rewrite the text: one that reads, which its rest regroups or trims. */
+/** Whether leaving would rewrite the text: one that reads, which its rest regroups or trims. Reads
+ *  `lastText`, which the card's own write sets at once, where the model reads it a render late. */
 function restRewrites() {
-	if (!model.value || tokenDecimals.value === undefined) return false
-	const read = readAmountText(String(model.value), { rested: rested.value })
-	return read.ok && restingAmount(read.plain, tokenDecimals.value) !== String(model.value)
+	if (!lastText || tokenDecimals.value === undefined) return false
+	const read = readAmountText(lastText, { rested: rested.value })
+	return read.ok && restingAmount(read.plain, tokenDecimals.value) !== lastText
 }
 
 // Enter leaves the text as typed, and a rest that rewrites it later asks the estimate again, so Enter

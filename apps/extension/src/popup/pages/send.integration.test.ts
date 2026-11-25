@@ -1969,7 +1969,7 @@ describe("Send — when the fee estimate starts", () => {
 			w.unmount()
 		})
 
-		test("Max pressed while the field has the focus: the leave on its press starts the typed amount, which Max's own amount replaces; in one task, one estimate", async () => {
+		test("Max pressed while the field has the focus: the leave on its press starts the typed amount, which Max's own amount replaces; a script's blur and press in one task start one", async () => {
 			const w = await typed("1.5")
 			const max = w.get('[data-testid="send-amount-max"]').element
 			// A press blurs the field first, and its click comes in a later task.
@@ -1979,6 +1979,7 @@ describe("Send — when the fee estimate starts", () => {
 			await nextTask()
 			expect(amounts()).toEqual([1_500_000n, 5_000_000n])
 
+			// A person's press always parts the two; only a script runs both before Vue's flush.
 			el(w).focus()
 			await field(w).setValue("2")
 			el(w).blur()
