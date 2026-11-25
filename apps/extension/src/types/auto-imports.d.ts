@@ -669,6 +669,7 @@ declare global {
   const useSecretCountdown: typeof import('../composables/useSecretCountdown').useSecretCountdown
   const useSeedStatus: typeof import('../composables/useSeedStatus').useSeedStatus
   const useSendData: typeof import('../composables/useSendData').useSendData
+  const useSendEstimate: typeof import('../composables/useSendEstimate').useSendEstimate
   const useSendFeeSelection: typeof import('../composables/useFeeSelection').useSendFeeSelection
   const useSendReview: typeof import('../composables/useSendReview').useSendReview
   const useSendStageLine: typeof import('../composables/useSendStageLine').useSendStageLine
@@ -1698,6 +1699,7 @@ declare module 'vue' {
     readonly useSecretCountdown: UnwrapRef<typeof import('../composables/useSecretCountdown')['useSecretCountdown']>
     readonly useSeedStatus: UnwrapRef<typeof import('../composables/useSeedStatus')['useSeedStatus']>
     readonly useSendData: UnwrapRef<typeof import('../composables/useSendData')['useSendData']>
+    readonly useSendEstimate: UnwrapRef<typeof import('../composables/useSendEstimate')['useSendEstimate']>
     readonly useSendFeeSelection: UnwrapRef<typeof import('../composables/useFeeSelection')['useSendFeeSelection']>
     readonly useSendReview: UnwrapRef<typeof import('../composables/useSendReview')['useSendReview']>
     readonly useSendStageLine: UnwrapRef<typeof import('../composables/useSendStageLine')['useSendStageLine']>

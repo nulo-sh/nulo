@@ -37,7 +37,6 @@ import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { isAddressShapedName } from "@/utils/contact-name"
-import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { feeJuiceBridgeUrl, feePayerOf } from "@/utils/fee/fee-helpers"
 import { formatBaseUnits } from "@/utils/amount"
 import { isValidDecimals } from "@/utils/token-amount"
@@ -53,20 +52,19 @@ import { feeAllowsSend, queueCapOf, queuedSponsoredOf, queueModeOf, sendFeeHando
 import { feeWarning, NO_FACTS, payerKindOf, publishFacts, TOKEN_CAVEAT } from "@/utils/fee/publish-facts"
 import { isValidatedTokenClass } from "@/utils/token-class"
 import { IMPORTED_UNUSABLE_TOAST } from "@/components/stale-network/copy"
-import { ImportedAccountUnusableError } from "@nulo/extension-messaging/errors"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { useFeeEstimation } from "@/composables/useFeeEstimation"
 import { useLegalAcceptance } from "@/composables/useLegalAcceptance"
 import { usePrices } from "@/composables/usePrices"
 import { vSnackFooter } from "@/composables/snackInset"
 import { useSendData } from "@/composables/useSendData"
+import { useSendEstimate } from "@/composables/useSendEstimate"
 import { useSendReview } from "@/composables/useSendReview"
 import { useTicker } from "@/composables/ticker"
 import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
-const { openToast, toast, closeToast } = useToast()
+const { openToast } = useToast()
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -439,24 +437,6 @@ const handleRequote = (e) => {
 	if (liveQuote.value && e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
 }
 
-/** The wallet answered that an earlier send holds this transfer's chain state; set until the
- *  estimate's run starts, lands, fails or stops, so nothing the person pays goes out on a fee they
- *  have not seen. */
-const feeQueued = ref(false)
-/** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
-const queuedCap = ref(null)
-const estimateFailed = ref(false)
-/** The snack that reported the failure: the next question closes it unless another replaced it. */
-let failureSnackId
-const clearEstimateFailure = () => {
-	estimateFailed.value = false
-	if (failureSnackId !== undefined && toast.value?.id === failureSnackId) closeToast()
-	failureSnackId = undefined
-}
-const clearQueued = () => {
-	feeQueued.value = false
-	queuedCap.value = null
-}
 const feeState = computed(() => ({
 	queued: feeQueued.value,
 	queuedCap: queuedCap.value,
@@ -585,6 +565,10 @@ const feeTxShape = computed(() =>
 	JSON.stringify([activeToken.value?.id, transferType.value, searchTerm.value, amountValidation.value.integerized?.toString()]),
 )
 
+watch(accountUnusable, (unusable) => {
+	if (unusable) leaveUnusable()
+})
+
 const executionService = new ExecutionServiceClient()
 // ExecutionService opens a live SW port as soon as fee estimation runs
 // (before any submit). Its ONLY disconnect used to live in executeTransfer's
@@ -610,60 +594,24 @@ let submitInFlight = false
 // dApp re-request, etc).
 const sendInstanceId = Math.random().toString(36).slice(2, 8)
 
-/** What the running estimate was asked: a requeue repeats it with a fresh token. */
-let lastEstimateParams
-
 const {
-	result: feeEstimate,
+	feeEstimate,
 	isEstimating,
-	estimate: scheduleFeeEstimate,
-	cancel: cancelFeeEstimate,
+	feeQueued,
+	queuedCap,
+	estimateFailed,
+	estimateSlow,
+	request: requestFeeEstimate,
 	handoff: handoffFeeEstimate,
 	pauseThisTask: pauseFeeEstimate,
 	startWaiting: startWaitingFeeEstimate,
-} = useFeeEstimation({
-	debounceMs: 800,
-	estimate: (params, estimateToken, signal) => {
-		const { networkId, accountAddress, tokenId, tokenContract, transferType: tt, destination, amount, settings } = params
-		lastEstimateParams = params
-		console.debug(`[send:${sendInstanceId}] estimateTransferFee firing`)
-		return estimateWhenClear(
-			() =>
-				executionService.estimateTransferFee(
-					networkId,
-					accountAddress,
-					tokenId,
-					tokenContract,
-					tt,
-					destination,
-					amount,
-					settings,
-					estimateToken,
-				),
-			signal,
-			{
-				onQueued: (answer) => {
-					if (signal.aborted) return
-					feeQueued.value = true
-					// A spent token's answer carries no cap; the requeue's own answer will.
-					if (!answer.tokenSpent) queuedCap.value = answer.cap ?? null
-				},
-				start: { events: executionService.onEstimateStarted, estimateToken, onStarted: clearQueued },
-			},
-		)
-	},
-	cancelRemote: (estimateToken) => {
-		executionService.cancelEstimate(estimateToken).catch(() => {})
-	},
-	onError: (err) => {
-		// Rescheduled before the engine's settle clears `isEstimating`, so the queued row never drops.
-		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(lastEstimateParams)
-		clearQueued()
-		if (err instanceof ImportedAccountUnusableError) return leaveUnusable()
-		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
-		estimateFailed.value = true
-		failureSnackId = openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
-	},
+	dispose: disposeFeeEstimate,
+} = useSendEstimate({
+	executionService,
+	instanceId: sendInstanceId,
+	ready: estimateReady,
+	params: estimateParams,
+	onUnusable: leaveUnusable,
 })
 const isSending = ref(false)
 
@@ -761,27 +709,6 @@ const submitDeps = {
 	},
 }
 
-watch(accountUnusable, (unusable) => {
-	if (unusable) leaveUnusable()
-})
-
-// The queued flag outlives requeues (the engine stays estimating) but never the estimate itself.
-watch(isEstimating, (estimating) => {
-	if (!estimating) clearQueued()
-})
-
-/** How long one question may run before the fee card and the review say so and offer to ask again. */
-const ESTIMATE_SLOW_MS = 20_000
-const estimateSlow = ref(false)
-let estimateSlowTimer
-/** Every new question restarts it: a reschedule leaves `isEstimating` true, so the watch alone misses it. */
-function restartSlowClock() {
-	clearTimeout(estimateSlowTimer)
-	estimateSlow.value = false
-	if (isEstimating.value) estimateSlowTimer = setTimeout(() => (estimateSlow.value = true), ESTIMATE_SLOW_MS)
-}
-watch(isEstimating, restartSlowClock)
-
 /** The refusals the amount card shows; an amount it cannot weigh yet refuses nothing. */
 const amountRefused = computed(
 	() => exceedsBalance.value || amountValidation.value.reason === "invalid" || amountValidation.value.reason === "tooManyDecimals",
@@ -851,26 +778,21 @@ function requestEstimate() {
 	// A change during a USD conversion would start an estimate for the amount before the typed figure.
 	// The page's guard, not the card's: the card reads a write it made in this task only after its render.
 	if (fiatGuard.value?.converting) amountCardRef.value?.convertNow()
-	clearEstimateFailure()
+	requestFeeEstimate()
+}
+
+/** The estimate's checks, in order: a refused one cancels it. */
+function estimateReady() {
 	// An estimate simulates against the node: no work for a send the wall would refuse.
-	if (!legal.isCurrent.value) {
-		cancelFeeEstimate()
-		return
-	}
+	if (!legal.isCurrent.value) return false
 	// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
 	// or Private → Private is silently dropped here before estimation.
-	if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
-		cancelFeeEstimate()
-		return
-	}
-	if (!amountValidation.value.valid) {
-		cancelFeeEstimate()
-		return
-	}
+	if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) return false
+	return amountValidation.value.valid
+}
 
-	// New input asks a new question: it is queued only once the wallet says so again.
-	clearQueued()
-	scheduleFeeEstimate({
+function estimateParams() {
+	return {
 		networkId: appStore.network.id,
 		accountAddress: appStore.account.address,
 		tokenId: activeToken.value.id,
@@ -879,8 +801,7 @@ function requestEstimate() {
 		destination: searchTerm.value,
 		amount: amountValidation.value.integerized,
 		settings: feeSettings.value,
-	})
-	restartSlowClock()
+	}
 }
 
 // Every input the estimate is asked with is a source here, so a landed estimate is always the
@@ -983,8 +904,7 @@ onBeforeUnmount(() => {
 	// owns the disconnect, and tearing down here would abort the pending RPC.
 	if (!submitInFlight) disconnectExecution()
 
-	cancelFeeEstimate()
-	clearTimeout(estimateSlowTimer)
+	disposeFeeEstimate()
 
 	amountTerm.value = null
 

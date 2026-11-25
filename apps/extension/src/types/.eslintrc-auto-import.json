@@ -946,6 +946,7 @@
     "useSecretCountdown": true,
     "useSeedStatus": true,
     "useSendData": true,
+    "useSendEstimate": true,
     "useSendFeeSelection": true,
     "useSendReview": true,
     "useSendStageLine": true,
