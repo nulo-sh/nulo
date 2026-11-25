@@ -42,8 +42,9 @@ const props = defineProps({
  *  `typed`: the card wrote typing into the model in this task (a keystroke, its rest on blur, or a typed
  *  USD figure's conversion), so a fee estimate it causes waits for more.
  *  `picked`: Max, the USD Max or the unit switch, which may leave the amount as it was.
- *  `done`: the person left a field, after its rest or conversion is written, or pressed Enter in it, so
- *  the estimate their typing asked waits no longer. A window losing focus is not leaving. */
+ *  `done`: the person left a field, after its rest or conversion is written, or pressed Enter in the USD
+ *  field or on a token text the field already rests on, so the estimate their typing asked waits no
+ *  longer. A window losing focus is not leaving. */
 const emit = defineEmits(["edit", "typed", "picked", "done"])
 
 /** Token amount string — ALWAYS the value that validates + sends, in both

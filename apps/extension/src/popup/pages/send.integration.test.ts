@@ -1917,9 +1917,11 @@ describe("Send — when the fee estimate starts", () => {
 			await nextTask()
 			expect(amounts()).toEqual([1_500_000n])
 			await field(w).trigger("keydown", { key: "Enter" })
+			el(w).blur()
 			await vi.advanceTimersByTimeAsync(1000)
 			expect(asked()).toBe(1)
 
+			el(w).focus()
 			await field(w).setValue("2.50")
 			await vi.advanceTimersByTimeAsync(300)
 			await field(w).trigger("keydown", { key: "Enter" })
@@ -1964,6 +1966,27 @@ describe("Send — when the fee estimate starts", () => {
 			el(w).blur()
 			await vi.advanceTimersByTimeAsync(1000)
 			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("Max pressed while the field has the focus: the leave on its press starts the typed amount, which Max's own amount replaces; in one task, one estimate", async () => {
+			const w = await typed("1.5")
+			const max = w.get('[data-testid="send-amount-max"]').element
+			// A press blurs the field first, and its click comes in a later task.
+			el(w).blur()
+			await nextTask()
+			sendEvent(max, "click")
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n, 5_000_000n])
+
+			el(w).focus()
+			await field(w).setValue("2")
+			el(w).blur()
+			sendEvent(max, "click")
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n, 5_000_000n, 5_000_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(3)
 			w.unmount()
 		})
 
