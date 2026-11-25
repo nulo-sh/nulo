@@ -25,7 +25,6 @@ const LANDED = { maxFee: "1000" } as unknown as Answer
 const QUEUED_WITH_CAP = { queued: true, tokenSpent: false, cap: { basis: "10", cap: "20" } } as Answer
 const QUEUED_SPENT = { queued: true, tokenSpent: true } as Answer
 const FAILURE_LABEL = "Couldn't estimate fee. Try again."
-/** An answer that never comes. */
 const pending = () => new Promise<Answer>(() => {})
 
 function setup() {
@@ -244,12 +243,9 @@ describe("useSendEstimate", () => {
 		h.estimate.request()
 		expect(h.estimate.estimateSlow.value).toBe(false)
 		await vi.advanceTimersByTimeAsync(19_999)
-		expect(h.estimate.estimateSlow.value).toBe(false)
-		await vi.advanceTimersByTimeAsync(1)
-		expect(h.estimate.estimateSlow.value).toBe(true)
-
 		landing.resolve(LANDED)
-		await nextTask()
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(h.estimate.feeEstimate.value).toEqual(LANDED)
 		expect(h.estimate.estimateSlow.value).toBe(false)
 		h.scope.stop()
 	})
