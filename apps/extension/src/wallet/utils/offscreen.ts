@@ -6,7 +6,6 @@ import { createSerialQueue } from "@nulo/wallet-core/utils"
 export const OFFSCREEN_READY_MESSAGE = "OFFSCREEN_READY"
 export const OFFSCREEN_PING = "OFFSCREEN_PING"
 export const OFFSCREEN_PONG = "OFFSCREEN_PONG"
-export const OFFSCREEN_KEEPALIVE = "OFFSCREEN_KEEPALIVE"
 
 let offscreenTimeout: NodeJS.Timeout
 let offscreenPromise: Promise<void> | null = null

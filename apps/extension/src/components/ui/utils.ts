@@ -16,17 +16,6 @@ export function getChainPosition(chainId: number): number {
 	}
 }
 
-export function getChainColor(chainId: number): string {
-	switch (chainId) {
-		case CHAIN_IDS.TESTNET:
-			return "neutral-mint"
-		case CHAIN_IDS.SANDBOX:
-			return "sand"
-		default:
-			return "purple"
-	}
-}
-
 export function getChainName(chainId: number): string {
 	switch (chainId) {
 		case CHAIN_IDS.TESTNET:

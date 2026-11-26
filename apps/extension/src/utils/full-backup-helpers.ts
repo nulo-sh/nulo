@@ -13,8 +13,6 @@ import { ACCOUNT_SERVICE_NAME, IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/servi
 import { ACCOUNT_STATE_SERVICE_NAME, isAccountStateV2 } from "@/wallet/services/account-state/spec"
 import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
 import { CONTACT_SERVICE_NAME } from "@/wallet/services/contact/spec"
-import { FPC_SERVICE_NAME } from "@/wallet/services/fpc/spec"
-import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
@@ -285,9 +283,8 @@ interface GenericRestoreItem {
  * Fields that identify WHICH row failed without describing what it held.
  *
  * Deliberately excludes `address` and `name`: the generic branch covers contacts (a counterparty
- * address and a user-chosen label), network endpoints (`rpcUrl`, which routinely carries a
- * provider API key) and imported keys (`encryptedSigningKey`). The row id is what a developer
- * needs to find the row again; the rest is what leaks.
+ * address and a user-chosen label) and imported keys (`encryptedSigningKey`). The row id is what a
+ * developer needs to find the row again; the rest is what leaks.
  *
  * Each field carries its EXPECTED TYPE, and `key` is scoped to the one service it means anything
  * for. A name-and-length allowlist is not enough on its own: `restoreRows` preserves the raw failed
@@ -315,7 +312,6 @@ const CONFIG_KEY: RestoreErrorField = { name: "key", kind: "configKey" }
  * Fail-closed: a service absent from this map emits nothing but its ordinal and error.
  */
 const RESTORE_ERROR_FIELDS_BY_SERVICE: Readonly<Record<string, ReadonlyArray<RestoreErrorField>>> = {
-	[NETWORK_SERVICE_NAME]: [ID, PROFILE_ID, CHAIN_ID],
 	// Accounts and imported keys are keyed by address and carry no `id`.
 	[ACCOUNT_SERVICE_NAME]: [PROFILE_ID, CHAIN_ID],
 	[IMPORTED_KEYS_SERVICE_NAME]: [PROFILE_ID, CHAIN_ID],
@@ -324,7 +320,6 @@ const RESTORE_ERROR_FIELDS_BY_SERVICE: Readonly<Record<string, ReadonlyArray<Res
 	// A Tx is keyed by hash, which is a private-activity link — the ordinal locates it instead.
 	[TRANSACTION_SERVICE_NAME]: [PROFILE_ID, NETWORK_ID, CHAIN_ID],
 	[AUTH_REGISTRY_SERVICE_NAME]: [ID],
-	[FPC_SERVICE_NAME]: [ID, PROFILE_ID, CHAIN_ID],
 	[CONTACT_SERVICE_NAME]: [ID, PROFILE_ID],
 	[CONFIG_SERVICE_NAME]: [CONFIG_KEY],
 }
@@ -503,30 +498,6 @@ export function normalizeAllIds(data: Record<string, unknown>, idKey: string, ne
 		const value = data[key]
 		if (!Array.isArray(value)) continue
 		data[key] = value.map((item) => (isObjectLike(item) && idKey in item ? { ...item, [idKey]: newId } : item))
-	}
-}
-
-/**
- * Rewrite each row's `idKey` via `oldToNew`, looking up each row's ORIGINAL value
- * exactly once in a single pass. This is REQUIRED (over sequential per-id remaps)
- * to avoid cascade-aliasing: a per-id `A→R` pass followed by an `R→S` pass would
- * rewrite the already-remapped `A→R` rows a second time when it processes a later
- * source id that equals the freshly-random `R`. Building the complete map first
- * and looking up the original value guarantees one rewrite per row.
- */
-export function remapByMap(data: Record<string, unknown>, idKey: string, oldToNew: Map<string, string>): void {
-	if (oldToNew.size === 0) return
-	for (const key of Object.keys(data)) {
-		const value = data[key]
-		if (!Array.isArray(value)) continue
-		data[key] = value.map((item) => {
-			if (isObjectLike(item) && idKey in item) {
-				const cur = item[idKey]
-				const next = typeof cur === "string" ? oldToNew.get(cur) : undefined
-				if (next !== undefined) return { ...item, [idKey]: next }
-			}
-			return item
-		})
 	}
 }
 

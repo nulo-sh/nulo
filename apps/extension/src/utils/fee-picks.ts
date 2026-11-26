@@ -100,11 +100,6 @@ export function readAppPicks(raw: unknown): Record<string, AppPick> {
 	return out
 }
 
-/** The account's two Send picks; anything malformed reads as absent. */
-export function readSendSlots(raw: unknown, address: string): SendSlots {
-	return slotsOf(asObject(raw)?.[address])
-}
-
 function withoutFpcInSend(raw: unknown, fpcId: string): Record<string, SendSlots> {
 	const all = readSendPicks(raw)
 	for (const [address, slots] of Object.entries(all)) {

@@ -52,8 +52,3 @@ export function activityScopeKey(scope: ActivityScope): ActivityScopeKey {
 	if (address.length === 0) throw new InvalidActivityScopeError("empty accountAddress")
 	return JSON.stringify([scope.profileId, scope.networkId, scope.chainId, address]) as ActivityScopeKey
 }
-
-/** Structural equality on the canonical form. */
-export function scopesEqual(a: ActivityScope, b: ActivityScope): boolean {
-	return activityScopeKey(a) === activityScopeKey(b)
-}

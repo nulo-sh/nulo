@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate, readAppPicks, readSendSlots, type SendPick } from "./fee-picks"
+import { applyFeePickUpdate, type FeePickUpdate, parseFeePickUpdate, readAppPicks, readSendPicks, type SendPick } from "./fee-picks"
 
 const sendPick = (send: unknown, address: string, side: "private" | "public", pick: SendPick) =>
 	applyFeePickUpdate({ app: undefined, send }, { kind: "send", address, side, pick }).send
@@ -10,9 +10,10 @@ describe("Send picks", () => {
 		raw = sendPick(raw, "0xA", "private", { type: "fj" })
 		raw = sendPick(raw, "0xA", "public", { type: "fpc", fpc: { id: "s1" } })
 		raw = sendPick(raw, "0xB", "private", { type: "private_fpc" })
-		expect(readSendSlots(raw, "0xA")).toEqual({ private: { type: "fj" }, public: { type: "fpc", fpc: { id: "s1" } } })
-		expect(readSendSlots(raw, "0xB")).toEqual({ private: { type: "private_fpc" } })
-		expect(readSendSlots(raw, "0xC")).toEqual({})
+		expect(readSendPicks(raw)).toEqual({
+			"0xA": { private: { type: "fj" }, public: { type: "fpc", fpc: { id: "s1" } } },
+			"0xB": { private: { type: "private_fpc" } },
+		})
 	})
 
 	test("stores the semantic key and the preview label; everything else is dropped", () => {
@@ -33,7 +34,7 @@ describe("Send picks", () => {
 		["an oversized string", "x".repeat(65)],
 	])("a label that is %s is dropped, the pick is kept", (_, name) => {
 		const stored = { "0xA": { private: { type: "fpc", fpc: { id: "s1", name } } } }
-		expect(readSendSlots(stored, "0xA")).toEqual({ private: { type: "fpc", fpc: { id: "s1" } } })
+		expect(readSendPicks(stored)).toEqual({ "0xA": { private: { type: "fpc", fpc: { id: "s1" } } } })
 	})
 
 	test.each<[string, unknown]>([
@@ -49,7 +50,7 @@ describe("Send picks", () => {
 		["non-string fpc id", { "0xA": { private: { type: "fpc", fpc: { id: 12 } } } }],
 		["empty fpc id", { "0xA": { private: { type: "fpc", fpc: { id: "" } } } }],
 	])("hostile input reads as absent and never throws: %s", (_name, raw) => {
-		expect(readSendSlots(raw, "0xA")).toEqual({})
+		expect(readSendPicks(raw)).toEqual({})
 		expect(() => sendPick(raw, "0xA", "public", { type: "fj" })).not.toThrow()
 		expect(() => applyFeePickUpdate({ app: raw, send: raw }, { kind: "forgetFpc", fpcId: "s1" })).not.toThrow()
 	})

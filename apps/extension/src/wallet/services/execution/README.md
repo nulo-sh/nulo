@@ -2,15 +2,18 @@
 
 The service-worker subsystem that builds, estimates, simulates, proves,
 and submits Aztec transactions — for both popup-initiated transfers and
-dApp RPC operations. `ExecutionService` (`service.ts`) is a thin RPC
-facade: it owns the wire surface (`Methods`), `executeOperations`
-dispatch, and collaborator wiring; the work lives in focused modules.
+dApp RPC operations. `ExecutionService` (`service.ts`) owns the wire
+surface (`Methods`), `executeOperations` dispatch, the estimate admission
+and slot envelopes, the held-send fee question, and collaborator wiring.
+Two pieces of work stay in it too: the display decoding of a batch's calls
+and grants, and the create-authwit message hash. The rest of the work lives
+in focused modules.
 
 ## File map
 
 | Module | Owns |
 |---|---|
-| `service.ts` | RPC facade, `executeOperations` dispatcher, `executeAztecCreateAuthWit`, collaborator wiring, gas-balance event subscriptions. |
+| `service.ts` | RPC surface, `executeOperations` dispatcher, estimate admission and slot envelopes, the held-send fee question, collaborator wiring, gas-balance event subscriptions; display decoding (`decodeCallsForDisplay`, `decodeGrantsForDisplay`, `decodeQuestionGrantsForDisplay`, one artifact fetch per contract per batch); `executeAztecCreateAuthWit` and its message hash: an intent's is bound to the live chain and a call intent's also to the selector's ABI function; a raw hash passes through. |
 | `execution-lane.ts` | The execution-lane state machine: cancel-controller registry, each controller tagged with its session serial (`registerInFlight`), per-(profileId, chainId) FIFO `ExecutionMutex`, queued-wait heartbeats, `acquireSlot`, queued-record claim wrapper, `cancelJob`, the ended-session sweep (`abandonDeadSessions`). Frozen invariants documented in its docblock. |
 | `transfer-executor.ts` | Popup transfer flow: `execute` + `estimateFee`, estimate-reuse fast path, transfer-only activity-record shape. Waits on the send sequencer, then takes the execution slot from claim to submit, like a dApp send. |
 | `send-sequencer.ts`, `transfer-sequence-keys.ts` | The order between popup transfers of one account that share chain state: a token's note sequences, the pair handshake, a fee contract's notes, the account's initialization. Tickets for sends, a check-and-hold for estimates, release on receipt settlement. |
