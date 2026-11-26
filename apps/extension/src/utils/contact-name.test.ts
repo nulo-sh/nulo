@@ -249,11 +249,106 @@ describe("isAddressShapedName, on the name as it is stored", () => {
 		for (const name of names) expect(reads(name), name).toBe(false)
 	})
 
+	test("two dot-like letters in a row are refused like two full stops, also across spaces, hyphens and underscores", () => {
+		const refused = [
+			"Mom\u{A4F8}\u{A4F8}",
+			"Abe.\u{A78F}Dad",
+			"J\u{1427}\u{1427} Smith",
+			"Wait\u{1C79} \u{318D} what",
+			"v1\u{2D1}-\u{119E}2",
+			"A\u{11AEF}_\u{1BC00}B",
+			"A\u{1BC94}.B",
+		]
+		for (const name of refused) expect(reads(name), name).toBe(true)
+		for (const name of ["Kim\u{A4F8} Lee", "Ann\u{A78F}a", "Dr\u{1427} No"]) expect(reads(name), name).toBe(false)
+	})
+
+	test("ꓺ counts as two dots", () => {
+		for (const name of ["Mom\u{A4FA}", "Abe\u{A4FA}Dad", "0c2b7e\u{A4FA}4b5c"]) expect(reads(name), name).toBe(true)
+		expect(reads("Mom.")).toBe(false)
+	})
+
+	test("a name written only in Lisu letters keeps ꓸ and ꓺ as its tone letters", () => {
+		const lisu = [
+			"\u{A4D0}\u{A4EF}\u{A4FA}",
+			"\u{A4E0}\u{A4F8} \u{A4D1}\u{A4F3}\u{A4FA}",
+			"\u{A4E1}\u{A4F2}\u{A4FA}-\u{A4E2}\u{A4F4}\u{A4FA}",
+			"\u{A4D0}\u{A4EF}\u{A4FA}\u{11FB0}",
+		]
+		for (const name of lisu) expect(reads(name), name).toBe(false)
+		for (const name of ["\u{A4D0}\u{A4EF}\u{A4FA} 2", "sugar \u{A4D0}\u{A4EF}\u{A4FA}"]) expect(reads(name), name).toBe(true)
+	})
+
+	test("one full stop inside the run after `0x` keeps it whole, and every `0x` starts a run", () => {
+		for (const name of ["0xc2l.4b5c", "0x0c2.7e4b5c", "0xcbe.4b5c", "0x.1234", "0xa.0x.1234"]) expect(reads(name), name).toBe(true)
+		for (const name of ["0xA.B.C.1", "0x 1.2.3.4"]) expect(reads(name), name).toBe(false)
+	})
+
+	test("the run counts letters, not UTF-16 units", () => {
+		expect(reads("0x1\u{10428}a")).toBe(false)
+		expect(reads("0x1\u{10428}ab")).toBe(true)
+	})
+
+	test.each([
+		["capital O", "Ox0c2l7e4b5c"],
+		["capital O, then spaces", "Ox 0c2b 7e4b"],
+		["ø", "\u{F8}x0c2l7e4b5c"],
+		["Cyrillic О, then a full stop", "\u{41E}x0c2l7e.4b5c"],
+		["Greek Θ", "\u{398}x0c2b7e4b5c"],
+		["Armenian Օ", "\u{555}x0c2b7e4b5c"],
+		["Lisu ꓳ", "\u{A4F3}x0c2l7e4b5c"],
+		["Greek σ before χ", "\u{3C3}\u{3C7} 2024"],
+		["after a space", "Pay \u{D8}x0c2l7e4b5c"],
+		["after a dot-like letter", "\u{A4F8}Ox0c2l7e.4b5c"],
+		["a dot-like letter skipped as a full stop is", "Oxcb\u{A4F8}7e4b5c"],
+		["the digit third", "Oxen 10"],
+	])("a zero-like letter beginning a word reads as 0 before an x-like letter and a near digit: %s", (_kind, name) => {
+		expect(reads(name)).toBe(true)
+	})
+
+	test("a zero-like letter inside a word, or with the digit past the third letter or digit, reads as itself", () => {
+		for (const name of ["Toxic99", "Roxanne1985", "Oxana 2", "Oxford2"]) expect(reads(name), name).toBe(false)
+	})
+
+	test("case is kept: Σ is not drawn like a zero, though σ is", () => {
+		expect(reads("\u{3A3}\u{3A7} 2024")).toBe(false)
+		expect(reads("\u{3A3}\u{3C7}\u{3B5}\u{3BC} 10")).toBe(false)
+		expect(reads("\u{3C3}\u{3C7} 2024")).toBe(true)
+	})
+
+	test.each([
+		["Coptic ⲭ", "0\u{2CAD}0c2b7e4b5c"],
+		["Coptic Ⲭ", "0\u{2CAC}0C2B7E4B5C"],
+		["Lisu ꓫ", "0\u{A4EB}0c2b7e4b5c"],
+	])("an x-like letter after a real 0 reads as x: %s", (_kind, name) => {
+		expect(reads(name)).toBe(true)
+		expect(reads(`${name.slice(0, 2)}ford`)).toBe(false)
+	})
+
+	// The owner's pick of 2026-11-26 names these as still passing.
+	test.each(["Box 0xford", "Roxanne1985", "Fox 2024", "Oxford2", "Toxic99", "Oxana 2", "Oxford 10"])("%j still passes", (name) => {
+		expect(reads(name)).toBe(false)
+	})
+
+	test("the dot-like, zero-like and run patterns match in time linear in the name, however long", () => {
+		const long = [
+			`\u{A4F3}\u{A4EB}${"\u{A4F8}".repeat(100_000)}`,
+			`Ox${"\u{A4F8}a".repeat(50_000)}`,
+			`O${" ".repeat(100_000)}x`,
+			" Ox".repeat(33_000),
+			"0xa.0x.".repeat(14_000),
+		]
+		const started = performance.now()
+		const results = long.map(isAddressShapedName)
+		expect(performance.now() - started).toBeLessThan(1_000)
+		expect(results).toEqual([false, false, false, false, false])
+	})
+
 	test("matches in time linear in the name, however long", () => {
 		const long = [
 			`0x${"g".repeat(100_000)}`,
 			`0x${"g".repeat(100_000)}.1`,
-			"0xgg.".repeat(20_000),
+			"0xg.g.".repeat(16_000),
 			`0${"\u0445".repeat(100_000)}`,
 			"abc.".repeat(25_000),
 			`abc${".".repeat(100_000)}g`,
@@ -261,6 +356,6 @@ describe("isAddressShapedName, on the name as it is stored", () => {
 		const started = performance.now()
 		const results = long.map(isAddressShapedName)
 		expect(performance.now() - started).toBeLessThan(1_000)
-		expect(results).toEqual([false, false, false, false, false, true])
+		expect(results).toEqual([false, true, false, false, false, true])
 	})
 })
