@@ -1953,6 +1953,20 @@ describe("Send — when the fee estimate starts", () => {
 			},
 		)
 
+		test("after the estimate landed, Enter's regroup asks once more at once, as leaving's would have, and the Tab after it asks nothing", async () => {
+			mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "5000000000" }])
+			const w = await typed("1000")
+			await estimateLands()
+			expect(asked()).toBe(1)
+			await field(w).trigger("keydown", { key: "Enter" })
+			await nextTask()
+			expect([el(w).value, amounts()]).toEqual(["1,000", [1_000_000_000n, 1_000_000_000n]])
+			;(w.get('[data-testid="send-from-private"]').element as HTMLElement).focus()
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(2)
+			w.unmount()
+		})
+
 		test("Enter on an empty field or a text that does not read rewrites nothing and starts nothing, the waiting estimate of the text before it included", async () => {
 			const w = await typed("1")
 			await field(w).setValue("")

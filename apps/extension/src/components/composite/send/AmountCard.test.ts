@@ -1604,6 +1604,7 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 			const w = mountLive()
 			el(w).focus()
 			await field(w).setValue(typed)
+			el(w).setSelectionRange(1, 1)
 			log = []
 			await field(w).trigger("keydown", { key: "Enter" })
 			expect(log).toEqual([["model", rest], ["typed"], ["done"]])

@@ -223,9 +223,10 @@ function restRewrite() {
 	return rest === lastText ? null : rest
 }
 
-// Enter writes the rest leaving would before the estimate starts, so the estimate is the rested
-// amount's and a later leave finds nothing to rewrite or ask again. The page's re-render writes the
-// rest into the focused field, which puts the caret at its end. Enter leaves the read hint to leaving.
+// Enter writes the rest leaving would, then starts the estimate waiting for it, so a later leave finds
+// nothing to rewrite or ask again; a rest that rewrites a text already estimated asks again, as
+// leaving's does. The page's re-render writes the rest into the focused field, which puts the caret at
+// its end. Enter leaves the read hint to leaving.
 const handleAmountEnter = (e) => {
 	if (isRepeatOrComposing(e)) return
 	const rest = restRewrite()
