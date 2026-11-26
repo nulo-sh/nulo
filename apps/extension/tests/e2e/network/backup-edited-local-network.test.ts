@@ -8,7 +8,7 @@ import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, replaceInputValue, test, waitForHash } from "../fixtures/extension"
 import { navigateToSettings, openNetworkDetail, waitForToast } from "../fixtures/helpers"
-import { exportBackupContent } from "../helpers/backup-export"
+import { accountStateItems, exportBackupContent } from "../helpers/backup-export"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
@@ -53,7 +53,7 @@ test("an edited Local Network that answers reads active and travels in the full 
 	await fresh.close()
 
 	const backup = await exportBackupContent(localNetworkExtension)
-	const items = (backup.data["account-state"] ?? []) as Array<{ networkId?: string; chainId?: number }>
+	const items = accountStateItems(backup.data)
 	expect(items.filter((item) => item.chainId === 0).map((item) => item.networkId)).toEqual([networkId])
 
 	expect(localNetworkExtension.pageErrors).toEqual([])

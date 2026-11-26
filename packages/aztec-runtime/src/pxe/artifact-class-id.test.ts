@@ -7,7 +7,7 @@ import { type ContractInstanceWithAddress, getContractClassFromArtifact } from "
 import { describe, expect, test } from "vitest"
 import { FrozenSchnorrAccountArtifact } from "../account/frozen-artifact"
 import { NuloAccount } from "../account/nulo-account"
-import { assertInstanceArtifactClassId, assertWireArtifactClassId } from "./artifact-class-id"
+import { assertInstanceArtifactClassId, assertWireArtifactClassId, wireArtifactClassId } from "./artifact-class-id"
 
 const MISMATCH = "Contract artifact doesn't match instance's current class id"
 const seed = Fr.fromHexString("0x0000000000000000000000000000000000000000000000000000000000000002")
@@ -67,6 +67,30 @@ describe("assertWireArtifactClassId", () => {
 		},
 		60_000,
 	)
+})
+
+describe("wireArtifactClassId", () => {
+	test("recomputes the class id even when the artifact names an artifact hash of its own", async () => {
+		const { instance, artifact } = await genuinePair()
+		await expect(wireArtifactClassId({ ...artifact, artifactHash: "0x01" })).resolves.toBe(instance.originalContractClassId)
+	}, 60_000)
+
+	test("a memo shared by two instances hashes the artifact once and still binds each instance", async () => {
+		const { instance, artifact } = await genuinePair()
+		const memo = new Map<unknown, Promise<string>>()
+		let hashes = 0
+		const classIdOf = (a: unknown) => {
+			if (!memo.has(a)) {
+				hashes++
+				memo.set(a, wireArtifactClassId(a))
+			}
+			return memo.get(a) as Promise<string>
+		}
+		await expect(assertWireArtifactClassId(instance, artifact, classIdOf)).resolves.toBeUndefined()
+		const otherClass = { ...instance, originalContractClassId: `0x${"07".repeat(32)}`, currentContractClassId: `0x${"07".repeat(32)}` }
+		await expect(assertWireArtifactClassId(otherClass, artifact, classIdOf)).rejects.toThrow(MISMATCH)
+		expect(hashes).toBe(1)
+	}, 60_000)
 })
 
 describe("assertInstanceArtifactClassId", () => {

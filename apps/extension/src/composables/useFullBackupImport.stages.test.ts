@@ -53,9 +53,8 @@ vi.mock("@/wallet/services/config/client", async () => (await import("../../test
 vi.mock("@/wallet/services/account/spec", async (importOriginal) =>
 	(await import("../../tests/helpers/backup-import-harness")).accountSpecModule(importOriginal),
 )
-vi.mock(
-	"@/wallet/services/account-state/spec",
-	async () => (await import("../../tests/helpers/backup-import-harness")).accountStateSpecModule,
+vi.mock("@/wallet/services/account-state/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).accountStateSpecModule(importOriginal),
 )
 vi.mock("@/utils/background-liveness", async () => (await import("../../tests/helpers/backup-import-harness")).livenessModule)
 vi.mock("@/wallet/services/auth-registry/spec", async (importOriginal) =>

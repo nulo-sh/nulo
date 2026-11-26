@@ -6,9 +6,12 @@ import { describe, expect, test } from "vitest"
 import {
 	ACCOUNT_STATE_CAPS,
 	ACCOUNT_STATE_SKIP_UNREACHABLE,
+	encodeAccountState,
+	isAccountStateV2,
 	isConnectivityErrorMessage,
 	normalizeAccountStateSlice,
 	registrableNetworkIds,
+	restorePayload,
 	skippedNetworkRecord,
 	truncateErrorMessage,
 } from "./normalize"
@@ -93,6 +96,254 @@ describe("normalizeAccountStateSlice", () => {
 		expect(items).toEqual([])
 		expect(violations).toHaveLength(1)
 		expect(violations[0].restoreError).toContain("too large")
+	})
+})
+
+const CLASS_A = `0x${"0a".repeat(32)}`
+const CLASS_B = `0x${"0b".repeat(32)}`
+const entry = (address: string, classId: string) => ({ address, instance: { address, currentContractClassId: classId } })
+const addr = (byte: string) => `0x${byte.repeat(32)}`
+
+describe("normalizeAccountStateSlice, format 2", () => {
+	test("decodes into items whose contracts of one class share the table's one artifact object, across networks", () => {
+		const artifactA = { name: "A" }
+		const artifactB = { name: "B" }
+		const { items, violations } = normalizeAccountStateSlice({
+			format: 2,
+			classes: [
+				{ classId: CLASS_A, artifact: artifactA },
+				{ classId: CLASS_B, artifact: artifactB },
+			],
+			items: [
+				{ networkId: "n1", chainId: 1, senders: [sender()], contracts: [entry(addr("01"), CLASS_A), entry(addr("02"), CLASS_A)] },
+				{ networkId: "n2", chainId: 2, senders: [], contracts: [entry(addr("03"), CLASS_A), entry(addr("04"), CLASS_B)] },
+			],
+		})
+		expect(violations).toEqual([])
+		const [n1, n2] = items
+		expect(n1.senders).toEqual([sender()])
+		expect(n1.contracts.map((c) => c.artifact)).toEqual([artifactA, artifactA])
+		expect(n1.contracts[0].artifact).toBe(n1.contracts[1].artifact)
+		expect(n2.contracts[0].artifact).toBe(n1.contracts[0].artifact)
+		expect(n2.contracts[1].artifact).toBe(artifactB)
+	})
+
+	test("an object of any other format is the one record a part this build cannot read, with no items", () => {
+		const { items, violations } = normalizeAccountStateSlice({
+			format: 3,
+			classes: [],
+			items: [{ networkId: "n1", senders: [sender()], contracts: [] }],
+		})
+		expect(items).toEqual([])
+		expect(violations).toEqual([
+			{ networkId: "(slice)", senders: [], contracts: [], restoreError: "malformed account-state slice (not an array)" },
+		])
+	})
+
+	test("a contract entry's own artifact key is never read; its code comes from the table only", () => {
+		const { items } = normalizeAccountStateSlice({
+			format: 2,
+			classes: [],
+			items: [{ networkId: "n1", senders: [], contracts: [{ ...entry(addr("01"), CLASS_A), artifact: { name: "inline" } }] }],
+		})
+		expect(items[0].contracts).toEqual([entry(addr("01"), CLASS_A)])
+	})
+
+	test.each<[string, unknown]>([
+		["a table that is not an array", { [CLASS_A]: { name: "A" } }],
+		["a table with no entry for the class", [{ classId: CLASS_B, artifact: { name: "B" } }]],
+		["a malformed entry for the class", [null, { classId: CLASS_A, artifact: "code" }, { classId: CLASS_A }]],
+		[
+			"an entry whose class id is not in the form the export writes",
+			[{ classId: CLASS_A.toUpperCase().replace("0X", "0x"), artifact: { name: "A" } }],
+		],
+	])("%s keeps the entry, with no artifact and no record", (_label, classes) => {
+		const { items, violations } = normalizeAccountStateSlice({
+			format: 2,
+			classes,
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A)] }],
+		})
+		expect(violations).toEqual([])
+		expect(items[0].contracts).toEqual([entry(addr("01"), CLASS_A)])
+	})
+
+	test("the first usable entry for a class wins over malformed and later ones", () => {
+		const first = { name: "first" }
+		const { items } = normalizeAccountStateSlice({
+			format: 2,
+			classes: [
+				{ classId: CLASS_A, artifact: 7 },
+				{ classId: CLASS_A, artifact: first },
+				{ classId: CLASS_A, artifact: { name: "second" } },
+			],
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A)] }],
+		})
+		expect(items[0].contracts[0].artifact).toBe(first)
+	})
+
+	test("unreferenced table entries are passed over: nothing they hold reaches an item", () => {
+		const artifactA = { name: "A" }
+		const bulk = Array.from({ length: 2_000 }, (_, i) => ({ classId: `0x${i.toString(16).padStart(64, "f")}`, artifact: { junk: i } }))
+		const { items, violations } = normalizeAccountStateSlice({
+			format: 2,
+			classes: [...bulk, { classId: CLASS_A, artifact: artifactA }],
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A)] }],
+		})
+		expect(violations).toEqual([])
+		expect(items[0].contracts).toEqual([{ ...entry(addr("01"), CLASS_A), artifact: artifactA }])
+	})
+
+	test("the cap is measured on the part as written, class table included", () => {
+		const huge = { name: "A", padding: "x".repeat(ACCOUNT_STATE_CAPS.maxSliceCodeUnits) }
+		const { items, violations } = normalizeAccountStateSlice({
+			format: 2,
+			classes: [{ classId: CLASS_A, artifact: huge }],
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A)] }],
+		})
+		expect(items).toEqual([])
+		expect(violations).toHaveLength(1)
+		expect(violations[0].restoreError).toContain("too large")
+	})
+
+	test("items that are not an array are the one unreadable-part record", () => {
+		expect(normalizeAccountStateSlice({ format: 2, classes: [], items: {} }).violations[0].restoreError).toBe(
+			"malformed account-state slice (not an array)",
+		)
+	})
+
+	test("isAccountStateV2 holds for a format-2 object only", () => {
+		expect(isAccountStateV2({ format: 2 })).toBe(true)
+		expect(isAccountStateV2([])).toBe(false)
+		expect(isAccountStateV2({ format: "2" })).toBe(false)
+		expect(isAccountStateV2(null)).toBe(false)
+	})
+})
+
+describe("encodeAccountState", () => {
+	test("stores each class's artifact once and round-trips through the decoder with every entry kept", () => {
+		const artifactA = { name: "A", padding: "a".repeat(1_800_000) }
+		const artifactB = { name: "B" }
+		const contracts = (n: number, start: number, classId: string, artifact: object) =>
+			Array.from({ length: n }, (_, i) => ({ ...entry(addr((start + i).toString(16).padStart(2, "0")), classId), artifact }))
+		const items = [
+			{ networkId: "n1", chainId: 1, senders: [sender()], contracts: contracts(24, 1, CLASS_A, artifactA) },
+			{
+				networkId: "n2",
+				chainId: 2,
+				senders: [],
+				contracts: [...contracts(8, 40, CLASS_A, artifactA), ...contracts(1, 60, CLASS_B, artifactB)],
+			},
+		] as never[]
+		const encoded = encodeAccountState(items)
+		expect(isAccountStateV2(encoded)).toBe(true)
+		const part = encoded as { classes: { classId: string }[]; items: { chainId: number; contracts: object[] }[] }
+		expect(part.classes.map((c) => c.classId)).toEqual([CLASS_A, CLASS_B])
+		expect(part.items.map((i) => i.chainId)).toEqual([1, 2])
+		expect(part.items[0].contracts[0]).toEqual(entry(addr("01"), CLASS_A))
+		expect(JSON.stringify(encoded).length).toBeLessThan(2_000_000)
+
+		const { items: decoded, violations } = normalizeAccountStateSlice(JSON.parse(JSON.stringify(encoded)))
+		expect(violations).toEqual([])
+		expect(decoded.map((i) => i.contracts.length)).toEqual([24, 9])
+		expect(decoded[1].contracts[0].artifact).toBe(decoded[0].contracts[0].artifact)
+		expect(decoded[1].contracts[8].artifact).toEqual(artifactB)
+	})
+
+	test("re-encodes decoded format-2 items compactly, so a second pass never inflates them", () => {
+		const shared = { name: "A", padding: "a".repeat(100_000) }
+		const raw = {
+			format: 2,
+			classes: [{ classId: CLASS_A, artifact: shared }],
+			items: [
+				{
+					networkId: "n1",
+					senders: [],
+					contracts: Array.from({ length: 32 }, (_, i) => entry(addr((i + 1).toString(16).padStart(2, "0")), CLASS_A)),
+				},
+			],
+		}
+		const { items } = normalizeAccountStateSlice(raw)
+		expect(JSON.stringify(encodeAccountState(items)).length).toBe(JSON.stringify(raw).length)
+	})
+
+	test.each<[string, (a: object, b: object) => unknown[]]>([
+		[
+			"one class with two distinct artifact objects in one item",
+			(a, b) => [
+				{
+					networkId: "n1",
+					senders: [],
+					contracts: [
+						{ ...entry(addr("01"), CLASS_A), artifact: a },
+						{ ...entry(addr("02"), CLASS_A), artifact: b },
+					],
+				},
+			],
+		],
+		[
+			"one class with two distinct artifact objects across items",
+			(a, b) => [
+				{ networkId: "n1", senders: [], contracts: [{ ...entry(addr("01"), CLASS_A), artifact: a }] },
+				{ networkId: "n2", senders: [], contracts: [{ ...entry(addr("02"), CLASS_A), artifact: b }] },
+			],
+		],
+		[
+			"a contract carrying an artifact whose instance names no class id in the export's form",
+			(a) => [
+				{
+					networkId: "n1",
+					senders: [],
+					contracts: [{ address: addr("01"), instance: { currentContractClassId: CLASS_A.toUpperCase() }, artifact: a }],
+				},
+			],
+		],
+	])("returns its input whole as format 1 for %s", (_label, build) => {
+		const items = build({ name: "A" }, { name: "A" }) as never[]
+		const encoded = encodeAccountState(items)
+		expect(encoded).toEqual(items)
+		expect(Array.isArray(encoded)).toBe(true)
+	})
+})
+
+describe("restorePayload", () => {
+	test.each<[string, (pad: string) => unknown[]]>([
+		["one artifact object", (pad) => [{ ...entry(addr("01"), CLASS_A), artifact: { name: "A", pad } }]],
+		[
+			"two contracts whose artifact is the same non-object value",
+			(pad) => [
+				{ address: addr("01"), instance: { currentContractClassId: CLASS_A, pad }, artifact: true },
+				{ ...entry(addr("02"), CLASS_B), artifact: true },
+			],
+		],
+	])("a format-1 part at the cap holding %s goes back as its own array, never over the cap", (_label, contracts) => {
+		const part = (pad: string) => [{ networkId: "n1", chainId: 1, senders: [sender()], contracts: contracts(pad) }]
+		const atCap = part("a".repeat(ACCOUNT_STATE_CAPS.maxSliceCodeUnits - JSON.stringify(part("")).length))
+		expect(JSON.stringify(atCap).length).toBe(ACCOUNT_STATE_CAPS.maxSliceCodeUnits)
+		const { items, violations } = normalizeAccountStateSlice(JSON.parse(JSON.stringify(atCap)))
+		expect(violations).toEqual([])
+		expect(JSON.stringify(encodeAccountState(items)).length).toBeGreaterThan(ACCOUNT_STATE_CAPS.maxSliceCodeUnits)
+
+		const payload = restorePayload(items)
+		expect(Array.isArray(payload)).toBe(true)
+		expect(normalizeAccountStateSlice(payload).violations).toEqual([])
+	})
+
+	test("items sharing a class's artifact object, or holding an entry without code, are encoded", () => {
+		const shared = normalizeAccountStateSlice({
+			format: 2,
+			classes: [{ classId: CLASS_A, artifact: { name: "A" } }],
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A), entry(addr("02"), CLASS_A)] }],
+		}).items
+		expect(isAccountStateV2(restorePayload(shared))).toBe(true)
+
+		const withoutCode = normalizeAccountStateSlice({
+			format: 2,
+			classes: [{ classId: CLASS_A, artifact: { name: "A" } }],
+			items: [{ networkId: "n1", senders: [], contracts: [entry(addr("01"), CLASS_A), entry(addr("02"), CLASS_B)] }],
+		}).items
+		const payload = restorePayload(withoutCode)
+		expect(isAccountStateV2(payload)).toBe(true)
+		expect(normalizeAccountStateSlice(payload).items[0].contracts.map((c) => c.address)).toEqual([addr("01"), addr("02")])
 	})
 })
 

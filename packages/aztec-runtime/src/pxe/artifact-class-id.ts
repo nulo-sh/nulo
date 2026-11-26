@@ -7,6 +7,8 @@
  *   registration, where a mismatched artifact must be refused at the boundary.
  * - `assertInstanceArtifactClassId` binds a parsed artifact to the class a parsed instance's address
  *   commits to, for a registration whose inputs the caller already parsed.
+ * - `wireArtifactClassId` parses and hashes a wire-form artifact, mapping every failure to the fixed
+ *   mismatch text.
  * - `assertWireArtifactClassId` parses a wire-form pair first, applies the same binding, and maps
  *   every failure to the fixed mismatch text, for registration inputs that crossed a trust boundary
  *   as JSON.
@@ -99,17 +101,35 @@ export async function assertInstanceArtifactClassId(instance: ContractInstanceWi
 }
 
 /**
- * `assertInstanceArtifactClassId` over a wire-form pair. A schema parse, hash or comparison failure
- * all throw the one fixed mismatch text: the upstream messages carry artifact-chosen names, which
- * would reach logs and any classifier that reads the message.
+ * The class id a wire-form artifact hashes to, as `Fr.toString()` writes it. The schema parse drops an
+ * `artifactHash` key, so the hash is always recomputed. A parse or hash failure throws the fixed
+ * mismatch text: the upstream messages carry artifact-chosen names, which would reach logs and any
+ * classifier that reads the message.
  */
-export async function assertWireArtifactClassId(instance: unknown, artifact: unknown): Promise<void> {
+export async function wireArtifactClassId(artifact: unknown): Promise<string> {
 	try {
-		await assertInstanceArtifactClassId(
-			await ContractInstanceWithAddressSchema.parseAsync(instance),
-			await ContractArtifactSchema.parseAsync(artifact),
-		)
+		return (await getContractClassFromArtifact(await ContractArtifactSchema.parseAsync(artifact))).id.toString()
 	} catch {
 		throw new Error(CLASS_ID_MISMATCH)
 	}
+}
+
+/**
+ * `assertInstanceArtifactClassId` over a wire-form pair: every failure throws the one fixed mismatch
+ * text. `artifactClassId` may be a memo of {@link wireArtifactClassId} keyed by the artifact object,
+ * so several instances sharing one artifact hash it once; the instance is parsed and bound per call.
+ */
+export async function assertWireArtifactClassId(
+	instance: unknown,
+	artifact: unknown,
+	artifactClassId: (artifact: unknown) => Promise<string> = wireArtifactClassId,
+): Promise<void> {
+	let parsed: ContractInstanceWithAddress
+	try {
+		parsed = await ContractInstanceWithAddressSchema.parseAsync(instance)
+	} catch {
+		throw new Error(CLASS_ID_MISMATCH)
+	}
+	if (!parsed.currentContractClassId.equals(parsed.originalContractClassId)) throw new Error(CLASS_ID_MISMATCH)
+	if ((await artifactClassId(artifact)) !== parsed.originalContractClassId.toString()) throw new Error(CLASS_ID_MISMATCH)
 }

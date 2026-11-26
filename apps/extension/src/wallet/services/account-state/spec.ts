@@ -3,17 +3,20 @@ import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { Restored } from "@/wallet/base"
 import type { RunFence } from "@/wallet/services/profile/spec"
+import { isRecord } from "@nulo/wallet-core/guards"
 
 export const ACCOUNT_STATE_SERVICE_NAME = "account-state"
 
 export type BackupSender = {
 	address: string
 }
+/** A contract entry of a format-1 part: it carries its own copy of its class's artifact. */
 export type BackupContract = {
 	address: string
 	instance: ContractInstanceWithAddress
 	artifact: ContractArtifact
 }
+/** One network's item of a format-1 part. */
 export type BackupAccountState = {
 	networkId: string
 	/** The chain the item's network served; the import binds the item to the seeded network
@@ -21,6 +24,32 @@ export type BackupAccountState = {
 	chainId?: number
 	senders: Restored<BackupSender>[]
 	contracts: Restored<BackupContract>[]
+}
+
+/** A contract entry of a format-2 part: its code is the class table's entry for its instance's
+ *  `currentContractClassId`. */
+export type BackupContractEntry = Omit<BackupContract, "artifact">
+/** One class's artifact in a format-2 part, shared by every instance of the class on any network. */
+export type BackupContractClass = { classId: string; artifact: ContractArtifact }
+export type AccountStateItemV2 = Omit<BackupAccountState, "contracts"> & { contracts: BackupContractEntry[] }
+/** Format 2: each class's artifact once per part, however many instances and networks use it. */
+export type AccountStateSliceV2 = { format: 2; classes: BackupContractClass[]; items: AccountStateItemV2[] }
+/** The part as a file carries it: format 1 (an array, every file written before format 2) or format 2. */
+export type AccountStateSlice = BackupAccountState[] | AccountStateSliceV2
+
+/** A format-2 part. Any other object is a part this build cannot read. */
+export function isAccountStateV2(raw: unknown): raw is Record<string, unknown> & Pick<AccountStateSliceV2, "format"> {
+	return isRecord(raw) && raw.format === 2
+}
+
+/** A restore's outcome for one contract. It never carries the contract's code. */
+export type RestoredContract = { address: string; restoreError?: string }
+/** A restore's outcome for one network. */
+export type AccountStateRestoreRecord = {
+	networkId: string
+	senders: Restored<BackupSender>[]
+	contracts: RestoredContract[]
+	restoreError?: string
 }
 
 /** One contract the PXE holds, as its own store has it. */

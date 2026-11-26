@@ -1,5 +1,6 @@
 import type { Page } from "puppeteer"
 import { openFullBackupText } from "@/utils/full-backup-helpers"
+import { isAccountStateV2 } from "@/wallet/services/account-state/spec"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import { clickByTestId, type ExtensionContext, openPopup, replaceInputValue, waitForHash } from "../fixtures/extension"
 import { navigateByHash } from "../fixtures/helpers"
@@ -85,14 +86,32 @@ export function accountChainId(backup: PlainBackup, address: string): number {
 	return chainId
 }
 
+export type AccountStateItem = {
+	networkId?: string
+	chainId?: number
+	senders?: Array<{ address: string }>
+	contracts?: Array<{ address?: string }>
+}
+
+/** The account-state part's network items, whichever format the backup carries. */
+export function accountStateItems(data: Record<string, unknown>): AccountStateItem[] {
+	const part = data["account-state"]
+	return ((isAccountStateV2(part) ? part.items : part) ?? []) as AccountStateItem[]
+}
+
+/** Writes `items` as the part's items, keeping a format-2 part's class table. */
+export function setAccountStateItems(data: Record<string, unknown>, items: AccountStateItem[]): void {
+	const part = data["account-state"]
+	data["account-state"] = isAccountStateV2(part) ? { ...part, items } : items
+}
+
 /** Keeps only `chainId`'s account-state items: public-chain recovery material would make the import
  *  register contracts over public RPC. Throws unless a kept item still lists `tokenAddress`. */
 export function keepChainAccountState(data: Record<string, unknown>, chainId: number, tokenAddress: string): void {
-	const items = (data["account-state"] ?? []) as Array<{ chainId?: number; contracts?: Array<{ address?: string }> }>
-	const kept = items.filter((item) => item.chainId === chainId)
+	const kept = accountStateItems(data).filter((item) => item.chainId === chainId)
 	const token = tokenAddress.toLowerCase()
 	if (!kept.some((item) => item.contracts?.some((c) => c.address?.toLowerCase() === token))) {
 		throw new Error(`no account-state item of chain ${chainId} lists the funded token's contract`)
 	}
-	data["account-state"] = kept
+	setAccountStateItems(data, kept)
 }

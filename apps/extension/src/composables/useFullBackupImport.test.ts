@@ -76,9 +76,8 @@ vi.mock("@/wallet/services/config/client", async () => (await import("../../test
 vi.mock("@/wallet/services/account/spec", async (importOriginal) =>
 	(await import("../../tests/helpers/backup-import-harness")).accountSpecModule(importOriginal),
 )
-vi.mock(
-	"@/wallet/services/account-state/spec",
-	async () => (await import("../../tests/helpers/backup-import-harness")).accountStateSpecModule,
+vi.mock("@/wallet/services/account-state/spec", async (importOriginal) =>
+	(await import("../../tests/helpers/backup-import-harness")).accountStateSpecModule(importOriginal),
 )
 vi.mock("@/utils/background-liveness", async () => (await import("../../tests/helpers/backup-import-harness")).livenessModule)
 vi.mock("@/wallet/services/auth-registry/spec", async (importOriginal) =>
@@ -119,7 +118,12 @@ import { EARLIER_PASSKEY_BACKUP, refusedAsEarlierPasskey, validateAndMigrateBack
 import { showsDecryptCta } from "@/utils/full-backup-ctas"
 import { collectRestoreErrors, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
-import { ACCOUNT_STATE_SKIP_DEADLINE, ACCOUNT_STATE_SKIP_WRONG_NETWORK } from "@/wallet/services/account-state/normalize"
+import {
+	ACCOUNT_STATE_CAPS,
+	ACCOUNT_STATE_SKIP_DEADLINE,
+	ACCOUNT_STATE_SKIP_WRONG_NETWORK,
+	isAccountStateV2,
+} from "@/wallet/services/account-state/normalize"
 import { IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS } from "./importChainSync"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -1294,7 +1298,8 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 	const ranOutOfTime = (networkId: string) => [
 		{ ...item(networkId, []), restoreError: `${ACCOUNT_STATE_SKIP_DEADLINE} (1 registration(s) not attempted)` },
 	]
-	const networkOf = (items: unknown) => (items as Array<{ networkId: string }>)[0]?.networkId
+	const networkOf = (slice: unknown) =>
+		((isAccountStateV2(slice) ? slice.items : slice) as Array<{ networkId: string }>)[0]?.networkId as string
 	type Import = ReturnType<typeof useFullBackupImport>
 	const accountStateRows = (c: Import) => (c.restoreErrorLog.value["account-state"] ?? []) as Array<Record<string, unknown>>
 	const rowsFor = (c: Import, networkId: string) => accountStateRows(c).filter((r) => r.networkId === networkId)
@@ -1354,6 +1359,58 @@ describe("useFullBackupImport — Retry the networks that did not restore", () =
 		expect(c.canRetryAccountState.value).toBe(false)
 		expect(c.unrestoredNetworkNames.value).toEqual([])
 		expect(opts.completeImport).not.toHaveBeenCalled()
+	})
+
+	it("a Retry sends 32 contracts of one class with the class's code once, under the slice cap", async () => {
+		const classId = `0x${"0a".repeat(32)}`
+		const artifact = { name: "Token", padding: "t".repeat(1_800_000) }
+		const contracts = Array.from({ length: 32 }, (_, i) => ({
+			address: `0x${(i + 16).toString(16).repeat(32)}`,
+			instance: { currentContractClassId: classId },
+		}))
+		let calls = 0
+		const { c, restored } = await start((id) => (++calls === 1 ? ranOutOfTime(id) : answered(id)), {
+			"account-state": { format: 2, classes: [{ classId, artifact }], items: [{ ...item("x1"), chainId: 1, contracts }] },
+		})
+		await restored
+		expect(c.canRetryAccountState.value).toBe(true)
+		accountStateClient.restore.mockClear()
+
+		await c.retryAccountState()
+
+		expect(accountStateClient.restore).toHaveBeenCalledOnce()
+		const [slice] = accountStateClient.restore.mock.calls[0] as unknown as [
+			{ classes: unknown[]; items: Array<{ contracts: unknown[] }> },
+		]
+		expect(JSON.stringify(slice).length).toBeLessThan(ACCOUNT_STATE_CAPS.maxSliceCodeUnits / 20)
+		expect(slice.classes).toEqual([{ classId, artifact }])
+		expect(slice.items[0].contracts).toHaveLength(32)
+		expect(c.canRetryAccountState.value).toBe(false)
+	})
+
+	it("a Retry over two networks each holding its own copy of one class sends each copy with its own contracts", async () => {
+		const classId = `0x${"0a".repeat(32)}`
+		const contract = (n: number, name: string) => ({
+			address: `0x${(n + 16).toString(16).repeat(32)}`,
+			instance: { currentContractClassId: classId },
+			artifact: { name },
+		})
+		let calls = 0
+		const { c, restored } = await start((id) => (++calls <= 2 ? ranOutOfTime(id) : answered(id)), {
+			"account-state": [
+				{ ...item("x1"), chainId: 1, contracts: [contract(1, "genuine")] },
+				{ ...item("x2"), chainId: 2, contracts: [contract(2, "other")] },
+			],
+		})
+		await restored
+		accountStateClient.restore.mockClear()
+
+		await c.retryAccountState()
+
+		const sent = (accountStateClient.restore.mock.calls as unknown as unknown[][]).map(([slice]) => slice)
+		expect(sent).toHaveLength(2)
+		expect(sent).toContainEqual([{ ...item("M1"), contracts: [contract(1, "genuine")] }])
+		expect(sent).toContainEqual([{ ...item("M2"), contracts: [contract(2, "other")] }])
 	})
 
 	it("names the networks a Retry replays by their seeded names, in seed order", async () => {

@@ -31,7 +31,9 @@ export {
 	assertWireArtifactClassId,
 	DefaultArtifactClassIdVerifier,
 	verifyArtifactClassId,
+	wireArtifactClassId,
 } from "./artifact-class-id"
+export { withoutDebugInfo } from "./artifact-debug-info"
 export type { IPXE } from "./ipxe"
 export { PXE_SERVICE_NAME, type Methods, type NotesFilter, type PxeEvents, type RouteSnapshot } from "./spec"
 export {

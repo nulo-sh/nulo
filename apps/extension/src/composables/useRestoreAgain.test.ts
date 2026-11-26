@@ -8,6 +8,7 @@ import { toBase64 } from "@nulo/wallet-core/utils"
 import { isProxy, nextTick, reactive, ref } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { NodeStatus } from "@/wallet/services/network/spec"
+import { isAccountStateV2 } from "@/wallet/services/account-state/spec"
 
 const accountStateClient = { restore: vi.fn(), disconnect: vi.fn() }
 const networkClient = {
@@ -121,10 +122,11 @@ function stubStorage() {
 	})
 }
 
-/** Answers each restore call per network; the networks of a call are its items'. */
+/** Answers each restore call per network; the networks of a call are its part's items'. */
 function answerRestore(answer: (networkId: string) => unknown) {
-	accountStateClient.restore.mockImplementation(async (items: Array<{ networkId: string }>) => answer(items[0].networkId))
+	accountStateClient.restore.mockImplementation(async (slice: unknown) => answer(itemsOf(slice)[0].networkId))
 }
+const itemsOf = (slice: unknown) => (isAccountStateV2(slice) ? slice.items : slice) as Array<{ networkId: string }>
 const answered = (networkId: string) => [{ networkId, senders: [SENDER], contracts: [] }]
 const ranOutOfTime = (networkId: string) => [
 	{ networkId, senders: [], contracts: [], restoreError: `${ACCOUNT_STATE_SKIP_DEADLINE} (1 registration(s) not attempted)` },
@@ -491,8 +493,8 @@ describe("useRestoreAgain: scope", () => {
 		await page.restoreBackup()
 
 		expect(accountStateClient.restore).toHaveBeenCalledOnce()
-		const [items, networks, fence] = accountStateClient.restore.mock.calls[0]
-		expect(items).toEqual([{ networkId: "N1", senders: [SENDER], contracts: [] }])
+		const [slice, networks, fence] = accountStateClient.restore.mock.calls[0]
+		expect(slice).toEqual([{ networkId: "N1", senders: [SENDER], contracts: [] }])
 		expect(networks).toEqual([TESTNET])
 		expect(isProxy(networks[0]), "a proxy cannot cross Firefox's port").toBe(false)
 		expect(fence).toEqual(FENCE)
@@ -639,8 +641,8 @@ describe("useRestoreAgain: races", () => {
 
 	test("a session that ends during a Retry returns Home and settles nothing", async () => {
 		let calls = 0
-		accountStateClient.restore.mockImplementation(async (items: Array<{ networkId: string }>) => {
-			const id = items[0].networkId
+		accountStateClient.restore.mockImplementation(async (slice: unknown) => {
+			const id = itemsOf(slice)[0].networkId
 			if (id !== "N2") return answered(id)
 			if (++calls === 1) return ranOutOfTime(id)
 			session.live = false
@@ -662,9 +664,9 @@ describe("useRestoreAgain: races", () => {
 		const held = new Promise<void>((resolve) => {
 			release = resolve
 		})
-		accountStateClient.restore.mockImplementation(async (items: Array<{ networkId: string }>) => {
+		accountStateClient.restore.mockImplementation(async (slice: unknown) => {
 			await held
-			return answered(items[0].networkId)
+			return answered(itemsOf(slice)[0].networkId)
 		})
 		const { page, opts, active } = await open()
 		const restoring = page.restoreBackup()

@@ -108,7 +108,10 @@ export async function accountSpecModule(importOriginal: ImportOriginal) {
 	}
 }
 
-export const accountStateSpecModule = { ACCOUNT_STATE_SERVICE_NAME: "account-state" }
+export async function accountStateSpecModule(importOriginal: ImportOriginal) {
+	const real = await importOriginal<typeof import("@/wallet/services/account-state/spec")>()
+	return { ACCOUNT_STATE_SERVICE_NAME: "account-state", isAccountStateV2: real.isAccountStateV2 }
+}
 
 export async function authRegistrySpecModule(importOriginal: ImportOriginal) {
 	const real = await importOriginal<typeof import("@/wallet/services/auth-registry/spec")>()
