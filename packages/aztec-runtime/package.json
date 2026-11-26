@@ -8,6 +8,7 @@
 		".": "./src/index.ts",
 		"./pxe": "./src/pxe/index.ts",
 		"./pxe/public-events": "./src/pxe/public-events.ts",
+		"./pxe/route-snapshot": "./src/pxe/route-snapshot.ts",
 		"./account": "./src/account/index.ts",
 		"./ports": "./src/ports/index.ts",
 		"./adapters": "./src/adapters/index.ts",
