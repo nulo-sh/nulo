@@ -1,5 +1,0 @@
-- 2026-11-23: arcs 1-2 built, frames, one Codex pass each; plan archived pending the owner.
-- 2026-11-24: decision page 203 signed; plan reopened. Arc 1 merged with dev, gates green, pushed (a5a430af1).
-- 2026-11-24: arc 2 rebuilt for 77, the Send line, 24-decimal proofs red at 18; frames captured.
-- 2026-11-24: arc 2 Codex pass (01a20dd5): F1 rejected (signed as built, D12), F2 and F3 fixed.
-- 2026-11-24: arc 2 gates green at 3fbd84e8f (dev merged after #1942); smoke and network e2e green on Chrome and Firefox at 82742fe71.

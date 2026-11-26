@@ -25,10 +25,10 @@ const props = defineProps({
 
 <style module>
 .section_last {
-	composes: section_last from "./import-shared.module.css";
+	composes: section from "@/components/composite/form-section.module.css";
 }
 
 .section_label {
-	composes: section_label from "./import-shared.module.css";
+	composes: label from "@/components/composite/form-section.module.css";
 }
 </style>

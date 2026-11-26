@@ -231,7 +231,12 @@ const STUBS = {
 			"side",
 		],
 		emits: ["update:modelValue", "update:rested", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote() {}, focusAmount() {}, exitFiat() {} },
+		methods: {
+			refreezeQuote() {},
+			focusAmount() {},
+			exitFiat() {},
+			convertNow() {},
+		},
 	},
 	// The card's read-only rows, and the menu chrome around the real selector's items.
 	FeeMethodRow: { template: '<div data-testid="stub-fee-method-row" />' },
@@ -284,7 +289,7 @@ const FUNDING = {
 /** What a landed estimate answers when a test names none. */
 const LANDED = { maxFee: "1000", gasDetails: {} }
 
-/** The page debounces its estimate by 800 ms; this lets the current input's estimate land. */
+/** Lets the current input's estimate land, a typed one's 800 ms pause included. */
 async function estimateLands() {
 	await vi.advanceTimersByTimeAsync(800)
 	await flushPromises()
@@ -1768,5 +1773,345 @@ describe("send page — a token's decimals against the wallet's bound, over the 
 		expect(submit(w).attributes("disabled")).toBeDefined()
 		expect(mocks.estimateTransferFee).not.toHaveBeenCalled()
 		w.unmount()
+	})
+})
+
+describe("Send — when the fee estimate starts", () => {
+	const asked = () => mocks.estimateTransferFee.mock.calls.length
+	const amounts = () => mocks.estimateTransferFee.mock.calls.map((call) => call[6])
+	/** Fake timers fire no timer between simulated actions: this runs the one that ends a task's mark. */
+	const nextTask = () => vi.advanceTimersByTimeAsync(0)
+
+	test("a typed amount waits the 800 ms pause; a side picked during it starts at once, with that amount", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("1.5")
+		await vi.advanceTimersByTimeAsync(799)
+		expect(asked()).toBe(0)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(amounts()).toEqual([1_500_000n])
+
+		await w.get('[data-testid="send-amount-input"]').setValue("1.25")
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(1)
+		await setSide(w, "to", "public")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(amounts()).toEqual([1_500_000n, 1_250_000n])
+		await vi.advanceTimersByTimeAsync(1000)
+		expect(asked()).toBe(2)
+		w.unmount()
+	})
+
+	test("Max on the amount already typed starts the waiting estimate at once; an address typed on the person step waits", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("5")
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(0)
+		await w.get('[data-testid="send-amount-max"]').trigger("click")
+		await nextTask()
+		expect(amounts()).toEqual([5_000_000n])
+
+		// Back on the person step the amount stays, so a valid address typed there asks again.
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await nextTask()
+		await w.get('[data-testid="stub-recipient"]').setValue(DESTINATION)
+		await vi.advanceTimersByTimeAsync(799)
+		expect(asked()).toBe(1)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(asked()).toBe(2)
+		w.unmount()
+	})
+
+	test("Pay this address on the address just pasted starts its waiting estimate at once", async () => {
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+		await toForm(w)
+		await nextTask()
+		await w.get('[data-testid="send-amount-input"]').setValue("5")
+		await estimateLands()
+		await w.get('[data-testid="subpage-back"]').trigger("click")
+		await nextTask()
+		const pasted = `0x2${"c".repeat(63)}`
+		await w.get('[data-testid="stub-recipient"]').setValue(pasted)
+		await vi.advanceTimersByTimeAsync(300)
+		expect(asked()).toBe(1)
+		await w.get('[data-testid="send-pay-address"]').trigger("click")
+		await flushPromises()
+		expect(mocks.estimateTransferFee.mock.calls.map((call) => call[5])).toEqual([DESTINATION, pasted])
+		w.unmount()
+	})
+
+	/** The form on a USDC balance of 1.234567 at $0.50, so the unit switch shows. */
+	async function pricedForm() {
+		const PRICED = { ...TOKEN, chainId: CHAIN_IDS.TESTNET, contract: TEST_TOKENS.USDC, symbol: "USDC" }
+		mocks.getTokens.mockResolvedValue([PRICED])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: PRICED, privateBalance: "1234567", publicBalance: "1234567" }])
+		const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true, chainId: CHAIN_IDS.TESTNET })
+		for (const { value } of vi.mocked(PriceServiceClient).mock.results) {
+			value.onQuotesUpdated.invoke({
+				quotes: { "usd-coin": { coingeckoId: "usd-coin", usd: 0.5, fetchedAt: Date.now(), providerUpdatedAt: null } },
+				pricedTokens: TEST_PRICED_TOKENS,
+				tokenIcons: {},
+				bridgeIcons: {},
+			})
+		}
+		await toForm(w)
+		await nextTask()
+		return w
+	}
+
+	describe("leaving the amount field, or Enter in it", () => {
+		const field = (w: W, testid = "send-amount-input") => w.get(`[data-testid="${testid}"]`)
+		const el = (w: W, testid?: string) => field(w, testid).element as HTMLInputElement
+		/** The form with `text` typed 300 ms ago in the amount field, which has the focus; nothing asked yet. */
+		async function typed(text: string) {
+			const { w } = await mountSend(FUNDING["both Fee Juices"], { realAmountCard: true })
+			await toForm(w)
+			await nextTask()
+			el(w).focus()
+			await field(w).setValue(text)
+			await vi.advanceTimersByTimeAsync(300)
+			expect(asked()).toBe(0)
+			return w
+		}
+
+		test("Shift+Tab to Max, pressing nothing, starts one estimate at once, for the amount the field rests on", async () => {
+			const w = await typed("1.50")
+			;(w.get('[data-testid="send-amount-max"]').element as HTMLElement).focus()
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n])
+			expect(el(w).value).toBe("1.5")
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("Tab to a side choice does the same", async () => {
+			const w = await typed("1.50")
+			;(w.get('[data-testid="send-from-private"]').element as HTMLElement).focus()
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("a press elsewhere, which leaves no control with the focus, does the same", async () => {
+			const w = await typed("1.50")
+			el(w).blur()
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("Enter on a text the field rests on starts it at once, a repeat Enter adds nothing, and leaving then adds nothing", async () => {
+			const w = await typed("1.5")
+			await field(w).trigger("keydown", { key: "Enter", repeat: true })
+			await nextTask()
+			expect(asked()).toBe(0)
+			await field(w).trigger("keydown", { key: "Enter" })
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n])
+			await field(w).trigger("keydown", { key: "Enter" })
+			el(w).blur()
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test.each([
+			["1000", "1,000", 1_000_000_000n],
+			["1.50", "1.5", 1_500_000n],
+		])(
+			"Enter on %s shows %s, keeps the focus with the caret at its end, and starts one estimate at once; the Tab after it starts nothing more",
+			async (text, rest, amount) => {
+				mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "5000000000" }])
+				const w = await typed(text)
+				await field(w).trigger("keydown", { key: "Enter", repeat: true })
+				await field(w).trigger("keydown", { key: "Enter", isComposing: true })
+				await nextTask()
+				expect([el(w).value, asked()]).toEqual([text, 0])
+
+				const enter = sendEvent(el(w), "keydown", { key: "Enter" })
+				await nextTask()
+				expect(enter?.defaultPrevented).toBe(false)
+				expect(amounts()).toEqual([amount])
+				expect(el(w).value).toBe(rest)
+				expect(document.activeElement).toBe(el(w))
+				expect([el(w).selectionStart, el(w).selectionEnd]).toEqual([rest.length, rest.length])
+				await vi.advanceTimersByTimeAsync(1000)
+				expect(asked()).toBe(1)
+
+				;(w.get('[data-testid="send-from-private"]').element as HTMLElement).focus()
+				await vi.advanceTimersByTimeAsync(1000)
+				expect([el(w).value, asked()]).toEqual([rest, 1])
+				w.unmount()
+			},
+		)
+
+		test("after the estimate landed, Enter's regroup asks once more at once, as leaving's would have, and the Tab after it asks nothing", async () => {
+			mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "5000000000" }])
+			const w = await typed("1000")
+			await estimateLands()
+			expect(asked()).toBe(1)
+			await field(w).trigger("keydown", { key: "Enter" })
+			await nextTask()
+			expect([el(w).value, amounts()]).toEqual(["1,000", [1_000_000_000n, 1_000_000_000n]])
+			;(w.get('[data-testid="send-from-private"]').element as HTMLElement).focus()
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(2)
+			w.unmount()
+		})
+
+		test("Enter on an empty field or a text that does not read rewrites nothing and starts nothing, the waiting estimate of the text before it included", async () => {
+			const w = await typed("1")
+			await field(w).setValue("")
+			await field(w).trigger("keydown", { key: "Enter" })
+			await vi.advanceTimersByTimeAsync(1000)
+			expect([el(w).value, asked()]).toEqual(["", 0])
+
+			await field(w).setValue("2")
+			el(w).value = "2 TST"
+			await field(w).trigger("input", { inputType: "insertFromPaste" })
+			await field(w).trigger("keydown", { key: "Enter" })
+			await vi.advanceTimersByTimeAsync(1000)
+			expect([el(w).value, asked()]).toEqual(["2 TST", 0])
+			w.unmount()
+		})
+
+		test("a keystroke, a paste and a deletion in the focused field each wait the 800 ms pause, and a window losing focus keeps it", async () => {
+			const w = await typed("1")
+			el(w).value = "1.25"
+			await field(w).trigger("input", { inputType: "insertFromPaste" })
+			await vi.advanceTimersByTimeAsync(500)
+			el(w).value = "1.2"
+			await field(w).trigger("input", { inputType: "deleteContentBackward" })
+			await vi.advanceTimersByTimeAsync(500)
+			// The field stays the document's active element, as when the window loses focus.
+			await field(w).trigger("blur")
+			expect(document.activeElement).toBe(el(w))
+			await vi.advanceTimersByTimeAsync(299)
+			expect(asked()).toBe(0)
+			await vi.advanceTimersByTimeAsync(1)
+			expect(amounts()).toEqual([1_200_000n])
+			w.unmount()
+		})
+
+		test("leaving with nothing waiting starts nothing: an estimate already asked, or an empty field", async () => {
+			const w = await typed("1.5")
+			await estimateLands()
+			expect(asked()).toBe(1)
+			el(w).blur()
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+
+			el(w).focus()
+			await field(w).setValue("")
+			el(w).blur()
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("Max pressed while the field has the focus: the leave on its press starts the typed amount, which Max's own amount replaces; a script's blur and press in one task start one", async () => {
+			const w = await typed("1.5")
+			const max = w.get('[data-testid="send-amount-max"]').element
+			// A press blurs the field first, and its click comes in a later task.
+			el(w).blur()
+			await nextTask()
+			sendEvent(max, "click")
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n, 5_000_000n])
+
+			// A person's press always parts the two; only a script runs both before Vue's flush.
+			el(w).focus()
+			await field(w).setValue("2")
+			el(w).blur()
+			sendEvent(max, "click")
+			await nextTask()
+			expect(amounts()).toEqual([1_500_000n, 5_000_000n, 5_000_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(3)
+			w.unmount()
+		})
+
+		test("the unit switch pressed on a typed amount starts its waiting estimate at once, as before", async () => {
+			const w = await pricedForm()
+			await field(w).setValue("0.3")
+			await vi.advanceTimersByTimeAsync(300)
+			expect(asked()).toBe(0)
+			await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+			await nextTask()
+			expect(amounts()).toEqual([300_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+	})
+
+	describe("while a typed USD figure converts", () => {
+		/** The form in USD mode on a USDC balance of 1.234567 at $0.50, with "0.3" typed 100 ms ago. */
+		async function converting() {
+			const w = await pricedForm()
+			await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+			await nextTask()
+			await w.get('[data-testid="send-amount-fiat-input"]').setValue("0.3")
+			await vi.advanceTimersByTimeAsync(100)
+			expect(asked()).toBe(0)
+			return w
+		}
+
+		test("a side picked starts one estimate at once, for the converted amount", async () => {
+			const w = await converting()
+			await setSide(w, "to", "public")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(amounts()).toEqual([600_000n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("Max sends the exact balance, not its rounded dollars converted back, estimated once, at once", async () => {
+			const w = await converting()
+			await w.get('[data-testid="send-amount-max"]').trigger("click")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(amounts()).toEqual([1_234_567n])
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(asked()).toBe(1)
+			w.unmount()
+		})
+
+		test("leaving the field, or Enter in it, lands the figure typed last and starts its estimate at once, once; a window losing focus keeps both waiting", async () => {
+			const w = await converting()
+			const usd = w.get('[data-testid="send-amount-fiat-input"]')
+			const input = usd.element as HTMLInputElement
+			// "0.3" has converted, and its estimate waits; "0.4" is typed and converting.
+			await vi.advanceTimersByTimeAsync(200)
+			input.focus()
+			await usd.setValue("0.4")
+			await vi.advanceTimersByTimeAsync(100)
+			await usd.trigger("blur")
+			await nextTask()
+			expect(asked()).toBe(0)
+			input.blur()
+			await nextTask()
+			expect(amounts()).toEqual([800_000n])
+			await vi.advanceTimersByTimeAsync(1500)
+			expect(asked()).toBe(1)
+
+			input.focus()
+			await usd.setValue("0.5")
+			await vi.advanceTimersByTimeAsync(100)
+			await usd.trigger("keydown", { key: "Enter" })
+			await nextTask()
+			expect(amounts()).toEqual([800_000n, 1_000_000n])
+			await vi.advanceTimersByTimeAsync(1500)
+			expect(asked()).toBe(2)
+			w.unmount()
+		})
 	})
 })

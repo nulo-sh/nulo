@@ -2,7 +2,7 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
+import { ADDRESS_LIKE_NAME, canSubmitContact, canonicalContactAddress, contactAddressError, contactNameError } from "@/utils/contact-rules"
 import { ALREADY_EXISTS } from "@/utils/entity-rules"
 import { entityListReducers } from "@/utils/entity-list"
 
@@ -45,6 +45,7 @@ const contactAddressTerm = form.fields.address.value
 
 // Existing template uses these inline-warning predicates. Map to the form's
 // error messages so the visual contract is unchanged.
+const nameLooksLikeAddress = computed(() => form.fields.name.error.value === ADDRESS_LIKE_NAME)
 const isAlreadyExistName = computed(() => form.fields.name.error.value === ALREADY_EXISTS)
 const isValidAddress = computed(() => isValidAztecAddress(contactAddressTerm.value))
 const isAlreadyExistAddress = computed(() => form.fields.address.error.value === ALREADY_EXISTS)
@@ -139,6 +140,7 @@ watch(
 			v-model:name="nameTerm"
 			v-model:address="contactAddressTerm"
 			:nameExists="isAlreadyExistName"
+			:nameLooksLikeAddress="nameLooksLikeAddress"
 			:addressValid="isValidAddress"
 			:addressExists="isAlreadyExistAddress"
 		/>

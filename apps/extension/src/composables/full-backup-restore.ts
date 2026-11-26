@@ -11,7 +11,7 @@ import { capRecords, remapNetworkIdByChain, resolveRestoredActiveNetworkIdByChai
 import type { RestoreSecret, RunFence } from "@/wallet/services/profile/client"
 import { admitRestoreOutcome, finishRestoreOutcome } from "@/utils/restore-outcome"
 import { sentenceName } from "@/utils/string"
-import type { HeldAccount } from "@/components/composite/import/restore-warning"
+import { type HeldAccount, heldAccountRestoreError } from "@/components/composite/import/restore-warning"
 import {
 	ACCOUNT_SERVICE_NAME,
 	type AccountScope,
@@ -615,7 +615,7 @@ export async function settleHeldAccounts(
 	// names the chain only: the name is backup content, and an address links on-chain activity.
 	const records: unknown[] = []
 	for (const h of kept) {
-		records[h.row] = { profileId, chainId: h.chainId, restoreError: `Waiting for a network with chain ID ${h.chainId}` }
+		records[h.row] = { profileId, chainId: h.chainId, restoreError: heldAccountRestoreError(h.chainId) }
 	}
 	// The reconcile reads only this restore's accounts, so every dropped scope has its row.
 	for (const scope of dropped) {

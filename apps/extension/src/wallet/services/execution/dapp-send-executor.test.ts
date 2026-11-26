@@ -44,6 +44,7 @@ import { FEE_RISE_ASKS, personalPayerOf } from "./fee-reask"
 import type { FeeQuestion } from "./models"
 import { feeLimitOf } from "./tx-fee-details"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
+import type { PayerBalanceRead } from "./sponsor-funding"
 import { ExecutionService } from "./service"
 import { callSequence } from "../../../../tests/helpers/call-sequence"
 
@@ -2586,6 +2587,20 @@ describe("DappSendEstimation.estimateOperationFee sponsor funding", () => {
 		expect(result).not.toHaveProperty("sponsorFunding")
 		expect(result.estimateId).toBeDefined()
 		expect(readPublicStorageOnce).toHaveBeenCalledTimes(reads)
+	})
+
+	test("the probe decides on the read the folded build started, and reads nothing after it", async () => {
+		const h = sponsorHarness()
+		h.readPublicStorageOnce.mockResolvedValueOnce(new Fr(799n)).mockResolvedValue(new Fr(800n))
+		h.buildAndEstimateFolded.mockImplementation(async (...args: unknown[]) => {
+			;(args[7] as PayerBalanceRead).start(h.built.network as never, SPONSOR.toString())
+			return h.built as never
+		})
+
+		const result = await h.estimation.estimateOperationFee(forgingOp(), FPC_SETTINGS)
+
+		expect(result.sponsorFunding).toEqual({ fpcId: "fpc-9", address: SPONSOR.toString(), funded: false })
+		expect(h.readPublicStorageOnce).toHaveBeenCalledTimes(1)
 	})
 
 	test("a cancel landing during the probe rejects and stashes nothing", async () => {

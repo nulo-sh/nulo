@@ -33,6 +33,7 @@ import { liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { InvalidWalletArgumentsError, UnsupportedMethodError } from "@nulo/extension-messaging/errors"
 import z from "zod"
 import type { AccountService } from "@/wallet/services/account/service"
+import { isAddressShapedName } from "@/utils/contact-name"
 import type { ContactService } from "@/wallet/services/contact/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import { networkInfoFrom } from "@/wallet/services/network/spec"
@@ -43,6 +44,7 @@ import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { toAppFacingSimulationResult, toAppFacingUtilityResult } from "./app-facing-results"
 import { assertSelectorBinding, CALL_BINDING, type ContractResolver, findFunctionByName, findFunctionBySelector } from "./contract-resolver"
 import { rehydrateOptimizablePrefix, runFastPath } from "./fast-path"
+import { RunReads } from "./run-reads"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
@@ -242,10 +244,12 @@ export class ViewExecutor {
 
 	public async executeAztecGetAddressBook(_op: AztecGetAddressBookOperation): Promise<Aliased<AztecAddress>[]> {
 		// TODO: filter by chainId
-		return (await this.deps.contactService.getContacts()).map((x) => ({
-			alias: x.name,
-			item: AztecAddress.fromStringUnsafe(x.address),
-		}))
+		return (await this.deps.contactService.getContacts()).map((x) => {
+			const item = AztecAddress.fromStringUnsafe(x.address)
+			// An app may print the alias where it would print the address: a name written like an
+			// address is answered as the address it names.
+			return { alias: isAddressShapedName(x.name) ? item.toString() : x.name, item }
+		})
 	}
 
 	/** The dApp gets the app-facing shape; the fast path's merge still reads the full standard arm. */
@@ -337,32 +341,39 @@ export class ViewExecutor {
 		// `maxPriorityFeesPerGas`) so `nulo-account.ts`'s
 		// `completeFeeOptions` call uses the dApp-supplied values rather
 		// than silently defaulting to `predictedWorstMinFees(node) * 1.5`.
-		const { txRequest, node, pxe, account, scopes } = await this.deps.txBuilder.buildStandard(
-			{ ...op, actions },
-			fence,
-			feePaymentMethod,
-			undefined,
-			op.opts.fee?.gasSettings,
-		)
-		suggestGasLimits(txRequest, fee)
-		await applyEmbeddedFpcGasCap(txRequest, fee, node)
-		// Thread `stubAccountAddresses` so the simulated account contract
-		// is the stubbed pass-through one (override path at
-		// `pxe/service.ts:233-246`). Real signing keys never enter PXE
-		// during a dApp `simulateTx` — defense-in-depth for read-heavy
-		// dApp flows. The third-arg pattern matches `executeNoFromSendTx`'s
-		// kernelless discovery sim, so the override mechanism is exercised
-		// identically across all dApp-facing sim paths.
-		return pxe.simulateTx(
-			txRequest,
-			{
-				simulatePublic: true,
-				skipTxValidation: op.opts.skipTxValidation,
-				skipFeeEnforcement: op.opts.skipFeeEnforcement ?? true,
-				scopes,
-			},
-			[account.address.toString()],
-		)
+		// The build's node reads leave together.
+		const reads = new RunReads()
+		try {
+			const { txRequest, node, pxe, account, scopes } = await this.deps.txBuilder.buildStandard(
+				{ ...op, actions },
+				fence,
+				feePaymentMethod,
+				undefined,
+				op.opts.fee?.gasSettings,
+				reads,
+			)
+			suggestGasLimits(txRequest, fee)
+			await applyEmbeddedFpcGasCap(txRequest, fee, node)
+			// Thread `stubAccountAddresses` so the simulated account contract
+			// is the stubbed pass-through one (override path at
+			// `pxe/service.ts:233-246`). Real signing keys never enter PXE
+			// during a dApp `simulateTx` — defense-in-depth for read-heavy
+			// dApp flows. The third-arg pattern matches `executeNoFromSendTx`'s
+			// kernelless discovery sim, so the override mechanism is exercised
+			// identically across all dApp-facing sim paths.
+			return await pxe.simulateTx(
+				txRequest,
+				{
+					simulatePublic: true,
+					skipTxValidation: op.opts.skipTxValidation,
+					skipFeeEnforcement: op.opts.skipFeeEnforcement ?? true,
+					scopes,
+				},
+				[account.address.toString()],
+			)
+		} finally {
+			reads.close()
+		}
 	}
 
 	public async executeAztecExecuteUtility(op: AztecExecuteUtilityOperation): Promise<UtilityExecutionResult> {

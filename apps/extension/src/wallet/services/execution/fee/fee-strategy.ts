@@ -62,6 +62,8 @@ import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-
 import { carriedHashes } from "../decode-authwit-effects"
 import type { DiscoveryProbe, DiscoveryProbeContext } from "../discovery-aware-estimator"
 import { throwIfAborted } from "../rpc-cancel"
+import type { RunReads } from "../run-reads"
+import type { PayerBalanceRead } from "../sponsor-funding"
 import type { Action, FeeOptions, FeeSettings } from "../spec"
 import type { BuiltStandardTx, TxRequestBuilder } from "../tx-request-builder"
 import type { PartialGasSettingsRPC } from "@nulo/aztec-runtime/account"
@@ -167,6 +169,11 @@ export type FeeStrategyContext = {
 	/** Called after every build. Set only by a dApp send's own pass, never by an estimate: the
 	 *  strategies serve the window's estimates too, and those name no record. */
 	onBuilt?: OnBuilt
+	/** What this run's builds fetch once and send together. Absent, every build reads one by one. */
+	reads?: RunReads
+	/** Set only by an estimate, which probes its payer: a strategy whose estimate is paid from a
+	 *  probed balance starts that read as the simulation that decides the estimate starts. */
+	payerBalance?: PayerBalanceRead
 }
 
 /** Dependencies injected once at construction. */
@@ -249,7 +256,7 @@ export async function buildFor(
 	method: AccountFeePaymentMethodOptions,
 	task: WrappedTask,
 ): Promise<BuiltStandardTx> {
-	const built = await txBuilder.buildStandard(ctx.op, ctx.fence, method, task, appPriorityOf(ctx.op.fee))
+	const built = await txBuilder.buildStandard(ctx.op, ctx.fence, method, task, appPriorityOf(ctx.op.fee), ctx.reads)
 	await ctx.onBuilt?.(built.txCalls)
 	// A cancel that landed while this build ran must not start its simulation.
 	throwIfAborted(ctx.signal)

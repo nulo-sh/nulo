@@ -21,7 +21,7 @@ import type { SealedEntityStorage } from "@/wallet/storage/sealed-entity-storage
 import { sealedEntityStorage } from "@/wallet/storage/stores"
 import { Lock } from "@/wallet/utils"
 import { getInitials } from "@/utils"
-import { isEmptyContactName, sanitizeContactName } from "@/utils/contact-name"
+import { isAddressShapedName, isEmptyContactName, sanitizeContactName } from "@/utils/contact-name"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Contact, CONTACT_SERVICE_NAME, ContactSchema, type Events, type Methods } from "./spec"
 
@@ -29,6 +29,7 @@ export * from "./spec"
 
 /** Never quotes the name: a contact name is personal data. */
 const NO_VISIBLE_NAME = "contact name has no visible characters"
+const ADDRESS_SHAPED_NAME = "contact name reads as an address"
 
 export class ContactService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
@@ -113,6 +114,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		if (isEmptyContactName(name)) throw new Error(NO_VISIBLE_NAME)
 		const stored = sanitizeContactName(name)
+		if (isAddressShapedName(stored)) throw new Error(ADDRESS_SHAPED_NAME)
 		// Atomic read+capture: the lock wait and id allocation below can span the
 		// profile's deletion — without a fence the row lands stamped with the
 		// deleted profile, surviving the cascade's earlier snapshot as an orphan.
@@ -148,6 +150,8 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 
 		return await this.lock.withLock(async () => {
 			const contact = requireOwnedRow(await this.storage.get(contactId), profileId, "invalid id")
+			// The name the row would keep is judged too: a row restored as it was is renamed before anything else changes.
+			if (isAddressShapedName(stored ?? contact.name)) throw new Error(ADDRESS_SHAPED_NAME)
 
 			const newContact = {
 				...contact,

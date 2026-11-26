@@ -1,5 +1,6 @@
 /** A contract position's chip in the approval and raised-fee windows. */
 import { type ChipModel, contractChipOf } from "@/components/composite/contract-chip"
+import { isAddressShapedName } from "@/utils/contact-name"
 import { type ContractReading, type ListReader, readContract } from "@/utils/contract-level"
 import { tokenMarkOf } from "@/utils/token-icon"
 import { type BlockExplorerType, explorerDisplayName, getContractExplorerUrl } from "@/wallet/constants/explorers"
@@ -24,14 +25,17 @@ export type ContractChipView = { model: ChipModel; explorer: { url: string; name
 
 /**
  * A contact by `@` and its name, then an account by its name: `AddressDisplay`'s order and spelling.
- * Case does not make another address, so both key by the lower-cased address.
+ * A contact name that reads as an address names nothing. Case does not make another address, so
+ * both key by the lower-cased address.
  */
 export function nameBookOf(
 	contacts: readonly { name: string; address: string }[],
 	accounts: readonly { name?: string; address: string }[],
 ): ReadonlyMap<string, string> {
 	const book = new Map<string, string>()
-	for (const { name, address } of contacts) if (name && !book.has(address.toLowerCase())) book.set(address.toLowerCase(), `@${name}`)
+	for (const { name, address } of contacts) {
+		if (name && !isAddressShapedName(name) && !book.has(address.toLowerCase())) book.set(address.toLowerCase(), `@${name}`)
+	}
 	for (const { name, address } of accounts) if (name && !book.has(address.toLowerCase())) book.set(address.toLowerCase(), name)
 	return book
 }

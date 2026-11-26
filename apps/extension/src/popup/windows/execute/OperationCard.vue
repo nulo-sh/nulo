@@ -135,6 +135,8 @@ const props = defineProps<{
 const emit = defineEmits<{
 	updateFeeSettings: [index: number, value: FeeSettings | undefined]
 	retryEstimate: [index: number]
+	/** The fee card's next settings re-ask after an answer. */
+	feeReread: [index: number]
 	retryPreview: [index: number]
 	/** The fee card's paying method, or null while none pays. */
 	updatePayer: [index: number, payer: FeePayerPick | null]
@@ -212,15 +214,17 @@ const onRetryAppEstimate = (event: MouseEvent) => {
 const isToken = (contract: unknown): boolean => tokenAt(props.tokens, props.op.network?.chainId, contract) !== undefined
 
 /** A grant reads from the call its signature hashes, or, undecoded, as the raw arguments it carries.
- *  No caller context: the spender makes the future call, so a transfer names only an explicit `from`. */
+ *  No caller context: the spender makes the future call, so a transfer names only an explicit `from`.
+ *  Only a call names its arguments before they are read, so only a call counts them. */
 const grantRows = computed(() =>
 	grantContentsOf(props.op).map((content, k) => {
 		const grant = props.decodedGrants ? (props.decodedGrants[k] ?? { kind: "undecoded", reason: "unavailable" }) : undefined
+		const fields = content.kind === "call" ? fieldCount(content.args) : undefined
 		if (grant?.kind === "decoded") {
-			return { contract: grant.call.to, surface: callSurface(undefined, grant.call, grant.decoded, isToken(grant.call.to)) }
+			return { contract: grant.call.to, surface: callSurface(undefined, grant.call, grant.decoded, isToken(grant.call.to)), fields }
 		}
 		const raw = content.kind === "call" ? { to: content.contract, args: content.args } : {}
-		return { contract: raw.to, surface: callSurface(undefined, raw, grant, false, Number.POSITIVE_INFINITY) }
+		return { contract: raw.to, surface: callSurface(undefined, raw, grant, false, Number.POSITIVE_INFINITY), fields }
 	}),
 )
 
@@ -366,7 +370,7 @@ const advises = computed((): boolean => {
 					:class="$style.group"
 				>
 					<Text variant="label-section" color="secondary">Arguments</Text>
-					<CallArguments :surface="grant.surface" :contract="grant.contract" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-grant" json-view full />
+					<CallArguments :surface="grant.surface" :contract="grant.contract" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-grant" json-view full :fields="grant.fields" />
 				</Flex>
 			</template>
 			<template v-else-if="op.kind === 'aztec_sendTx'">
@@ -469,6 +473,7 @@ const advises = computed((): boolean => {
 				@update:modelValue="(value: FeeSettings | undefined) => emit('updateFeeSettings', index, value)"
 				@update:payer="(payer: FeePayerPick | null) => emit('updatePayer', index, payer)"
 				@retryEstimate="emit('retryEstimate', index)"
+				@reread="emit('feeReread', index)"
 			/>
 			<!-- Mounted with the card: a region created with its text in place may go unannounced. -->
 			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-failure-live">

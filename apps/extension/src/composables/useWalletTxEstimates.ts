@@ -76,6 +76,8 @@ export function useWalletTxEstimates<P>(deps: WalletTxEstimatesDeps<P>) {
 			map.cancelAll()
 			retireFailureSnack()
 		},
+		/** The card re-read a payer's balance after an answer: the re-ask it publishes now waits the pause. */
+		pauseThisTask: map.pauseThisTask,
 		dispose: () => {
 			stopScope()
 			map.dispose()

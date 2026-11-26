@@ -24,6 +24,7 @@ import {
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import z from "zod"
 import { getAuthRegistryAddress, getSetAuthorizedFn } from "@/wallet/utils/auth-registry"
+import { RunReads } from "./run-reads"
 import { TxRequestBuilder } from "./tx-request-builder"
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
@@ -67,6 +68,7 @@ function makeHarness() {
 			calls.push("ensureContractRegistered")
 		}),
 		createAuthWit: vi.fn(async (h: Fr) => new AuthWitness(h, [Fr.fromString("0x77")])),
+		requiresInitialization: vi.fn(async () => false),
 		buildTxExecutionRequest: vi.fn(async (...args: unknown[]) => {
 			calls.push("buildTxExecutionRequest")
 			buildArgs.push(args)
@@ -83,6 +85,7 @@ function makeHarness() {
 			return NODE_INFO
 		}),
 		getContract: vi.fn(async (): Promise<unknown> => ({ currentContractClassId: CLASS_ID })),
+		getPredictedMinFees: vi.fn(async () => [new GasFees(1n, 1n)]),
 	}
 	const deps = {
 		pxeService: { getPXE: vi.fn(() => ({ fake: "pxe" })) },
@@ -137,13 +140,14 @@ function makeHarness() {
 	return { builder, deps, account, node, calls, buildArgs, flags }
 }
 
-function build(h: Harness, actions: unknown[], gasSettings?: unknown) {
+function build(h: Harness, actions: unknown[], gasSettings?: unknown, reads?: RunReads) {
 	return h.builder.buildStandard(
 		{ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), actions: actions as never },
 		FENCE,
 		{ fake: "feeMethod" } as never,
 		undefined,
 		gasSettings as never,
+		reads,
 	)
 }
 
@@ -395,6 +399,52 @@ describe("buildStandard pins", () => {
 		const chainInfo = args[4] as { chainId: Fr; version: Fr }
 		expect(chainInfo.chainId.toBigInt()).toBe(0n)
 		expect(chainInfo.version.toBigInt()).toBe(31337n)
+	})
+})
+
+describe("a build under a run sends its node reads ahead", () => {
+	const CALL = { kind: "call", contract: CONTRACT, method: FN.name, args: [] }
+
+	test("each build reads for itself and hands on the node, not its own view; artifacts go through the run", async () => {
+		const reads = new RunReads()
+		const first = await build(h, [CALL, CALL], undefined, reads)
+		expect(h.node.getContract).toHaveBeenCalledTimes(1)
+		expect(h.node.getPredictedMinFees).toHaveBeenCalledTimes(1)
+		expect(h.account.requiresInitialization).toHaveBeenCalledTimes(1)
+		expect(first.node).toBe(h.node)
+		// The account builds on the view its reads were sent through.
+		expect((h.buildArgs[0] as unknown[])[0]).not.toBe(h.node)
+
+		const second = await build(h, [CALL], undefined, reads)
+		expect(h.node.getNodeInfo).toHaveBeenCalledTimes(2)
+		expect(h.node.getContract).toHaveBeenCalledTimes(2)
+		expect(h.node.getPredictedMinFees).toHaveBeenCalledTimes(2)
+		expect(second.txCalls[0].classId).toBe(first.txCalls[0].classId)
+		expect(h.deps.resolver.resolveArtifacts).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), reads)
+	})
+
+	test("a build refused for chain drift sends none of its other reads", async () => {
+		const drifted = { ...h.node, getNodeInfo: vi.fn(async () => ({ ...NODE_INFO, rollupVersion: 999 })) }
+		h.deps.networkService.getNode.mockResolvedValueOnce(drifted as never)
+		await expect(build(h, [CALL], undefined, new RunReads())).rejects.toThrowError(/Chain identity mismatch/)
+		expect(h.node.getContract).not.toHaveBeenCalled()
+		expect(h.node.getPredictedMinFees).not.toHaveBeenCalled()
+		expect(h.account.requiresInitialization).not.toHaveBeenCalled()
+	})
+
+	test("a build refused for a contract this wallet never registered sends none of its other reads", async () => {
+		h.deps.resolver.resolveInstances.mockRejectedValueOnce(new Error("not registered"))
+		await expect(build(h, [CALL], undefined, new RunReads())).rejects.toThrowError("not registered")
+		expect(h.node.getContract).not.toHaveBeenCalled()
+		expect(h.node.getPredictedMinFees).not.toHaveBeenCalled()
+		expect(h.account.requiresInitialization).not.toHaveBeenCalled()
+	})
+
+	test("a caller's own fee cap: no minimum fee is read ahead; without a run nothing is", async () => {
+		await build(h, [CALL], { maxFeesPerGas: { feePerDaGas: "0x1", feePerL2Gas: "0x1" } }, new RunReads())
+		await build(h, [CALL])
+		expect(h.node.getPredictedMinFees).not.toHaveBeenCalled()
+		expect(h.account.requiresInitialization).toHaveBeenCalledTimes(1)
 	})
 })
 

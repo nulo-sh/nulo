@@ -1,0 +1,9 @@
+# Phase 3 (arc 3): `useSendFiatGate` and close-out
+
+- Re-derived at 5341e818a before any code (the arc's first commit): the file map's lines, the arc 3 site table (with #2018's `convertNow` read and the card's model writes), the hook's budget, a third mutant and `send-amount-exact` in the e2e list. No decision, interface or test changed, so no Codex pass on the amendment.
+- A `v-model` on a destructured ref compiles to `isRef(x) ? x.value = $event : null` (a `setup-maybe-ref` binding; `@vue/compiler-sfc`, checked on a probe), against `x.value = $event` for a `ref()` const: the same write for a ref, so the card's model writes reach the hook's `fiatGuard` in the task they are made.
+- `src/utils/` is an auto-import directory, so moving `send-fiat-gate.ts` there makes its four exports and two types globals (`auto-imports.d.ts`, `.eslintrc-auto-import.json`); no name collides.
+- Budgets on the final file (Biome 2.5.13, scratch copy outside the repo): `useSendFiatGate` 23 lines; highest complexity `proxyTicker` 3, `fiatGate` 2.
+- Mutants, each red: `allowsSendNow` on the ticker's time ("the press reads the wall clock…"); the reactive gate on `Date.now()` alone ("the reactive gate re-evaluates on each tick…" and "the press reads the wall clock…"); the page's `convertNow` check on a ref of its own (`send.integration.test.ts` "a side picked starts one estimate at once, for the converted amount").
+- Codex: r1 (session 01a21103) 1 comment finding, applied; r2 clean. Opus 5.5 diff review (in-process, `general-purpose`): 2 low comment findings and a test nit, applied; Codex r3 clean on them. Fresh cross-arc Codex session (01a2110e) over the three arcs: clean.
+- E2E at retry 0: smoke `send-keyboard` Chrome 6/6, Firefox 6/6; network prover-on `fiat-send`, `send-amount-exact` Chrome 2/2, Firefox 2/2 (code at 1020fb9fb; later commits change comments and the hook's suite only).

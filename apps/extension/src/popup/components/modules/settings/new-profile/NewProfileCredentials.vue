@@ -24,14 +24,10 @@ const repeatedPassword = defineModel("repeatedPassword", { type: String, default
 
 <style module>
 .section_last {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	padding: 20px 0;
+	composes: section from "@/components/composite/form-section.module.css";
 }
 
 .section_label {
-	composes: type--label-section from global;
-	color: var(--nulo-secondary);
+	composes: label from "@/components/composite/form-section.module.css";
 }
 </style>

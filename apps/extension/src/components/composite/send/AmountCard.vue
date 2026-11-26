@@ -1,10 +1,10 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 /** Composables */
-import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { isRepeatOrComposing, refuseRepeatEnter } from "@/composables/usePopupEntity"
 
 /** Utils */
-import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
+import { clampDecimals, formatBaseUnits, parseAmountToBaseUnits, readAmountText } from "@/utils/amount"
 import { pluralize } from "@/utils/plural"
 import { sideBalanceText } from "./send-sides"
 import { fitHero } from "@/utils/hero-fit"
@@ -37,9 +37,14 @@ const props = defineProps({
 	side: { type: String, default: "private" },
 })
 
-/** The person's own change to the amount: a key or a paste in either field, or Max. A write from the
- *  page, and the card's own rest, re-clamp or clear, never emit it. */
-const emit = defineEmits(["edit"])
+/** `edit`: the person's own change to the amount: a key or a paste in either field, or Max. A write
+ *  from the page, and the card's own rest, re-clamp or clear, never emit it.
+ *  `typed`: the card wrote typing into the model in this task (a keystroke, its rest on blur or Enter, or
+ *  a typed USD figure's conversion), so a fee estimate it causes waits for more.
+ *  `picked`: Max, the USD Max or the unit switch, which may leave the amount as it was.
+ *  `done`: the person left a field or pressed Enter in it, after its rest or conversion is written, so
+ *  the estimate their typing asked waits no longer. A window losing focus is not leaving. */
+const emit = defineEmits(["edit", "typed", "picked", "done"])
 
 /** Token amount string — ALWAYS the value that validates + sends, in both
  *  modes. In fiat mode it is derived (round-DOWN, bigint) at the FROZEN
@@ -145,6 +150,7 @@ const handleAmountInput = (e) => {
 	readHint.value = next.hint === "clamp" ? null : next.hint
 	writeAmount(next.text, { point: next.commaPoint })
 	emit("edit")
+	emit("typed")
 	// When the text equals what the parent already holds, no re-render comes to correct the field.
 	showText(e.target, next.text)
 }
@@ -179,8 +185,17 @@ const handleAmountFocus = () => {
 	if (props.tokenBalanceByType) isFocused.value = true
 	fieldScale.value = 1
 }
-const handleAmountBlur = () => {
+/** A window losing focus blurs the field but leaves it the document's active element: the person may
+ *  come back to type. */
+const leftField = (e) => document.activeElement !== e.target
+
+const handleAmountBlur = (e) => {
 	isFocused.value = false
+	restAmount()
+	if (leftField(e)) emit("done")
+}
+
+function restAmount() {
 	if (!model.value) readHint.value = null
 	if (!model.value || tokenDecimals.value === undefined) return
 	const read = readAmountText(String(model.value), { rested: rested.value })
@@ -189,13 +204,50 @@ const handleAmountBlur = () => {
 		return
 	}
 	readHint.value = null
-	const rest = restingAmount(read.plain, tokenDecimals.value)
-	writeAmount(rest, { atRest: true, point: commaPoint && rest.includes(".") })
+	writeRest(restingAmount(read.plain, tokenDecimals.value))
 }
 
-const handleFiatBlur = () => {
+function writeRest(rest) {
+	writeAmount(rest, { atRest: true, point: commaPoint && rest.includes(".") })
+	emit("typed")
+}
+
+/** The rest leaving would write in place of the text, or null when it would write none: no text, a
+ *  text that does not read, or one already at rest. Reads `lastText`, which the card's own write sets
+ *  at once, where the model reads it a render late. */
+function restRewrite() {
+	if (!lastText || tokenDecimals.value === undefined) return null
+	const read = readAmountText(lastText, { rested: rested.value })
+	if (!read.ok) return null
+	const rest = restingAmount(read.plain, tokenDecimals.value)
+	return rest === lastText ? null : rest
+}
+
+// Enter writes the rest leaving would, then starts the estimate waiting for it, so a later leave finds
+// nothing to rewrite or ask again; a rest that rewrites a text already estimated asks again, as
+// leaving's does. The page's re-render writes the rest into the focused field, which puts the caret at
+// its end. Enter leaves the read hint to leaving.
+const handleAmountEnter = (e) => {
+	if (isRepeatOrComposing(e)) return
+	const rest = restRewrite()
+	if (rest !== null) writeRest(rest)
+	emit("done")
+}
+
+const handleFiatBlur = (e) => {
 	isFocused.value = false
 	if (!fiatTerm.value || readAmountText(fiatTerm.value, { currency: "$" }).ok) readHint.value = null
+	if (leftField(e)) finishFiat()
+}
+
+const handleFiatEnter = (e) => {
+	if (!isRepeatOrComposing(e)) finishFiat()
+}
+
+/** The figure typed last reaches the amount before the estimate starts, not the one before it. */
+function finishFiat() {
+	landConversion()
+	emit("done")
 }
 
 /** The amount field's type, token or USD, as a fraction of its 40 px: full with focus, and at rest
@@ -253,9 +305,8 @@ const modelRaw = computed(() => {
 	if (tokenDecimals.value === undefined) return null
 	const read = readAmountText(String(model.value ?? ""), { rested: rested.value })
 	if (!read.ok) return null
-	const [whole, fraction = ""] = read.plain.split(".")
-	const frac = fraction.slice(0, tokenDecimals.value).padEnd(tokenDecimals.value, "0")
-	return BigInt(whole || "0") * 10n ** BigInt(tokenDecimals.value) + BigInt(frac || "0")
+	// A token with no decimals clamps ".5" to "", which the parser refuses and the field reads as 0.
+	return parseAmountToBaseUnits(clampDecimals(read.plain, tokenDecimals.value) || "0", tokenDecimals.value)
 })
 
 /** Token-mode conversion line — LIVE quote (display-only; freezing applies to
@@ -322,22 +373,33 @@ function usdText(text) {
 	return fixed === read.plain ? text : fixed
 }
 
-const scheduleConvert = (base = fiatGuard.value) => {
+/** `typed`: a keystroke started the conversion, not Refresh quote. */
+const scheduleConvert = ({ base = fiatGuard.value, typed = false } = {}) => {
 	if (!base) return
 	fiatGuard.value = { ...base, converting: true }
 	clearTimeout(convertTimer)
-	convertTimer = setTimeout(() => {
-		const guard = fiatGuard.value
-		if (!guard) return
-		const read = readAmountText(fiatTerm.value, { currency: "$" })
-		const raw = read.ok ? usdToTokenAmount(read.plain, tokenDecimals.value, guard.frozenUsd) : null
-		if (raw !== null) {
-			writeModelFromRaw(raw)
-		} else {
-			writeAmount("")
-		}
-		fiatGuard.value = { ...guard, converting: false }
-	}, CONVERT_DEBOUNCE_MS)
+	convertTimer = setTimeout(() => convert(typed), CONVERT_DEBOUNCE_MS)
+}
+
+function convert(typed) {
+	const guard = fiatGuard.value
+	if (!guard) return
+	const read = readAmountText(fiatTerm.value, { currency: "$" })
+	const raw = read.ok ? usdToTokenAmount(read.plain, tokenDecimals.value, guard.frozenUsd) : null
+	if (raw !== null) {
+		writeModelFromRaw(raw)
+	} else {
+		writeAmount("")
+	}
+	if (typed) emit("typed")
+	fiatGuard.value = { ...guard, converting: false }
+}
+
+/** Lands a pending conversion now, as no keystroke. */
+function landConversion() {
+	if (!fiatGuard.value?.converting) return
+	clearTimeout(convertTimer)
+	convert(false)
 }
 
 const handleFiatInput = (e) => {
@@ -355,7 +417,7 @@ const handleFiatInput = (e) => {
 	// Before the write, so v-model's re-render finds the text in place and leaves the caret.
 	showText(e.target, text)
 	writeFiat(text, next.commaPoint && text.includes("."))
-	scheduleConvert()
+	scheduleConvert({ typed: true })
 	emit("edit")
 }
 
@@ -380,6 +442,7 @@ const toggleFiatMode = () => {
 	readHint.value = null
 	// The note names what was typed in the other unit; kept, it would hold the figure's slot all session.
 	wasClamped.value = false
+	emit("picked")
 }
 
 /** A token swap mid-fiat-session would silently keep the OLD token's frozen
@@ -445,7 +508,7 @@ function exitFiatMode({ clearAmount = false } = {}) {
 const refreezeQuote = () => {
 	if (!fiatMode.value || !props.liveQuote) return
 	// Handed over, not written first: `fiatGuard.value` reads the page's old quote until it re-renders.
-	scheduleConvert({ frozenUsd: props.liveQuote.usd, frozenAt: Date.now(), converting: false })
+	scheduleConvert({ base: { frozenUsd: props.liveQuote.usd, frozenAt: Date.now(), converting: false } })
 }
 defineExpose({
 	refreezeQuote,
@@ -455,6 +518,9 @@ defineExpose({
 	exitFiat: () => {
 		if (fiatMode.value) exitFiatMode({ clearAmount: Boolean(fiatGuard.value?.converting) })
 	},
+	/** Lands a pending conversion now, as no keystroke: an estimate that starts at once must read the
+	 *  amount of the figure typed last, not the one before it. */
+	convertNow: landConversion,
 })
 
 onBeforeUnmount(() => {
@@ -478,6 +544,7 @@ const handleMax = () => {
 	writeAmount(restingAmount(plainAmount(BigInt(props.balanceRawByType)), tokenDecimals.value), { atRest: true })
 	readHint.value = null
 	emit("edit")
+	emit("picked")
 }
 
 /** Fiat-mode Max/Half: bigint-exact from the RAW balance — the sent amount is
@@ -492,6 +559,7 @@ const handleFiatBalanceAction = (divisor) => {
 	fiatGuard.value = { ...guard, converting: false }
 	clearTimeout(convertTimer)
 	emit("edit")
+	emit("picked")
 }
 </script>
 
@@ -519,6 +587,7 @@ const handleFiatBalanceAction = (divisor) => {
 						ref="inputEl"
 						v-model="fiatTerm"
 						@input="handleFiatInput"
+						@keydown.enter="handleFiatEnter"
 						@focus="handleAmountFocus"
 						@blur="handleFiatBlur"
 						:disabled="!tokenBalanceByType"
@@ -535,6 +604,7 @@ const handleFiatBalanceAction = (divisor) => {
 						ref="inputEl"
 						:value="model"
 						@input="handleAmountInput"
+						@keydown.enter="handleAmountEnter"
 						@focus="handleAmountFocus"
 						@blur="handleAmountBlur"
 						:disabled="!tokenBalanceByType"

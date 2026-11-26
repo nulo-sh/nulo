@@ -278,7 +278,7 @@ describe("composite/AmountCard", () => {
 		expect(emits[emits.length - 1]?.[0]).toBe("1,234,567.123456")
 	})
 
-	test("a blur's rest, a re-clamp and a write from the page each write the amount and none is an edit", async () => {
+	test("a blur's rest, a re-clamp and a write from the page each write the amount and none is an edit; only the rest is typing", async () => {
 		const w: ReturnType<typeof mountCard> = mountCard({
 			modelValue: "1000.123456789",
 			token: { symbol: "ETH", decimals: 18 },
@@ -289,6 +289,8 @@ describe("composite/AmountCard", () => {
 		await w.setProps({ modelValue: "" })
 		expect(w.emitted("update:modelValue")).toEqual([["1,000.123456789"], ["1,000.1234"]])
 		expect(w.emitted("edit")).toBeUndefined()
+		expect(w.emitted("typed")).toEqual([[]])
+		expect(w.emitted("picked")).toBeUndefined()
 	})
 
 	test("clamps to 0 decimals (token with no fractional units strips the dot)", async () => {
@@ -353,6 +355,33 @@ describe("composite/AmountCard — C3 fiat input", () => {
 		}
 	})
 
+	test("convertNow lands a pending conversion at once, as no keystroke, and does nothing with none pending", async () => {
+		vi.useFakeTimers()
+		try {
+			const w: ReturnType<typeof mountCard> = mountFiat({
+				"onUpdate:modelValue": (v: unknown) => w.setProps({ modelValue: v }),
+				"onUpdate:fiatMode": (v: unknown) => w.setProps({ fiatMode: v }),
+				"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
+			})
+			const convertNow = () => (w.vm as unknown as { convertNow: () => void }).convertNow()
+			const writes = () => w.emitted("update:modelValue")?.length ?? 0
+			await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+			const before = writes()
+			convertNow()
+			expect(writes()).toBe(before)
+
+			await w.get("input[data-testid='send-amount-fiat-input']").setValue("125")
+			convertNow()
+			await nextTick()
+			expect(w.props()).toMatchObject({ modelValue: "125.017877", fiatGuard: { converting: false } })
+			await vi.advanceTimersByTimeAsync(300)
+			expect(writes()).toBe(before + 1)
+			expect(w.emitted("typed")).toBeUndefined()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("toggle only offered for priced tokens", () => {
 		expect(mountFiat().find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(true)
 		expect(mountFiat({ liveQuote: null }).find("[data-testid='send-amount-fiat-toggle']").exists()).toBe(false)
@@ -373,14 +402,20 @@ describe("composite/AmountCard — C3 fiat input", () => {
 			"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
 		})
 		const edits = () => w.emitted("edit")?.length ?? 0
+		const count = () => ({ typed: w.emitted("typed")?.length ?? 0, picked: w.emitted("picked")?.length ?? 0 })
 		await w.get("input[data-testid='send-amount-input']").setValue("5")
+		expect(count()).toEqual({ typed: 1, picked: 0 })
 		await w.get("[data-testid='send-amount-max']").trigger("click")
 		expect(edits()).toBe(2)
 		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
 		expect(edits()).toBe(2)
+		expect(count()).toEqual({ typed: 1, picked: 2 })
+		// A USD keystroke writes no amount until its conversion, which is the typing.
 		await w.get("input[data-testid='send-amount-fiat-input']").setValue("3")
+		expect(count()).toEqual({ typed: 1, picked: 2 })
 		await w.get("[data-testid='send-amount-max']").trigger("click")
 		expect(edits()).toBe(4)
+		expect(count()).toEqual({ typed: 1, picked: 3 })
 		expect(w.props("modelValue")).toBe("1000")
 	})
 
@@ -470,12 +505,15 @@ describe("composite/AmountCard — C3 fiat input", () => {
 			await input.setValue("120")
 			await input.trigger("input")
 			await vi.advanceTimersByTimeAsync(300)
+			// The typed figure's conversion is typing; Refresh quote's, a press, is not.
+			expect(w.emitted("typed")).toHaveLength(1)
 			;(w.vm as unknown as { refreezeQuote(): void }).refreezeQuote()
 			const guard = w.emitted("update:fiatGuard")?.at(-1)?.[0] as { frozenUsd: number }
 			expect(guard.frozenUsd).toBe(1.2)
 			await vi.advanceTimersByTimeAsync(300)
 			// $120 at $1.20 → exactly 100 tokens.
 			expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["100"])
+			expect(w.emitted("typed")).toHaveLength(1)
 		} finally {
 			vi.useRealTimers()
 		}
@@ -505,6 +543,16 @@ describe("composite/AmountCard — the amount in dollars, for the review", () =>
 		await nextTick()
 		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $43.20")
 		expect(figures(w).at(-1)).toBe("≈ $43.20")
+	})
+
+	test("a token with no decimals cuts a fraction: a bare one reads as nothing, never a throw", async () => {
+		const w = mountCard({ token: { symbol: "INT", decimals: 0 }, liveQuote: { usd: 1.5, fetchedAt: Date.now() }, modelValue: ".5" })
+		await nextTick()
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("1 INT ≈ $1.50")
+		expect(figures(w).at(-1) ?? null).toBeNull()
+		await w.setProps({ modelValue: "1.5" })
+		expect(w.get("[data-testid='send-amount-fiat-label']").text()).toBe("≈ $1.50")
+		expect(figures(w).at(-1)).toBe("≈ $1.50")
 	})
 
 	test("no price or no amount: none", async () => {
@@ -1443,5 +1491,205 @@ describe("composite/AmountCard — every refusal takes the line under the field"
 		await nextTick()
 		expect(w.find("[data-testid='send-amount-clamp-hint']").exists()).toBe(false)
 		expect(slotOf(w).find("[data-testid='send-amount-derived']").exists()).toBe(true)
+	})
+})
+
+describe("composite/AmountCard — leaving a field, or Enter in it, ends the typing", () => {
+	const TOKEN = { symbol: "cUSD", decimals: 6 }
+	const QUOTE = { usd: 0.999857, fetchedAt: Date.now() }
+	/** The card's amount writes and its `typed` and `done`, in the order it made them. */
+	let log: string[][]
+	/** Unmounted after each test, a failed one included, so no attached card keeps the focus. */
+	let live: ReturnType<typeof mountCard> | undefined
+	// Attached and really focused: a leave is read off which element has the focus.
+	const mountLive = () => {
+		const w: ReturnType<typeof mountCard> = mount(AmountCard, {
+			props: {
+				tokenBalanceByType: 1000,
+				balanceState: "read",
+				balanceRawByType: "1000000000",
+				token: TOKEN,
+				liveQuote: QUOTE,
+				modelValue: "",
+				"onUpdate:modelValue": (v: unknown) => {
+					log.push(["model", String(v)])
+					void w.setProps({ modelValue: v })
+				},
+				"onUpdate:fiatMode": (v: unknown) => w.setProps({ fiatMode: v }),
+				"onUpdate:fiatGuard": (v: unknown) => w.setProps({ fiatGuard: v }),
+				onTyped: () => log.push(["typed"]),
+				onDone: () => log.push(["done"]),
+			},
+			global: { stubs: STUBS },
+			attachTo: document.body,
+		})
+		live = w
+		return w
+	}
+	const field = (w: ReturnType<typeof mountCard>, testid = "send-amount-input") => w.get(`[data-testid='${testid}']`)
+	const el = (w: ReturnType<typeof mountCard>, testid?: string) => field(w, testid).element as HTMLInputElement
+
+	beforeEach(() => {
+		vi.restoreAllMocks()
+		log = []
+	})
+	afterEach(() => {
+		live?.unmount()
+		live = undefined
+	})
+
+	test("leaving the token field writes its rest, marks it typing, then emits done; a window losing focus rests it and emits none", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("1.50")
+		log = []
+		// The field stays the document's active element, as when the window loses focus.
+		await field(w).trigger("blur")
+		expect(document.activeElement).toBe(el(w))
+		expect(log).toEqual([["model", "1.5"], ["typed"]])
+
+		await field(w).setValue("2.50")
+		log = []
+		el(w).blur()
+		await nextTick()
+		expect(log).toEqual([["model", "2.5"], ["typed"], ["done"]])
+
+		// A field left empty has nothing to rest, and is still left.
+		el(w).focus()
+		await field(w).setValue("")
+		log = []
+		el(w).blur()
+		await nextTick()
+		expect(log).toEqual([["done"]])
+	})
+
+	test("keystrokes, a paste and a deletion are typing, never done", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("1")
+		el(w).value = "1.25"
+		await field(w).trigger("input", { inputType: "insertFromPaste" })
+		el(w).value = "1.2"
+		await field(w).trigger("input", { inputType: "deleteContentBackward" })
+		expect(log).toEqual([["model", "1"], ["typed"], ["model", "1.25"], ["typed"], ["model", "1.2"], ["typed"]])
+	})
+
+	test("Enter emits done on a text the field rests on; a repeat or composing Enter emits none and writes no rest", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("5")
+		log = []
+		await field(w).trigger("keydown", { key: "Enter", repeat: true })
+		await field(w).trigger("keydown", { key: "Enter", isComposing: true })
+		await field(w).trigger("keydown", { key: "Enter", keyCode: 229 })
+		expect(log).toEqual([])
+		await field(w).trigger("keydown", { key: "Enter" })
+		expect(log).toEqual([["done"]])
+
+		await field(w).setValue("1000")
+		log = []
+		await field(w).trigger("keydown", { key: "Enter", repeat: true })
+		await field(w).trigger("keydown", { key: "Enter", isComposing: true })
+		await field(w).trigger("keydown", { key: "Enter", keyCode: 229 })
+		expect(log).toEqual([])
+		expect(el(w).value).toBe("1000")
+	})
+
+	test.each([
+		["1000", "1,000"],
+		["1.50", "1.5"],
+	])(
+		"Enter on %s writes its rest %s, as typing, then emits done; the field keeps the focus, its caret at the end, and leaving then writes nothing new",
+		async (typed, rest) => {
+			const w = mountLive()
+			el(w).focus()
+			await field(w).setValue(typed)
+			el(w).setSelectionRange(1, 1)
+			log = []
+			await field(w).trigger("keydown", { key: "Enter" })
+			expect(log).toEqual([["model", rest], ["typed"], ["done"]])
+			expect(el(w).value).toBe(rest)
+			expect(document.activeElement).toBe(el(w))
+			expect([el(w).selectionStart, el(w).selectionEnd]).toEqual([rest.length, rest.length])
+
+			el(w).blur()
+			await nextTick()
+			expect(log).toEqual([["model", rest], ["typed"], ["done"], ["typed"], ["done"]])
+			expect(el(w).value).toBe(rest)
+		},
+	)
+
+	test("Enter on a text with no rest writes nothing: an empty field, a text that does not read, one with more decimals than the token", async () => {
+		const w = mountLive()
+		el(w).focus()
+		const enter = async () => {
+			log = []
+			await field(w).trigger("keydown", { key: "Enter" })
+			expect(log).toEqual([["done"]])
+		}
+		await enter()
+		expect(el(w).value).toBe("")
+
+		for (const pasted of ["100 TST", "1,234"]) {
+			el(w).value = pasted
+			await field(w).trigger("input", { inputType: "insertFromPaste" })
+			const hint = w.get("[data-testid='send-amount-meta']").text()
+			await enter()
+			expect(el(w).value).toBe(pasted)
+			expect(w.get("[data-testid='send-amount-meta']").text()).toBe(hint)
+		}
+
+		// Typing clamps to the token's decimals, so only a write from the page holds more.
+		await w.setProps({ modelValue: "1.1234567" })
+		await enter()
+		expect(el(w).value).toBe("1.1234567")
+	})
+
+	test("Enter's rest leaves a refused key's hint to leaving", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("1000x")
+		expect(w.find("[data-testid='send-amount-unreadable-hint']").exists()).toBe(true)
+		await field(w).trigger("keydown", { key: "Enter" })
+		expect(el(w).value).toBe("1,000")
+		expect(w.find("[data-testid='send-amount-unreadable-hint']").exists()).toBe(true)
+		el(w).blur()
+		await nextTick()
+		expect(w.find("[data-testid='send-amount-unreadable-hint']").exists()).toBe(false)
+	})
+
+	test("the USD field: leaving or Enter lands a pending conversion first, as no keystroke, then emits done; a window losing focus leaves it pending", async () => {
+		vi.useFakeTimers()
+		try {
+			const w = mountLive()
+			await field(w, "send-amount-fiat-toggle").trigger("click")
+			const USD = "send-amount-fiat-input"
+			el(w, USD).focus()
+			await field(w, USD).setValue("125")
+			await field(w, USD).trigger("blur")
+			expect(document.activeElement).toBe(el(w, USD))
+			expect(log).toEqual([])
+			await vi.advanceTimersByTimeAsync(300)
+			expect(log).toEqual([["model", "125.017877"], ["typed"]])
+
+			await field(w, USD).setValue("50")
+			log = []
+			el(w, USD).blur()
+			await nextTick()
+			expect(log).toEqual([["model", "50.007151"], ["done"]])
+			await vi.advanceTimersByTimeAsync(300)
+			expect(log).toHaveLength(2)
+
+			el(w, USD).focus()
+			await field(w, USD).setValue("10")
+			log = []
+			await field(w, USD).trigger("keydown", { key: "Enter", repeat: true })
+			await field(w, USD).trigger("keydown", { key: "Enter", isComposing: true })
+			expect(log).toEqual([])
+			await field(w, USD).trigger("keydown", { key: "Enter" })
+			expect(log).toEqual([["model", "10.00143"], ["done"]])
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })

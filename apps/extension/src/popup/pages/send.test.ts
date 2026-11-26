@@ -229,7 +229,7 @@ const STUBS = {
 			"side",
 		],
 		emits: ["update:modelValue", "update:rested", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount, exitFiat: mocks.exitFiat },
+		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount, exitFiat: mocks.exitFiat, convertNow() {} },
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",
@@ -1595,10 +1595,62 @@ describe("send page — the contact in the URL", () => {
 		const { w, cacheStore } = await mountSend()
 		await flushPromises()
 		expect(w.find('[data-testid="send-person-step"]').exists()).toBe(false)
-		expect(payee(w)).toEqual({ name: "Alice", address: ALICE.address, check: false })
+		expect(payee(w)).toEqual({ name: "Alice", address: ALICE.address, check: true })
 		expect(mocks.focusAmount).toHaveBeenCalledTimes(1)
 		expect(w.findComponent({ name: "SendReviewSheet" }).props("recipientName")).toBe("Alice")
 		expect("preselectedContactToSend" in cacheStore).toBe(false)
+		w.unmount()
+	})
+
+	test("a contact is known once paid: a past send to it hides the not-paid line", async () => {
+		mocks.getContacts.mockResolvedValue([ALICE])
+		mocks.getOperations.mockResolvedValue([
+			{
+				id: "op-1",
+				kind: "transfer",
+				origin: "popup",
+				profileId: "p1",
+				networkId: "n1",
+				accountAddress: ACCOUNT,
+				recipientAddress: ALICE.address,
+				amountRaw: "2500000",
+				tokenId: TOKEN.id,
+				transferType: TransferType.Private,
+				progress: { stage: "succeeded" },
+				error: null,
+				terminalAt: 1_000,
+				attempts: 0,
+				createdAt: 900,
+				updatedAt: 1_000,
+			},
+		])
+		route.query = { contact: ALICE.id }
+		const { w } = await mountSend()
+		await flushPromises()
+		expect(payee(w)).toEqual({ name: "Alice", address: ALICE.address, check: false })
+		w.unmount()
+	})
+
+	test("?contact=<id> of a contact whose name reads as an address opens the form on its address with no name", async () => {
+		const legacy = { ...ALICE, id: "c-legacy", name: "0x0c2b7e..4b5c" }
+		mocks.getContacts.mockResolvedValue([legacy])
+		route.query = { contact: legacy.id }
+		const { w } = await mountSend()
+		await flushPromises()
+		expect(w.find('[data-testid="send-payee-name"]').exists()).toBe(false)
+		expect(w.get('[data-testid="send-payee-address"]').text()).toBe(legacy.address)
+		expect(w.findComponent({ name: "SendReviewSheet" }).props("recipientName")).toBeNull()
+		w.unmount()
+	})
+
+	test("a contact whose name reads as an address is no suggestion: the person step offers only names that may stand for an address", async () => {
+		const legacy = { ...ALICE, id: "c-legacy", name: "0x0c2b7e..4b5c", address: `0x2${"b".repeat(63)}` }
+		mocks.getContacts.mockResolvedValue([legacy, ALICE])
+		const { w } = await mountSend()
+		await flushPromises()
+		const candidates = recipient(w).props("candidates") as { id?: string }[]
+		expect(candidates.map((c) => c.id)).toContain(ALICE.id)
+		expect(candidates.map((c) => c.id)).not.toContain(legacy.id)
 		w.unmount()
 	})
 
@@ -1623,7 +1675,7 @@ describe("send page — the contact in the URL", () => {
 		setIdentity(appStore)
 		await flushPromises()
 		expect(w.find('[data-testid="send-person-step"]').exists()).toBe(false)
-		expect(payee(w)).toEqual({ name: "Alice", address: ALICE.address, check: false })
+		expect(payee(w)).toEqual({ name: "Alice", address: ALICE.address, check: true })
 		w.unmount()
 	})
 })

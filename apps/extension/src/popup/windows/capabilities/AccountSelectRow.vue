@@ -8,7 +8,6 @@
  * A `locked` row is one the session already holds: it renders selected, cannot be toggled, and has
  * no rename link, since the stored alias is not re-consented here.
  */
-import { getChainName } from "@/components/ui/utils.js"
 import RowTarget from "@/components/ui/RowTarget.vue"
 import DottedTerm from "@/components/composite/DottedTerm.vue"
 import { formatCaipAccount } from "@/wallet/utils/caip"
@@ -16,6 +15,8 @@ import { stripBidiAndZeroWidth, trimAddress } from "@/utils/string"
 
 const props = defineProps<{
 	account: { address: string; name: string; chainId: number }
+	/** The account's network as the person named it. */
+	chainName: string
 	selected: boolean
 	alias?: string
 	disabled?: boolean
@@ -86,10 +87,10 @@ const onAliasInput = (e: Event) => {
 			<Icon v-else name="square" size="16" color="secondary" :class="$style.row_check" />
 
 			<Flex direction="column" gap="2" wide :class="$style.row_text">
-				<Flex align="center" justify="between" gap="8" wide>
+				<Flex align="center" justify="between" gap="8" wide :class="!locked && $style.name_line">
 					<span :id="nameId" :class="$style.row_name">{{ account.name }}</span>
 					<span v-if="locked" :class="$style.chain_label">SHARED</span>
-					<span v-else :class="$style.chain_label">{{ getChainName(account.chainId).toUpperCase() }}</span>
+					<span v-else :class="[$style.chain_label, $style.network_label]">{{ chainName.toUpperCase() }}</span>
 				</Flex>
 				<Flex align="center" justify="between" gap="8" wide :class="$style.address_line">
 					<span data-testid="account-select-address" :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>
@@ -230,6 +231,20 @@ const onAliasInput = (e: Event) => {
 	flex-shrink: 0;
 
 	color: var(--nulo-secondary);
+}
+
+/* The network's name, a person's own of up to 25 characters, goes under the account's name when the
+ * two do not fit, and wraps there rather than being cut. SHARED stays beside the name. Two classes
+ * outrank the global `gap--8`. */
+.row_text > .name_line {
+	flex-wrap: wrap;
+	row-gap: 2px;
+}
+
+.name_line > .network_label {
+	flex-shrink: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 /* Above the row's stretched target, so the field takes its own clicks. */

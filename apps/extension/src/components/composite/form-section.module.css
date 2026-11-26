@@ -1,0 +1,13 @@
+/* A composer never redeclares a property set here: which one wins would depend on chunk order. */
+/* The same set as `CollapsingHeroLayout.vue`'s global `export_section_last`: change both together. */
+.section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 20px 0;
+}
+
+.label {
+	composes: type--label-section from global;
+	color: var(--nulo-secondary);
+}

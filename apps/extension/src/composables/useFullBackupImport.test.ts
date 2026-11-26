@@ -386,6 +386,25 @@ describe("settleHeldAccounts — what the import records and shows of a held acc
 		expect(accountService.disconnect).toHaveBeenCalledOnce()
 	})
 
+	it("names a retired network first in a held account's line; any other chain still waits for its network", async () => {
+		const log = ref<Record<string, unknown[]>>({})
+		const held = [
+			{ chainId: 2904119610, address: `0x${"0a".repeat(32)}`, name: "Trading", row: 0 },
+			{ chainId: 677692, address: `0x${"1b".repeat(32)}`, name: "Cold", row: 1 },
+		]
+
+		const shown = await settleHeldAccounts(accountServiceDropping([]), "p", { held, rows: new Map() }, ioOver(log))
+
+		expect(shown).toEqual([
+			{ name: "Trading", chainId: 2904119610 },
+			{ name: "Cold", chainId: 677692 },
+		])
+		expect(log.value.account).toEqual([
+			{ row: 0, profileId: "p", chainId: 2904119610, restoreError: "Testnet V6-RC.1 has been retired. Not restored." },
+			{ row: 1, profileId: "p", chainId: 677692, restoreError: "Waiting for a network with chain ID 677692" },
+		])
+	})
+
 	it("records an imported account dropped on a network the profile has at its row; no drop records nothing", async () => {
 		const log = ref<Record<string, unknown[]>>({})
 		const rows = new Map([

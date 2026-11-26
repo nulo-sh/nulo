@@ -1,4 +1,5 @@
 import { mount, type VueWrapper } from "@vue/test-utils"
+import { trimAddress } from "@/utils/string"
 import { describe, expect, test } from "vitest"
 import { sendEvent } from "../../../../../tests/helpers/send-event"
 import SendPersonStep from "./SendPersonStep.vue"
@@ -17,10 +18,11 @@ const STUBS = {
 	AccountAvatar: { template: '<span data-testid="stub-avatar" :data-name="name" />', props: ["name", "address", "size"] },
 	RecipientField: {
 		props: ["searchTerm", "selectedContact", "candidates"],
-		emits: ["update:searchTerm", "update:selectedContact", "choose"],
+		emits: ["update:searchTerm", "update:selectedContact", "choose", "picked"],
 		template: `<div><input data-testid="stub-field" :value="searchTerm" />
 			<button data-testid="stub-hold" @click="$emit('update:selectedContact', candidates[0])" />
-			<button data-testid="stub-pick" @click="$emit('choose', candidates[0])" /></div>`,
+			<button data-testid="stub-pick" @click="$emit('choose', candidates[0])" />
+			<button data-testid="stub-picked" @click="$emit('picked')" /></div>`,
 	},
 }
 
@@ -54,6 +56,7 @@ describe("modules/send/SendPersonStep", () => {
 		await w.setProps({ searchTerm: BEN })
 		await w.get('[data-testid="send-pay-address"]').trigger("click")
 		expect(chosen(w)).toEqual([[BEN, null]])
+		expect(w.emitted("picked")).toHaveLength(1)
 	})
 
 	test("a pasted address a contact holds is chosen as that contact", async () => {
@@ -84,6 +87,14 @@ describe("modules/send/SendPersonStep", () => {
 		expect(chosen(w)).toEqual([[ANA, ana]])
 	})
 
+	test("the field's press or Enter is a pick; its choice alone, as a blur makes, is not", async () => {
+		const w = mountStep({ searchTerm: ANA })
+		await w.get('[data-testid="stub-pick"]').trigger("click")
+		expect(w.emitted("picked")).toBeUndefined()
+		await w.get('[data-testid="stub-picked"]').trigger("click")
+		expect(w.emitted("picked")).toHaveLength(1)
+	})
+
 	test("a field pick whose address is no point is never the choice", async () => {
 		const w = mountStep({ candidates: [{ id: "9", name: "Off", address: NOT_A_POINT }] })
 		await w.get('[data-testid="stub-pick"]').trigger("click")
@@ -98,9 +109,9 @@ describe("modules/send/SendPersonStep", () => {
 		expect(chosen(w)).toEqual([[BEN, null]])
 	})
 
-	test("a recent recipient the wallet names shows the name", () => {
+	test("a recent recipient the wallet names shows the name, then its short address", () => {
 		const w = mountStep({ recents: [{ address: ANA, name: "Ana", words: "1 TST", ago: "yesterday" }] })
-		expect(w.get('[data-testid="send-recent"]').text()).toContain("Ana")
+		expect(w.get('[data-testid="send-recent"]').text()).toBe(`Ana${trimAddress(ANA, 6, 4, "…")}Last: 1 TSTyesterday`)
 	})
 
 	test("Your accounts rows show the account and emit it", async () => {

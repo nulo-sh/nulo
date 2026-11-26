@@ -1,4 +1,4 @@
-import { onScopeDispose, ref, type Ref } from "vue"
+import { nextTick, onScopeDispose, ref, type Ref } from "vue"
 import { createFeeEstimationEngine } from "./internal/fee-estimation-engine"
 
 export interface UseFeeEstimationOptions<TParams, TResult> {
@@ -9,11 +9,7 @@ export interface UseFeeEstimationOptions<TParams, TResult> {
 	 * abort + evict on remote cancel. `signal` aborts once this attempt is superseded or abandoned.
 	 */
 	estimate: (params: TParams, estimateToken: string, signal: AbortSignal) => Promise<TResult>
-	/**
-	 * Debounce window before the estimator actually fires. Default: 800ms,
-	 * matching the prior inline debounce in `send.vue`. Lower it (e.g. 500)
-	 * for per-op estimation in the execute window.
-	 */
+	/** The pause an estimate asked in a task the caller marked with `pauseThisTask` waits. Default: 800ms. */
 	debounceMs?: number
 	/**
 	 * Called when the estimator throws a real error (not a stale-counter cancel).
@@ -24,7 +20,7 @@ export interface UseFeeEstimationOptions<TParams, TResult> {
 	/**
 	 * Fire-and-forget remote cancel (`executionService.cancelEstimate`).
 	 * Invoked for a superseded or abandoned token whose RPC actually started —
-	 * a debounce that never fired needs no remote cancel. Never invoked for
+	 * an estimate that never started needs no remote cancel. Never invoked for
 	 * tokens released via `handoff()` (ownership transferred to the
 	 * execution path, which is about to consume the stashed estimate).
 	 */
@@ -36,8 +32,19 @@ export interface UseFeeEstimationResult<TParams, TResult> {
 	result: Ref<TResult | null>
 	/** True from the moment `estimate()` is called until the result lands or fails. */
 	isEstimating: Ref<boolean>
-	/** Schedule a debounced estimation. Cancels any in-flight one (incl. remotely). */
+	/**
+	 * Schedule an estimation: it starts once the task ends, or after the pause in a marked task.
+	 * Cancels any in-flight one (incl. remotely).
+	 */
 	estimate: (params: TParams) => void
+	/** The person typed in this task, or an answer's consequence is handled in it: what it schedules waits the pause. */
+	pauseThisTask: () => void
+	/**
+	 * A pick that may leave every input as it was (Max on the same amount, the unit switch): once the
+	 * changes it made have scheduled, starts the estimate still waiting its pause, if any. Call it
+	 * after the pick's writes.
+	 */
+	startWaiting: () => void
 	/** Cancel the pending estimation (if any) and clear `result`. Safe to call repeatedly. */
 	cancel: () => void
 	/**
@@ -84,6 +91,11 @@ export function useFeeEstimation<TParams, TResult>(
 		result,
 		isEstimating,
 		estimate: (params) => engine.schedule(SINGLE_SLOT, params),
+		pauseThisTask: engine.pauseThisTask,
+		startWaiting: () => {
+			// Vue's flush runs the watchers the pick's writes queued before this, so their schedule is the one started.
+			void nextTick(() => engine.startWaiting(SINGLE_SLOT))
+		},
 		cancel: () => engine.cancel(SINGLE_SLOT),
 		handoff: () => engine.handoffInclusive(SINGLE_SLOT),
 		dispose: engine.dispose,

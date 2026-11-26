@@ -86,28 +86,34 @@ const feeMapInstances: Array<{
 		dispose: ReturnType<typeof vi.fn>
 	}
 }> = []
-vi.mock("@/composables/useFeeEstimationMap", () => ({
-	useFeeEstimationMap: vi.fn((opts: unknown) => {
-		const failed = ref<Record<number, boolean>>({})
-		// As the real map: asking a key again, or cancelling it, ends its failure at once.
-		const settle = (key: number) => {
-			failed.value[key] = false
-		}
-		const api = {
-			results: ref({}),
-			estimating: ref({}),
-			failed,
-			estimate: vi.fn(settle),
-			cancel: vi.fn(settle),
-			cancelAll: vi.fn(),
-			handoffAll: vi.fn(() => ({})),
-			rearm: vi.fn(),
-			dispose: vi.fn(),
-		}
-		feeMapInstances.push({ opts: opts as never, api: api as never })
-		return api
-	}),
-}))
+/** On: the window gets the real fee map, so a test reads when its estimates start. */
+const realFeeMap = vi.hoisted(() => ({ on: false }))
+vi.mock("@/composables/useFeeEstimationMap", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/composables/useFeeEstimationMap")>()
+	return {
+		useFeeEstimationMap: vi.fn((opts: unknown) => {
+			if (realFeeMap.on) return actual.useFeeEstimationMap(opts as never)
+			const failed = ref<Record<number, boolean>>({})
+			// As the real map: asking a key again, or cancelling it, ends its failure at once.
+			const settle = (key: number) => {
+				failed.value[key] = false
+			}
+			const api = {
+				results: ref({}),
+				estimating: ref({}),
+				failed,
+				estimate: vi.fn(settle),
+				cancel: vi.fn(settle),
+				cancelAll: vi.fn(),
+				handoffAll: vi.fn(() => ({})),
+				rearm: vi.fn(),
+				dispose: vi.fn(),
+			}
+			feeMapInstances.push({ opts: opts as never, api: api as never })
+			return api
+		}),
+	}
+})
 const estimateOperationFeeMock = vi.fn(async () => undefined)
 const cancelEstimateMock = vi.fn(async (_token: string): Promise<void> => undefined)
 const decodeGrantsForDisplayMock = vi.fn(async (): Promise<unknown[]> => [])
@@ -2256,5 +2262,88 @@ describe("execute window — a failed fee estimate's retry", () => {
 		cards()[0]!.vm.$emit("retryEstimate", 0)
 		await flushPromises()
 		expect(toast.value?.id).toBe(later)
+	})
+})
+
+// ── Only a re-ask an answer causes waits the 500 ms pause. ──
+describe("execute window — when a fee estimate starts", () => {
+	const NETWORK = { id: "n1", chainId: 1, name: "TestNet" }
+	const OWNER = `0x${"0a".repeat(32)}`
+	const APP_FPC = `0x${"0f".repeat(32)}`
+	// As the wire carries it: every argument a field, `0x` + 64 hex.
+	const CALL = {
+		name: "transfer_in_private",
+		to: `0x${"1c".repeat(32)}`,
+		selector: "0x9a3b2c1d",
+		args: [`0x${"00".repeat(31)}05`, `0x${"2d".repeat(32)}`],
+	}
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } }
+	const FJ = { paymentMethod: { kind: "fj" } }
+	const resolvable = () => {
+		accountServiceCtorMock.mockImplementationOnce(function () {
+			return {
+				getAccount: vi.fn(async (_p: string, _c: number, address: string) => ({ address, chainId: 1, name: `acct-${address}` })),
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+			}
+		})
+		networkServiceCtorMock.mockImplementationOnce(function () {
+			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
+		} as never)
+	}
+	const asked = () => estimateOperationFeeMock.mock.calls.map((call) => (call as unknown[]).slice(1, 3))
+
+	beforeEach(() => {
+		realFeeMap.on = true
+		// Timers only: the harness flushes promises through `setImmediate`.
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		estimateOperationFeeMock.mockImplementation(() => new Promise(() => {}))
+	})
+	afterEach(() => {
+		realFeeMap.on = false
+		vi.useRealTimers()
+		estimateOperationFeeMock.mockImplementation(async () => undefined)
+	})
+
+	test("an app-paid send is estimated as the window opens; a card's settings start at once unless its re-read re-asks", async () => {
+		resolvable()
+		approval.payloadToLoad = {
+			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
+			params: {
+				operations: [
+					{
+						kind: "aztec_sendTx",
+						account: `aztec:1:${OWNER}`,
+						exec: { calls: [CALL], feePayer: APP_FPC },
+						opts: { from: OWNER },
+					},
+					{ kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [CALL] }, opts: { from: OWNER } },
+				],
+			},
+		}
+		w = factory()
+		await completeInit()
+		await vi.advanceTimersByTimeAsync(0)
+		expect(asked()).toEqual([[0, EMBEDDED]])
+
+		const card = w.findAllComponents(STUBS.OperationCard)[1]!
+		card.vm.$emit("updateFeeSettings", 1, FJ)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(asked()).toEqual([
+			[0, EMBEDDED],
+			[1, FJ],
+		])
+
+		// The next task: the card re-read Fee Juice after an answer, and publishes the same method again.
+		card.vm.$emit("feeReread", 1)
+		card.vm.$emit("updateFeeSettings", 1, { ...FJ })
+		await vi.advanceTimersByTimeAsync(499)
+		expect(asked()).toHaveLength(2)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(asked()).toEqual([
+			[0, EMBEDDED],
+			[1, FJ],
+			[1, FJ],
+		])
 	})
 })

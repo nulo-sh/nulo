@@ -26,7 +26,7 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => ({
 
 import { asImportedKeysDek, sealImportedSigningKeyV2 } from "@nulo/wallet-crypto"
 import { runsUnattended, runUnattended, type StaleNetworkClient } from "@/composables/useStaleNetwork"
-import { readImportedAccounts } from "@/popup/pages/settings/security/imported-accounts"
+import { readImportedAccounts, ResetRunningError } from "@/popup/pages/settings/security/imported-accounts"
 import type { RestoreGateHoldPoint } from "@/e2e/restore-gate"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
@@ -518,6 +518,30 @@ describe("a stale network reset through the real service graph", () => {
 				{ name: "Cold", address: IMPORTED, chainId: LOCAL, networked: true },
 			],
 			resetPending: true,
+		})
+	})
+
+	test("past a running reset's purge its import is only in the journal: Delete Profile cannot read its list until the reset ends", async () => {
+		const hold = holdAt("network-reset-purged")
+		const h = await harness(hold)
+		await twoChains(h)
+		const { ended } = await startReset(h)
+		await hold.reached
+		const reads = {
+			getNetworks: () => h.network.getNetworks(),
+			getImportedAccounts: (profileId: string) => h.account.getImportedAccounts(profileId),
+			getPendingReset: () => h.reset.getPendingReset(),
+			getStaleNetwork: (networkId: string) => h.reset.getStaleNetwork(networkId),
+		}
+		expect(await h.account.getImportedAccounts("p1")).toEqual([])
+		expect((await h.reset.getStaleNetwork("tn"))?.reset?.heldImported).toEqual([{ name: "Imported 1", address: IMPORTED }])
+		await expect(readImportedAccounts(reads, "p1")).rejects.toBeInstanceOf(ResetRunningError)
+
+		hold.release()
+		await expect(ended).resolves.toMatchObject({ completed: { addressesMoved: false } })
+		expect(await readImportedAccounts(reads, "p1")).toEqual({
+			accounts: [{ name: "Imported 1", address: IMPORTED, chainId: NEW, networked: true }],
+			resetPending: false,
 		})
 	})
 

@@ -24,11 +24,11 @@ const pairs = computed(() => Math.min(props.fields ?? 0, LABEL_WIDTHS.length))
 <template>
 	<div :class="fields === undefined ? $style.line : $style.pairs" :aria-hidden="decorative || undefined">
 		<span v-if="!decorative" :class="$style.words">Reading arguments…</span>
-		<Skeleton v-if="fields === undefined" :width="148" :height="9" />
+		<Skeleton v-if="fields === undefined" :width="148" :height="9" :class="$style.bar" />
 		<template v-else>
 			<span v-for="n in pairs" :key="n" :class="$style.pair">
-				<Skeleton :width="LABEL_WIDTHS[n - 1]" :height="9" />
-				<Skeleton :width="VALUE_WIDTHS[n - 1]" :height="9" />
+				<Skeleton :width="LABEL_WIDTHS[n - 1]" :height="9" :class="$style.bar" />
+				<Skeleton :width="VALUE_WIDTHS[n - 1]" :height="9" :class="$style.bar" />
 			</span>
 		</template>
 	</div>
@@ -60,5 +60,30 @@ const pairs = computed(() => Math.min(props.fields ?? 0, LABEL_WIDTHS.length))
 	display: flex;
 	align-items: center;
 	min-height: 17px;
+}
+
+/* However narrow the window, a bar ends inside its box. */
+.bar {
+	max-width: 100%;
+}
+
+/* Below the popup's width a decoded row puts its value under its name, at the right, when the two do
+ * not fit side by side: a pair wraps by the same rule, into the same 11 px name and 13 px value lines. */
+@media (width < 359px) {
+	.pair {
+		flex-wrap: wrap;
+		column-gap: 12px;
+		row-gap: 2px;
+		height: auto;
+
+		> :first-child {
+			margin-block: 1px;
+		}
+
+		> :last-child {
+			margin-block: 2px;
+			margin-left: auto;
+		}
+	}
 }
 </style>

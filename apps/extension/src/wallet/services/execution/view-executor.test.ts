@@ -18,14 +18,16 @@ import {
 	ScopeViolationError,
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
-import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
+import { ContractInitializationStatus, WalletSchema } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { getSchemaReturnType } from "@aztec-labs/foundation/schemas"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { UtilityExecutionResult } from "@aztec-labs/stdlib/tx"
 import { toAppFacingSimulationResult } from "./app-facing-results"
 import { simulationFixture } from "./app-facing-results.fixtures"
 import { ContractResolver } from "./contract-resolver"
+import type { RunReads } from "./run-reads"
 import { ViewExecutor, type ViewExecutorDeps } from "./view-executor"
 
 const fastPathMocks = vi.hoisted(() => ({
@@ -185,6 +187,23 @@ describe("ViewExecutor.executeAztecSimulateTx", () => {
 		expect(simArgs[2]).toEqual(["0xacct"])
 	})
 
+	test("the standard simulation builds under a run that is closed once it answers, or fails", async () => {
+		const { executor, deps, pxe } = makeHarness()
+		const op = () => makeSimOp({ opts: { from: addr(VALID_ADDR), additionalScopes: [addr(VALID_ADDR)] } })
+		await executor.executeAztecSimulateTx(op())
+		pxe.simulateTx.mockRejectedValueOnce(new Error("simulation failed"))
+		await expect(executor.executeAztecSimulateTx(op())).rejects.toThrowError("simulation failed")
+
+		// A closed run keeps nothing: it fetches an artifact every time it is asked.
+		for (const call of (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls) {
+			const fetch = vi.fn(async (): Promise<[string, never]> => ["class", {} as never])
+			const reads = call[5] as RunReads
+			await reads.artifact("class", fetch)
+			await reads.artifact("class", fetch)
+			expect(fetch).toHaveBeenCalledTimes(2)
+		}
+	})
+
 	test("fast path result=null falls back to the standard path", async () => {
 		fastPathMocks.rehydrateOptimizablePrefix.mockReturnValue({ optimizableCalls: [], remainingRaw: [] })
 		fastPathMocks.runFastPath.mockResolvedValue(null)
@@ -279,6 +298,27 @@ describe("ViewExecutor.executeAztecGetChainInfo", () => {
 		expect((refused as Error).message).toBe(
 			"Chain identity mismatch: selected network has chainId=7 but live node reports composite=3 (l1ChainId=1, rollupVersion=2). Refusing to sign/prove against a drifted endpoint.",
 		)
+	})
+})
+
+describe("ViewExecutor.executeAztecGetAddressBook", () => {
+	test("a contact whose name reads as an address is answered with its own address as the name; any other name as stored", async () => {
+		const shaped = "0x2f91d6a0c47e3b58e1a9d02c6f7400089a15d2c07f6e49b1a3d8c05e72f94a1b"
+		const ana = "0x1d4c7a90b2e3f6081c5d9a2e7b4f03c6d8a1e5b29f7c0d4a6e3b8c1f5d2a9e07"
+		const contacts = [
+			{ id: "c1", profileId: "p1", name: "0x0c2b7e..4b5c", address: shaped, abbr: "0X" },
+			{ id: "c2", profileId: "p1", name: "Ana", address: ana, abbr: "AN" },
+		]
+		const { executor } = makeHarness({ contactService: { getContacts: vi.fn(async () => contacts) } as never })
+
+		const wire = JSON.parse(JSON.stringify(await executor.executeAztecGetAddressBook({ kind: "aztec_getAddressBook" } as never)))
+
+		expect(wire).toEqual([
+			{ alias: shaped, item: shaped },
+			{ alias: "Ana", item: ana },
+		])
+		const parsed = getSchemaReturnType(WalletSchema.getAddressBook).parse(wire) as { alias: string }[]
+		expect(parsed.map((entry) => entry.alias)).toEqual([shaped, "Ana"])
 	})
 })
 

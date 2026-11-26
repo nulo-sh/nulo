@@ -17,7 +17,7 @@ on:
         default: "http://localhost:8080"
       shard:
         description: |
-          vitest --shard expression (e.g. "1/5"). Empty string runs the full suite.
+          vitest --shard expression (e.g. "1/7"). Empty string runs the full suite.
           Caller workflows use this with a matrix strategy to parallelize across
           runners; each shard runs its own anvil + aztec sandbox.
         required: false
@@ -25,7 +25,7 @@ on:
         default: ""
       shard_label:
         description: |
-          Artifact-safe label for the shard (e.g. "1-of-5"). actions/upload-artifact
+          Artifact-safe label for the shard (e.g. "1-of-7"). actions/upload-artifact
           rejects `/` in artifact names, so the caller passes a separate label
           here distinct from the `shard` input's vitest expression. Empty falls
           back to "full" for the unsharded invocation.
@@ -421,7 +421,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          # Use shard_label (e.g. "1-of-5") not shard ("1/5") — upload-artifact
+          # Use shard_label (e.g. "1-of-7") not shard ("1/7") — upload-artifact
           # rejects `/` in names (actions/upload-artifact#647).
           name: network-e2e-logs-${{ inputs.browser != 'chrome' && format('{0}-', inputs.browser) || '' }}${{ inputs.shard_label || 'full' }}
           path: |

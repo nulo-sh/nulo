@@ -84,14 +84,11 @@ export function lastSendTo(sends: readonly PastSend[], address: string): PastSen
 	return sends.find((s) => keyOf(s.address) === key) ?? null
 }
 
-/** An address this wallet has a record of: a contact, one of its accounts, or a past send. */
-export function isKnownAddress(
-	address: string,
-	known: { contacts: readonly { address?: string }[]; accounts: readonly { address?: string }[]; sends: readonly PastSend[] },
-): boolean {
+/** An address this wallet has paid, or one of its own accounts. */
+export function isKnownAddress(address: string, known: { accounts: readonly { address?: string }[]; sends: readonly PastSend[] }): boolean {
 	const key = keyOf(address)
 	const matches = (row: { address?: string }) => row.address !== undefined && keyOf(row.address) === key
-	return known.contacts.some(matches) || known.accounts.some(matches) || known.sends.some(matches)
+	return known.accounts.some(matches) || known.sends.some(matches)
 }
 
 /** How long ago a send was, in the words a recent row reads. */

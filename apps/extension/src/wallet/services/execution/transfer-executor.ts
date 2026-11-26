@@ -43,7 +43,7 @@ import type { ExecutionLane } from "./execution-lane"
 import type { SharedSendDeps } from "./shared-send-deps"
 import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
 import type { Action, FeeOptions, FeeSettings, TransferFeeEstimate, TransferFeeQueued } from "./spec"
-import { ownFeeJuiceShortfall, probeSponsorFunding } from "./sponsor-funding"
+import { ownFeeJuiceShortfall, PayerBalanceRead, probeSponsorFunding } from "./sponsor-funding"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { minedSuccessfully, type SequenceKey, transferSequenceKeys, usedSequences } from "./transfer-sequence-keys"
 import { getEstimatedFee, getGasDetails } from "./tx-fee-details"
@@ -132,6 +132,7 @@ export interface TransferExecutorDeps extends SharedSendDeps {
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		fpc?: Fpc,
+		payerBalance?: PayerBalanceRead,
 	): Promise<FeeEstimate>
 	createJournalOperation(input: NewOperationInput): Promise<OperationRecord>
 	transitionJournal(journalId: string, progress: JobProgress, error?: JobError | null): Promise<unknown>
@@ -756,12 +757,13 @@ export class TransferExecutor {
 
 		// Read before the build: a send that reaches the node during it may hold this build's index.
 		const sequenceEpoch = sequence ? this.deps.sequencer.epoch(sequence.scope) : undefined
-		const built = await this.deps.buildAndEstimate(op, op.feeSettings, fence, undefined, signal)
+		const payerBalance = new PayerBalanceRead(this.deps.readPublicStorageOnce)
+		const built = await this.deps.buildAndEstimate(op, op.feeSettings, fence, undefined, signal, undefined, payerBalance)
 		const { txRequest, network, nonce, feePaymentMethod, initializesAccount: builtInitializes } = built
 		throwIfAborted(signal)
 		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
-		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
-		const feeJuiceShortfall = await ownFeeJuiceShortfall(built, this.deps, log)
+		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log, payerBalance)
+		const feeJuiceShortfall = await ownFeeJuiceShortfall(built, this.deps, log, payerBalance)
 		throwIfAborted(signal)
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))

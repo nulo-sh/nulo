@@ -318,6 +318,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-fees-ux](send-fees-ux/plan.md) — completed — the sponsor forms' "Already added", "Refused before sending" for a capped app send, the app-set fee legend kept while estimating, a sponsored send queued behind an earlier one, and Send's fee card drawn as a skeleton while it reads balances
 - [send-fixes-1](send-fixes-1/plan.md) — completed — start finishes on a custom node that does not answer, a paused reset's imported accounts export as account files, the re-ask button reads Send (#498 #710; #112 held for the owner)
 - [send-followups-1](send-followups-1/plan.md) — completed — the queued cap from a like send (#412), a row for a long USD line (#408), the fee card without its dead override path (#406)
+- [send-page-split-1](send-page-split-1/plan.md) — completed — Send's data loading, fee estimate and fiat gate move into three composables; the page keeps orchestration (#1930)
 - [send-publish-ledger](send-publish-ledger/plan.md) — completed — Send says what a send puts on the public chain
 - [send-queue-activity](send-queue-activity/plan.md) — completed — dApp sends ordered behind earlier sends, fee spender kept across restarts; send outcome states, feed surfaces; Send's amount card and keyboard reach; a queued send held to a fee cap, asked again above it
 - [send-states](send-states/plan.md) — completed — a sponsor funding check on the fee card and a load error on Send's token card
@@ -377,6 +378,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-followups-6](wallet-followups-6/plan.md) — completed — a secure message bounded to `{iv, ciphertext}` within 16 MiB (#345), one address spelling at the parse (#331), a typed refusal for a non-string method (#332), both e2e error arrays (#336); #262 and #355 known limits
 - [wallet-followups-7](wallet-followups-7/plan.md) — completed — one token contract spelling at the parse (#329); a bound of 32 pending calls on every dApp session at decrypt and dispatch (#354); #371 and #372 known limits
 - [wallet-followups-8](wallet-followups-8/plan.md) — completed — node retries stop while a profile or chain is torn down (#277); a dead profile RPC goes (#464); the no-token line, a field purpose and the unlock toast (#339, #465, #466)
+- [wallet-followups-9](wallet-followups-9/plan.md) — completed — Delete profile names imported accounts on every chain (#1925) and waits for a running reset, with Export first for passkeys (#1938, #1939); one bound of 77 on a token's decimals (#1926)
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set
@@ -622,5 +624,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-security-fixes-5](harden-security-fixes-5/plan.md) — completed — discovery ids bound to their first tab, category-only log lines, paced discovery, bounded finished tasks, at most 1,024 calls per batch
 - [quality-lows-b](quality-lows-b/plan.md) — completed — the approval windows' raced-cancel and wrong-profile endings move into their shell, the pending-send refusal toast and the first-connect rule get one home each (#1977, #1978, #1979)
 - [quality-lows-a](quality-lows-a/plan.md) — completed — the baseline scripts' Biome reader, the landing's subscribe client, the network endpoint edits and the proving backends each get one home; the route-snapshot half of #1976 left out (#1981, #1982, #1975)
+- [contact-names-build-1](contact-names-build-1/plan.md) — completed — a contact name written like an address is refused at entry, edit and contacts-file import and never printed for an address; Send matches a typed address only whole, shows the short address under each Recent name, and the not-paid line for a contact never paid
 - [task-owner-1](task-owner-1/plan.md) — completed — every root task names its profile, and the task registry inserts only its own profile's; a scan pins the creators
 - [backup-contracts-1](backup-contracts-1/plan.md) — completed — a full backup stores each contract class's code once, without debug info, and every older file still restores (#2003, #2004)
+- [css-recipes-home-1](css-recipes-home-1/plan.md) — completed — the accent and muted text actions, visually hidden, form sections and the filled auth tabs get one home each; a scan stops cross-feature `composes`
+- [ci-shards-1](ci-shards-1/plan.md) — completed — seven network shards, four smoke shards and the unit tests three ways: pr-quick 14 → ~5–6 min, network Firefox 26 → ~16–18 min, for eight more jobs per PR
+- [est-pause-1](est-pause-1/plan.md) — completed — a pick starts the fee estimate at once, typing and an answer's re-ask keep the pause: the request leaves ~0.8 s sooner on Send, ~0.5 s in the approval window and the authorization popups

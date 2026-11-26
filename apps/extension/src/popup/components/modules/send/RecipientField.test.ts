@@ -73,6 +73,7 @@ describe("modules/send/RecipientField", () => {
 		await w.find("input").trigger("focus")
 		await w.get('[role="option"]').trigger("click")
 		expect(choices(w)).toEqual([alice.address])
+		expect(w.emitted("picked")).toHaveLength(1)
 		expect(w.find("input").exists()).toBe(true)
 	})
 
@@ -147,6 +148,8 @@ describe("modules/send/RecipientField", () => {
 			const w = real({ candidates: [bob] })
 			await typeAndLeave(w, `${rlo}${address}${zwsp}`)
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([bob])
+			// Recognized by the blur, not picked: a typed address's estimate keeps its pause.
+			expect(w.emitted("picked")).toBeUndefined()
 		})
 
 		describe("and an address keeps no white space or joiner at its two ends", () => {
@@ -234,6 +237,17 @@ describe("modules/send/RecipientField", () => {
 			input.element.dispatchEvent(enter())
 			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([alice.address])
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
+			expect(w.emitted("picked")).toHaveLength(1)
+		})
+
+		test("an Enter on the first characters of an address picks nothing, though a name holds them", async () => {
+			const holder = { id: "6", name: "Joe 0x0c", address: `0x${"6".repeat(64)}` }
+			const w = mountAttached({ candidates: [holder, alice], searchTerm: "0x0c" })
+			const input = w.find("input")
+			await input.trigger("focus")
+			input.element.dispatchEvent(enter())
+			expect(picks(w)).toEqual({ term: [], contact: [] })
+			expect(w.find('[role="option"]').exists()).toBe(false)
 		})
 
 		test("an Enter pick is chosen and leaves the input, so the page places the keyboard", async () => {
@@ -488,7 +502,8 @@ describe("modules/send/RecipientField", () => {
 	})
 
 	describe("a mouse press that takes the focus from the field: the pick waits for the press to end", () => {
-		const namesake = { id: "5", name: "0xaaaa fan", address: "0xcccc" }
+		// A second candidate at Alice's address: a typed address offers only candidates holding it whole.
+		const namesake = { id: "5", name: "Fan", address: "0xaaaa" }
 		const mounted: ReturnType<typeof mount>[] = []
 		const mountAttached = (props: Record<string, unknown>) => {
 			const w = mount(RecipientField, { props, global: { stubs: STUBS }, attachTo: document.body })
@@ -508,6 +523,11 @@ describe("modules/send/RecipientField", () => {
 		const suggested = (w: ReturnType<typeof mount>) => w.findAll('[data-testid="stub-avatar"]').map((a) => a.attributes("data-address"))
 		const clickSuggestion = (w: ReturnType<typeof mount>, address: string) =>
 			(w.get(`[data-testid="stub-avatar"][data-address="${address}"]`).element.parentElement as HTMLElement).click()
+		const suggestedNames = (w: ReturnType<typeof mount>) =>
+			w.findAll('[data-testid="stub-avatar"]').map((a) => a.attributes("data-name"))
+		const clickSuggestionNamed = (w: ReturnType<typeof mount>, name: string) =>
+			(w.get(`[data-testid="stub-avatar"][data-name="${name}"]`).element.parentElement as HTMLElement).click()
+		const chosen = (w: ReturnType<typeof mount>) => (w.emitted<[unknown]>("choose") ?? []).map(([c]) => c)
 		const focused = async (props: Record<string, unknown>) => {
 			const w = mountAttached(props)
 			await w.get("input").trigger("focus")
@@ -607,14 +627,16 @@ describe("modules/send/RecipientField", () => {
 			const w = await focused({ candidates: [alice, namesake], searchTerm: alice.address })
 			press("pointerdown")
 			await w.get("input").trigger("blur")
+			expect(lastContact(w)).toEqual(alice)
 			vi.advanceTimersByTime(1_500)
 			await nextTick()
-			expect(suggested(w)).toEqual([alice.address, namesake.address])
+			expect(suggestedNames(w)).toEqual([alice.name, namesake.name])
+			expect(chosen(w)).toEqual([])
 			press("pointerup")
-			clickSuggestion(w, namesake.address)
+			clickSuggestionNamed(w, namesake.name)
 			await afterRelease()
 			expect(lastContact(w)).toEqual(namesake)
-			expect(choices(w)).toEqual([namesake.address])
+			expect(chosen(w)).toEqual([namesake])
 		})
 
 		test("a list that changes under a held press never rebinds the pressed row to another destination", async () => {

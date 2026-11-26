@@ -263,6 +263,7 @@ onBeforeUnmount(() => {
 	border-bottom: none;
 }
 
+/* The same set as `form-section.module.css`'s `.section`: change both together. */
 :global(.export_section_last) {
 	display: flex;
 	flex-direction: column;

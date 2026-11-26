@@ -361,7 +361,7 @@
 		{
 			"file": "apps/extension/src/popup/components/modules/send/SendPersonStep.vue",
 			"expression": "trimAddress(r.address, 6, 4, \"…\")",
-			"branch": "recents.length && !(r.name)",
+			"branch": "recents.length",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"send-recent-address\"]",
@@ -804,7 +804,7 @@
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/connected-apps/[id].vue",
-			"expression": "`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`",
+			"expression": "`\u2068${getNetworkName(acc.chainId, appStore.networks).toUpperCase()}\u2069 · ${trimAddress(acc.address, 6, 4, '...')}`",
 			"branch": "session && accounts.length",
 			"ordinal": 0,
 			"role": "meta",

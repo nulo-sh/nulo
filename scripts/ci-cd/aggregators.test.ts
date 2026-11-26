@@ -483,7 +483,7 @@ test("release runs the network suite in the one job attach-assets and status rea
 })
 
 // The four PR e2e lanes. Each `status` checks out `e2e-aggregate.sh` at this run's commit and runs it
-// on `toJSON(needs)`; each smoke lane's three shards reach it as the one `smoke` result, so a failed or
+// on `toJSON(needs)`; each smoke lane's four shards reach it as the one `smoke` result, so a failed or
 // cancelled shard arrives as `failure` or `cancelled`. Every table below runs the lane's own wiring
 // and the shared script together.
 const E2E_LANES = [
