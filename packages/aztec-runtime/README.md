@@ -35,6 +35,7 @@ The package exposes targeted entry points instead of a single barrel:
 ```
 "./"            → src/index.ts
 "./pxe"         → src/pxe/index.ts
+"./pxe/route-snapshot" → src/pxe/route-snapshot.ts
 "./account"     → src/account/index.ts
 "./ports"       → src/ports/index.ts
 "./adapters"    → src/adapters/index.ts
@@ -42,6 +43,8 @@ The package exposes targeted entry points instead of a single barrel:
 "./offscreen/entry" → src/offscreen/entry.ts
 "./fee-juice"   → src/fee-juice.ts
 ```
+
+`./pxe/route-snapshot` holds `RouteSnapshotSchema`, which the popup's network spec reads, and imports only zod and types: a value import of the `pxe` barrel would put the PXE and its kernel artifacts in the popup's module graph.
 
 ## Scripts
 
