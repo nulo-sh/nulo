@@ -1574,7 +1574,7 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 		expect(log).toEqual([["model", "1"], ["typed"], ["model", "1.25"], ["typed"], ["model", "1.2"], ["typed"]])
 	})
 
-	test("Enter emits done on a text the field rests on; a repeat or composing Enter emits none, nor does Enter on a text its rest rewrites, which leaving then ends", async () => {
+	test("Enter emits done on a text the field rests on; a repeat or composing Enter emits none and writes no rest", async () => {
 		const w = mountLive()
 		el(w).focus()
 		await field(w).setValue("5")
@@ -1586,14 +1586,75 @@ describe("composite/AmountCard — leaving a field, or Enter in it, ends the typ
 		await field(w).trigger("keydown", { key: "Enter" })
 		expect(log).toEqual([["done"]])
 
-		await field(w).setValue("1.50")
+		await field(w).setValue("1000")
 		log = []
-		await field(w).trigger("keydown", { key: "Enter" })
+		await field(w).trigger("keydown", { key: "Enter", repeat: true })
+		await field(w).trigger("keydown", { key: "Enter", isComposing: true })
+		await field(w).trigger("keydown", { key: "Enter", keyCode: 229 })
 		expect(log).toEqual([])
-		expect(el(w).value).toBe("1.50")
+		expect(el(w).value).toBe("1000")
+	})
+
+	test.each([
+		["1000", "1,000"],
+		["1.50", "1.5"],
+	])(
+		"Enter on %s writes its rest %s, as typing, then emits done; the field keeps the focus, its caret at the end, and leaving then writes nothing new",
+		async (typed, rest) => {
+			const w = mountLive()
+			el(w).focus()
+			await field(w).setValue(typed)
+			log = []
+			await field(w).trigger("keydown", { key: "Enter" })
+			expect(log).toEqual([["model", rest], ["typed"], ["done"]])
+			expect(el(w).value).toBe(rest)
+			expect(document.activeElement).toBe(el(w))
+			expect([el(w).selectionStart, el(w).selectionEnd]).toEqual([rest.length, rest.length])
+
+			el(w).blur()
+			await nextTick()
+			expect(log).toEqual([["model", rest], ["typed"], ["done"], ["typed"], ["done"]])
+			expect(el(w).value).toBe(rest)
+		},
+	)
+
+	test("Enter on a text with no rest writes nothing: an empty field, a text that does not read, one with more decimals than the token", async () => {
+		const w = mountLive()
+		el(w).focus()
+		const enter = async () => {
+			log = []
+			await field(w).trigger("keydown", { key: "Enter" })
+			expect(log).toEqual([["done"]])
+		}
+		await enter()
+		expect(el(w).value).toBe("")
+
+		for (const pasted of ["100 TST", "1,234"]) {
+			el(w).value = pasted
+			await field(w).trigger("input", { inputType: "insertFromPaste" })
+			const hint = w.get("[data-testid='send-amount-meta']").text()
+			await enter()
+			expect(el(w).value).toBe(pasted)
+			expect(w.get("[data-testid='send-amount-meta']").text()).toBe(hint)
+		}
+
+		// Typing clamps to the token's decimals, so only a write from the page holds more.
+		await w.setProps({ modelValue: "1.1234567" })
+		await enter()
+		expect(el(w).value).toBe("1.1234567")
+	})
+
+	test("Enter's rest leaves a refused key's hint to leaving", async () => {
+		const w = mountLive()
+		el(w).focus()
+		await field(w).setValue("1000x")
+		expect(w.find("[data-testid='send-amount-unreadable-hint']").exists()).toBe(true)
+		await field(w).trigger("keydown", { key: "Enter" })
+		expect(el(w).value).toBe("1,000")
+		expect(w.find("[data-testid='send-amount-unreadable-hint']").exists()).toBe(true)
 		el(w).blur()
 		await nextTick()
-		expect(log).toEqual([["model", "1.5"], ["typed"], ["done"]])
+		expect(w.find("[data-testid='send-amount-unreadable-hint']").exists()).toBe(false)
 	})
 
 	test("the USD field: leaving or Enter lands a pending conversion first, as no keystroke, then emits done; a window losing focus leaves it pending", async () => {

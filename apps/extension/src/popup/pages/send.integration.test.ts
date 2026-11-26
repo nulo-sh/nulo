@@ -1908,7 +1908,7 @@ describe("Send — when the fee estimate starts", () => {
 			w.unmount()
 		})
 
-		test("Enter on a text the field rests on starts it at once, a repeat Enter adds nothing; on a text its rest rewrites, leaving starts it", async () => {
+		test("Enter on a text the field rests on starts it at once, a repeat Enter adds nothing, and leaving then adds nothing", async () => {
 			const w = await typed("1.5")
 			await field(w).trigger("keydown", { key: "Enter", repeat: true })
 			await nextTask()
@@ -1920,18 +1920,52 @@ describe("Send — when the fee estimate starts", () => {
 			el(w).blur()
 			await vi.advanceTimersByTimeAsync(1000)
 			expect(asked()).toBe(1)
+			w.unmount()
+		})
 
-			el(w).focus()
-			await field(w).setValue("2.50")
-			await vi.advanceTimersByTimeAsync(300)
+		test.each([
+			["1000", "1,000", 1_000_000_000n],
+			["1.50", "1.5", 1_500_000n],
+		])(
+			"Enter on %s shows %s, keeps the focus with the caret at its end, and starts one estimate at once; the Tab after it starts nothing more",
+			async (text, rest, amount) => {
+				mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, privateBalance: "5000000000" }])
+				const w = await typed(text)
+				await field(w).trigger("keydown", { key: "Enter", repeat: true })
+				await field(w).trigger("keydown", { key: "Enter", isComposing: true })
+				await nextTask()
+				expect([el(w).value, asked()]).toEqual([text, 0])
+
+				const enter = sendEvent(el(w), "keydown", { key: "Enter" })
+				await nextTask()
+				expect(enter?.defaultPrevented).toBe(false)
+				expect(amounts()).toEqual([amount])
+				expect(el(w).value).toBe(rest)
+				expect(document.activeElement).toBe(el(w))
+				expect([el(w).selectionStart, el(w).selectionEnd]).toEqual([rest.length, rest.length])
+				await vi.advanceTimersByTimeAsync(1000)
+				expect(asked()).toBe(1)
+
+				;(w.get('[data-testid="send-from-private"]').element as HTMLElement).focus()
+				await vi.advanceTimersByTimeAsync(1000)
+				expect([el(w).value, asked()]).toEqual([rest, 1])
+				w.unmount()
+			},
+		)
+
+		test("Enter on an empty field or a text that does not read rewrites nothing and starts nothing, the waiting estimate of the text before it included", async () => {
+			const w = await typed("1")
+			await field(w).setValue("")
 			await field(w).trigger("keydown", { key: "Enter" })
-			await nextTask()
-			expect(asked()).toBe(1)
-			el(w).blur()
-			await nextTask()
-			expect(amounts()).toEqual([1_500_000n, 2_500_000n])
 			await vi.advanceTimersByTimeAsync(1000)
-			expect(asked()).toBe(2)
+			expect([el(w).value, asked()]).toEqual(["", 0])
+
+			await field(w).setValue("2")
+			el(w).value = "2 TST"
+			await field(w).trigger("input", { inputType: "insertFromPaste" })
+			await field(w).trigger("keydown", { key: "Enter" })
+			await vi.advanceTimersByTimeAsync(1000)
+			expect([el(w).value, asked()]).toEqual(["2 TST", 0])
 			w.unmount()
 		})
 
