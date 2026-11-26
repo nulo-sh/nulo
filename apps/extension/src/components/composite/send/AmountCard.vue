@@ -39,12 +39,11 @@ const props = defineProps({
 
 /** `edit`: the person's own change to the amount: a key or a paste in either field, or Max. A write
  *  from the page, and the card's own rest, re-clamp or clear, never emit it.
- *  `typed`: the card wrote typing into the model in this task (a keystroke, its rest on blur, or a typed
- *  USD figure's conversion), so a fee estimate it causes waits for more.
+ *  `typed`: the card wrote typing into the model in this task (a keystroke, its rest on blur or Enter, or
+ *  a typed USD figure's conversion), so a fee estimate it causes waits for more.
  *  `picked`: Max, the USD Max or the unit switch, which may leave the amount as it was.
- *  `done`: the person left a field, after its rest or conversion is written, or pressed Enter in the USD
- *  field or on a token text the field already rests on, so the estimate their typing asked waits no
- *  longer. A window losing focus is not leaving. */
+ *  `done`: the person left a field or pressed Enter in it, after its rest or conversion is written, so
+ *  the estimate their typing asked waits no longer. A window losing focus is not leaving. */
 const emit = defineEmits(["edit", "typed", "picked", "done"])
 
 /** Token amount string — ALWAYS the value that validates + sends, in both
@@ -205,23 +204,33 @@ function restAmount() {
 		return
 	}
 	readHint.value = null
-	const rest = restingAmount(read.plain, tokenDecimals.value)
+	writeRest(restingAmount(read.plain, tokenDecimals.value))
+}
+
+function writeRest(rest) {
 	writeAmount(rest, { atRest: true, point: commaPoint && rest.includes(".") })
 	emit("typed")
 }
 
-/** Whether leaving would rewrite the text: one that reads, which its rest regroups or trims. Reads
- *  `lastText`, which the card's own write sets at once, where the model reads it a render late. */
-function restRewrites() {
-	if (!lastText || tokenDecimals.value === undefined) return false
+/** The rest leaving would write in place of the text, or null when it would write none: no text, a
+ *  text that does not read, or one already at rest. Reads `lastText`, which the card's own write sets
+ *  at once, where the model reads it a render late. */
+function restRewrite() {
+	if (!lastText || tokenDecimals.value === undefined) return null
 	const read = readAmountText(lastText, { rested: rested.value })
-	return read.ok && restingAmount(read.plain, tokenDecimals.value) !== lastText
+	if (!read.ok) return null
+	const rest = restingAmount(read.plain, tokenDecimals.value)
+	return rest === lastText ? null : rest
 }
 
-// Enter leaves the text as typed, and a rest that rewrites it later asks the estimate again, so Enter
-// starts it only on a text the field already rests on; leaving rests the text and then starts it.
+// Enter writes the rest leaving would, then starts the estimate waiting for it, so a later leave finds
+// nothing to rewrite or ask again; a rest that rewrites a text already estimated asks again, as
+// leaving's does. The page's re-render writes the rest into the focused field, which puts the caret at
+// its end. Enter leaves the read hint to leaving.
 const handleAmountEnter = (e) => {
-	if (isRepeatOrComposing(e) || restRewrites()) return
+	if (isRepeatOrComposing(e)) return
+	const rest = restRewrite()
+	if (rest !== null) writeRest(rest)
 	emit("done")
 }
 
