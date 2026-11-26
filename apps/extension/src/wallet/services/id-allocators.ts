@@ -65,8 +65,11 @@ function nextIdAbove(max: number, occupied: (id: number) => boolean): number {
 	return candidate
 }
 
+/** Hex characters in a random id, a network's included. */
+export const RANDOM_ID_LENGTH = 8
+
 /** Sync sibling of `nextRandomId` for in-memory registries. */
-export function randomIdNotIn(taken: (id: string) => boolean, length = 8): string {
+export function randomIdNotIn(taken: (id: string) => boolean, length = RANDOM_ID_LENGTH): string {
 	let id: string
 	do {
 		id = getRandomHex(length)
@@ -74,7 +77,7 @@ export function randomIdNotIn(taken: (id: string) => boolean, length = 8): strin
 	return id
 }
 
-export async function nextRandomId(storage: { contains(id: string): Promise<boolean> }, length = 8): Promise<string> {
+export async function nextRandomId(storage: { contains(id: string): Promise<boolean> }, length = RANDOM_ID_LENGTH): Promise<string> {
 	let id: string
 	do {
 		id = getRandomHex(length)

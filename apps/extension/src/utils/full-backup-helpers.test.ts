@@ -10,6 +10,7 @@ import {
 	assembleFullBackup,
 	type BackupSource,
 	MAX_BACKUP_FILE_BYTES,
+	MAX_SEALABLE_TEXT_BYTES,
 	collectRestoreErrors,
 	detectBackupType,
 	FULL_BACKUP_V2_TAG,
@@ -19,8 +20,10 @@ import {
 	openSelection,
 	parseEncryptedBackup,
 	readBackupFile,
+	readBackupFileRest,
 	sealFullBackupText,
 	resolveRestoredActiveNetworkIdByChain,
+	utf8Length,
 	remapNetworkIdByChain,
 	capRecords,
 } from "./full-backup-helpers"
@@ -93,6 +96,39 @@ describe("assembleFullBackup", () => {
 		for (const spy of spies.slice(2)) expect(spy).not.toHaveBeenCalled()
 	})
 
+	it("fetches the account-state part last, told exactly what the rest of the file takes, in its own key place", async () => {
+		const part = { format: 2, classes: [{ classId: "0x01", artifact: { name: "語", pad: [[0], [1]] } }], items: [] }
+		let rest: unknown
+		const order: string[] = []
+		const sources: BackupSource[] = ["profile", "account-state", "contact"].map((name) => ({
+			name,
+			backup: async (r) => {
+				order.push(name)
+				if (name !== "account-state") return [{ from: name, note: "é" }]
+				rest = r
+				return part
+			},
+		}))
+		const result = await assembleFullBackup({ "wallet-version": "1.0.0" }, sources)
+		expect(order).toEqual(["profile", "contact", "account-state"])
+		expect(Object.keys((JSON.parse(result.compact) as { data: object }).data)).toEqual(["profile", "account-state", "contact"])
+		const prettyPart = JSON.stringify(part, null, 2)
+		const indented = utf8Length(prettyPart) + 4 * (prettyPart.split("\n").length - 1)
+		expect(rest).toEqual({
+			compactBytes: utf8Length(result.compact) - utf8Length(JSON.stringify(part)),
+			prettyBytes: utf8Length(result.pretty) - indented,
+		})
+	})
+
+	it("drops the account-state key when its part is absent", async () => {
+		const sources: BackupSource[] = [
+			{ name: "account-state", backup: async () => undefined },
+			{ name: "contact", backup: async () => [] },
+		]
+		const result = await assembleFullBackup({}, sources)
+		expect(Object.keys((JSON.parse(result.compact) as { data: object }).data)).toEqual(["contact"])
+	})
+
 	it("skips null/undefined slices and drops undefined envelope fields", async () => {
 		const sources: BackupSource[] = [
 			{ name: "a", backup: async () => null },
@@ -104,6 +140,40 @@ describe("assembleFullBackup", () => {
 		expect(Object.keys(parsed.data)).toEqual(["c"])
 		expect("absent" in parsed).toBe(false)
 		expect(parsed.present).toBe("x")
+	})
+})
+
+describe("readBackupFileRest", () => {
+	it("reads an absent rest as empty and refuses anything but two non-negative safe integers", () => {
+		expect(readBackupFileRest(undefined)).toEqual({ compactBytes: 0, prettyBytes: 0 })
+		expect(readBackupFileRest({ compactBytes: 3, prettyBytes: 4 })).toEqual({ compactBytes: 3, prettyBytes: 4 })
+		for (const raw of [
+			null,
+			{},
+			{ compactBytes: -1, prettyBytes: 0 },
+			{ compactBytes: 1.5, prettyBytes: 0 },
+			{ compactBytes: 0, prettyBytes: "1" },
+		]) {
+			expect(() => readBackupFileRest(raw)).toThrow("Malformed backup file size")
+		}
+	})
+})
+
+describe("MAX_SEALABLE_TEXT_BYTES", () => {
+	it("is the longest compact text whose sealed file passes the file cap", async () => {
+		const sealedLength = (bytes: number) => FULL_BACKUP_V2_TAG.length + 1 + 4 * Math.ceil((bytes + 29) / 3)
+		for (const text of ["", "a", "ab", "abc", "語"]) {
+			expect((await sealFullBackupText(text, "pw")).length).toBe(sealedLength(utf8Length(text)))
+		}
+		expect(sealedLength(MAX_SEALABLE_TEXT_BYTES)).toBeLessThanOrEqual(MAX_BACKUP_FILE_BYTES)
+		expect(sealedLength(MAX_SEALABLE_TEXT_BYTES + 1)).toBeGreaterThan(MAX_BACKUP_FILE_BYTES)
+	})
+})
+
+describe("utf8Length", () => {
+	it("counts what TextEncoder writes, a lone surrogate included", () => {
+		for (const text of ["", "ascii", "é語", "😀", "a\ud800b", "\udc00"])
+			expect(utf8Length(text)).toBe(new TextEncoder().encode(text).length)
 	})
 })
 

@@ -2,8 +2,10 @@
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
 import { ContractInstanceWithAddressSchema } from "@aztec-labs/stdlib/contract"
-import { assertWireArtifactClassId, wireArtifactClassId, withoutDebugInfo } from "@nulo/aztec-runtime/pxe"
+import { FROZEN_ACCOUNT_CLASS_ID } from "@nulo/aztec-runtime/account"
+import { assertWireArtifactClassId, loadProductionKnownArtifacts, wireArtifactClassId, withoutDebugInfo } from "@nulo/aztec-runtime/pxe"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
+import { readBackupFileRest } from "@/utils/full-backup-helpers"
 import { toRestoreError } from "@/utils/restore-error"
 import type { ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -16,7 +18,7 @@ import { networkInfoFrom, NetworkSchema, NodeStatus, NETWORK_SERVICE_NAME } from
 import type { ProfileService } from "@/wallet/services/profile/service"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import type { RunFence } from "@/wallet/services/profile/spec"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, jsonStringify } from "@nulo/wallet-core/utils"
 import {
 	ACCOUNT_STATE_SERVICE_NAME,
 	type AccountStateRestoreRecord,
@@ -34,6 +36,8 @@ import {
 	ACCOUNT_STATE_SKIP_DEADLINE,
 	ACCOUNT_STATE_SKIP_UNREACHABLE,
 	encodeAccountState,
+	type FittedAccountState,
+	fitAccountStatePart,
 	isAccountStateV2,
 	isConnectivityErrorMessage,
 	type NormalizedContract,
@@ -47,6 +51,25 @@ export * from "./spec"
 /** How long the contacts export waits on each network's node before it treats that network as
  *  having no senders. */
 export const SENDER_PROBE_TIMEOUT_MS = 5_000
+
+/** Class ids of the code the wallet itself ships: the compiled-in catalog and the vendored account. */
+async function loadWalletClassIds(): Promise<ReadonlySet<string>> {
+	const { artifacts } = await loadProductionKnownArtifacts()
+	return new Set([...artifacts.keys(), FROZEN_ACCOUNT_CLASS_ID])
+}
+
+/** An artifact's name is logged when it is a Noir identifier of at most 32 characters, else as
+ *  `(unnamed)`. */
+const LOGGABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/
+const logName = (name: unknown) => (typeof name === "string" && LOGGABLE_NAME.test(name) ? name : "(unnamed)")
+const MAX_LOGGED_CLASSES = 8
+
+/** `name=units` for the first classes, then how many more. */
+function logClasses(classes: readonly { name: unknown; codeUnits: number }[]): string {
+	const shown = classes.slice(0, MAX_LOGGED_CLASSES).map((c) => `${logName(c.name)}=${c.codeUnits}`)
+	const more = classes.length - shown.length
+	return more > 0 ? `${shown.join(", ")} and ${more} more` : shown.join(", ")
+}
 
 export class AccountStateService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
@@ -72,6 +95,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	public constructor(
 		logger: ILogger,
 		private readonly restoreGate: RestoreGate = NOOP_RESTORE_GATE,
+		private readonly walletClassIds: () => Promise<ReadonlySet<string>> = loadWalletClassIds,
 	) {
 		super(ACCOUNT_STATE_SERVICE_NAME, logger)
 	}
@@ -279,7 +303,10 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		return stripped
 	}
 
-	public async backup(): Promise<AccountStateSlice | undefined> {
+	/** The part a full backup writes, sized to what the `rest` of the file leaves (see
+	 *  `fitAccountStatePart`). */
+	public async backup(rest?: unknown): Promise<AccountStateSlice | undefined> {
+		const fileRest = readBackupFileRest(rest)
 		const networks = await this.networkService.getNetworks()
 		if (!networks.length) {
 			return undefined
@@ -308,35 +335,34 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			if (item) result.push(item)
 		}
 
-		const slice = encodeAccountState(result)
-		this.warnNearSliceCap(slice)
-		return slice
+		const fitted = await fitAccountStatePart(encodeAccountState(result), fileRest, this.walletClassIds)
+		this.logFit(fitted)
+		return fitted.part
 	}
 
-	/** The slice is mostly contract ARTIFACTS, and the restore side rejects it wholesale past
-	 *  `maxSliceCodeUnits` — an export that silently crosses the cap only fails much later, on
-	 *  someone else's import. Report the size while the user can still act on it. */
-	private warnNearSliceCap(slice: AccountStateSlice): void {
-		const sliceCodeUnits = JSON.stringify(slice).length
-		if (sliceCodeUnits <= ACCOUNT_STATE_CAPS.maxSliceCodeUnits * 0.8) return
-		const artifacts = isAccountStateV2(slice)
-			? slice.classes.map((c) => c.artifact)
-			: slice.flatMap((item) => item.contracts.map((c) => c.artifact))
-		const contracts = (isAccountStateV2(slice) ? slice.items : slice).reduce((n, item) => n + item.contracts.length, 0)
-		// Artifact NAMES, never addresses. This line is pre-formatted, so it reaches the
-		// persisted + CSV-exportable log verbatim — the logger's `trim()` only collapses object
-		// arguments, and cannot reach inside a string. Which contracts a wallet has registered
-		// is a privacy signal; names carry the diagnosis without it, and are exactly what
-		// `trim()` itself keeps when it collapses a ContractArtifact.
-		const biggest = artifacts
-			.map((a) => ({ name: a?.name ?? "(unnamed)", units: JSON.stringify(a ?? {}).length }))
-			.sort((a, b) => b.units - a.units)
+	/** Names and sizes, never an address: the line is pre-formatted, so it reaches the persisted and
+	 *  CSV-exportable log verbatim. */
+	private logFit({ part, codeUnits, left }: FittedAccountState): void {
+		const contracts = (isAccountStateV2(part) ? part.items : part).reduce((n, item) => n + item.contracts.length, 0)
+		const cap = ACCOUNT_STATE_CAPS.maxSliceCodeUnits
+		if (left.length > 0) {
+			const leftUnits = left.reduce((n, c) => n + c.codeUnits, 0)
+			this.logWarn(
+				`backup: contract code of ${left.length} class(es), ${leftUnits} code units, left out of the account-state part ` +
+					`(${codeUnits} of ${cap}, ${contracts} contract(s)): ${logClasses(left)}`,
+			)
+			return
+		}
+		if (codeUnits <= cap * 0.8) return
+		const classes = isAccountStateV2(part)
+			? part.classes.map((c) => c.artifact)
+			: part.flatMap((item) => item.contracts.map((c) => c.artifact))
+		const largest = classes
+			.map((a) => ({ name: a?.name, codeUnits: jsonStringify(a ?? {}).length }))
+			.sort((a, b) => b.codeUnits - a.codeUnits)
 			.slice(0, 5)
-			.map((c) => `${c.name}=${c.units}`)
-			.join(", ")
 		this.logWarn(
-			`backup: account-state slice is ${sliceCodeUnits} code units of ${ACCOUNT_STATE_CAPS.maxSliceCodeUnits} ` +
-				`(${contracts} contract(s)); largest artifacts: ${biggest}`,
+			`backup: account-state slice is ${codeUnits} code units of ${cap} (${contracts} contract(s)); largest artifacts: ${logClasses(largest)}`,
 		)
 	}
 

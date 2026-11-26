@@ -194,6 +194,25 @@ describe("response correlation", () => {
 
 // ── Hard timeout ──────────────────────────────────────────────────────
 
+describe("backup", () => {
+	test("forwards its arguments as the request's params, as restore does", async () => {
+		const client = newClient()
+		await client.connect()
+		const paramsOfLast = () => {
+			const calls = capturePortMessage(SERVICE).mock.calls
+			return (calls[calls.length - 1][0] as { content: { params: unknown } }).content.params
+		}
+		const sized = client.backup({ compactBytes: 1, prettyBytes: 2 })
+		expect(paramsOfLast()).toEqual({ n: 1, 0: { compactBytes: 1, prettyBytes: 2 } })
+		emitPortMessage(SERVICE, responseMessage(lastRequestId(), "part"))
+		await expect(sized).resolves.toBe("part")
+		const bare = client.backup()
+		expect(paramsOfLast()).toEqual({ n: 0 })
+		emitPortMessage(SERVICE, responseMessage(lastRequestId(), "slice"))
+		await expect(bare).resolves.toBe("slice")
+	})
+})
+
 describe("request timeout", () => {
 	test("rejects with RpcTimeoutError after the configured timeout", async () => {
 		vi.useFakeTimers()

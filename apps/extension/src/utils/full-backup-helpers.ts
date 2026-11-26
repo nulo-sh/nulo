@@ -114,6 +114,27 @@ export async function sealFullBackupText(plaintext: string, password: string): P
 	}
 }
 
+/** The most UTF-8 bytes a full backup's compact text may hold for its sealed text to pass
+ *  `MAX_BACKUP_FILE_BYTES`: the tag and its colon, then the padded base64 of the frame, which is the
+ *  text plus `MIN_ENCRYPTED_FRAME_BYTES`. */
+export const MAX_SEALABLE_TEXT_BYTES =
+	Math.floor((MAX_BACKUP_FILE_BYTES - FULL_BACKUP_V2_TAG.length - 1) / 4) * 3 - MIN_ENCRYPTED_FRAME_BYTES
+
+/** UTF-8 bytes of `text` as `TextEncoder` writes it (a lone surrogate as U+FFFD), without encoding it. */
+export function utf8Length(text: string): number {
+	let bytes = 0
+	for (let i = 0; i < text.length; i++) {
+		const unit = text.charCodeAt(i)
+		if (unit < 0x80) bytes += 1
+		else if (unit < 0x800) bytes += 2
+		else if (unit >= 0xd800 && unit <= 0xdbff && (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+			bytes += 4
+			i++
+		} else bytes += 3
+	}
+	return bytes
+}
+
 /** An encrypted account file picked as a backup: it opened under the account file's AAD. */
 export class AccountFileNotBackupError extends Error {
 	constructor() {
@@ -212,8 +233,56 @@ export async function readBackupFile(file: File): Promise<ProcessBackupResult> {
 	return { selection: { kind: "plain", name: file.name, backup, profileType: profileTypeOf(backup) } }
 }
 
-/** A backup-slice producer: the service's own name constant plus its backup call. */
-export type BackupSource = { name: string; backup: () => Promise<unknown> }
+/** A backup-slice producer: the service's own name constant plus its backup call. Only the
+ *  account-state call is passed the rest of the file. */
+export type BackupSource = { name: string; backup: (rest?: BackupFileRest) => Promise<unknown> }
+
+/** What a full-backup file takes besides its account-state part's value: UTF-8 bytes of its compact
+ *  text and of its pretty text, the checksum included. */
+export interface BackupFileRest {
+	compactBytes: number
+	prettyBytes: number
+}
+
+/** A slice's value sits at `data.<name>`, so each of its pretty lines is indented this much more
+ *  than when it is printed alone. */
+export const SLICE_PRETTY_INDENT = 4
+
+const isByteCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0
+
+/** A rest that crossed the worker boundary. Absent reads as an empty rest; anything but two
+ *  non-negative safe integers is refused. */
+export function readBackupFileRest(raw: unknown): BackupFileRest {
+	if (raw === undefined) return { compactBytes: 0, prettyBytes: 0 }
+	if (isObjectLike(raw) && isByteCount(raw.compactBytes) && isByteCount(raw.prettyBytes)) {
+		return { compactBytes: raw.compactBytes, prettyBytes: raw.prettyBytes }
+	}
+	throw new Error("Malformed backup file size")
+}
+
+/** The rest of a draft whose account-state value is the placeholder `0`, one byte in both texts. The
+ *  checksum the assembly appends last is a SHA-256 hex digest. */
+function measureRest(draft: Record<string, unknown>): BackupFileRest {
+	const probe = { ...draft, checksum: "0".repeat(64) }
+	return {
+		compactBytes: utf8Length(JSON.stringify(probe)) - 1,
+		prettyBytes: utf8Length(JSON.stringify(probe, null, 2)) - 1,
+	}
+}
+
+/** Fetches the account-state part last, passed what the rest of the file takes, into the key place
+ *  its placeholder holds. */
+async function fetchAccountStatePart(
+	draft: Record<string, unknown>,
+	data: Record<string, unknown>,
+	backup: BackupSource["backup"],
+	onSlice?: () => boolean,
+): Promise<void> {
+	if (onSlice && !onSlice()) throw new AssemblyAbortedError()
+	const part = await backup(measureRest(draft))
+	if (part === null || part === undefined) delete data[ACCOUNT_STATE_SERVICE_NAME]
+	else data[ACCOUNT_STATE_SERVICE_NAME] = part
+}
 
 /** Thrown when the caller's `onSlice` probe reports the run is no longer current. */
 export class AssemblyAbortedError extends Error {
@@ -238,6 +307,9 @@ export interface AssembledBackup {
  * side's strip-checksum → compact-restringify recompute reproduces the hashed
  * string exactly (key insertion order survives parse → stringify).
  *
+ * The account-state slice is fetched after every other one and passed what they take, keeping its
+ * place in `data`.
+ *
  * `onSlice` is a currency probe: consulted before every slice and before
  * sealing; returning false aborts with `AssemblyAbortedError`.
  */
@@ -249,12 +321,19 @@ export async function assembleFullBackup(
 	if ("checksum" in envelope) throw new Error("Backup envelope must not carry a checksum")
 	const data: Record<string, unknown> = {}
 	const draft: Record<string, unknown> = { ...envelope, data }
+	let accountState: BackupSource["backup"] | undefined
 	for (const { name, backup } of sources) {
 		if (onSlice && !onSlice()) throw new AssemblyAbortedError()
+		if (name === ACCOUNT_STATE_SERVICE_NAME) {
+			data[name] = 0
+			accountState = backup
+			continue
+		}
 		const slice = await backup()
 		if (slice === null || slice === undefined) continue
 		data[name] = slice
 	}
+	if (accountState) await fetchAccountStatePart(draft, data, accountState, onSlice)
 	if (onSlice && !onSlice()) throw new AssemblyAbortedError()
 	const unsigned = JSON.stringify(draft)
 	const checksum = await EncryptionKey.getHashHex(unsigned)
