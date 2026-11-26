@@ -17,7 +17,6 @@ import {
 	buildJournalTerminalCardProps,
 	type CategoricalFailureLabel,
 	categoricalLabel,
-	humanizeErrorKind,
 	journalCallTitle,
 	journalCardAmount,
 	journalCardDirection,
@@ -762,59 +761,6 @@ describe("sanitizeJournalSubtitle — URL-shape defense", () => {
 	// ALPHA first. The pin above verifies it passes through unchanged.
 })
 
-// User-facing labels for error.kind. Whitelist source-of-truth: verified
-// against `wallet-core/jobs/types.ts` documented values + `failedSubtitleFor`
-// switch in this file + reaper.ts emissions + execution/service.ts normalizeError
-// call sites. `stuck_queued` is critical — the reaper emits it on queued-record
-// time-out and pinning it here ensures the raw kind never leaks into the
-// "Reason" row on the journal-detail page.
-describe("humanizeErrorKind — JobError.kind → user-facing label", () => {
-	test("network → 'Network'", () => {
-		expect(humanizeErrorKind("network")).toBe("Network")
-	})
-	test("simulation → 'Simulation'", () => {
-		expect(humanizeErrorKind("simulation")).toBe("Simulation")
-	})
-	test("prover → 'Proof generation'", () => {
-		expect(humanizeErrorKind("prover")).toBe("Proof generation")
-	})
-	test("popup_bound → 'Popup closed'", () => {
-		expect(humanizeErrorKind("popup_bound")).toBe("Popup closed")
-	})
-	test("dapp_execute → 'App' (we never use 'dApp' in user-facing copy)", () => {
-		expect(humanizeErrorKind("dapp_execute")).toBe("App")
-	})
-	test("transfer → 'Transfer'", () => {
-		expect(humanizeErrorKind("transfer")).toBe("Transfer")
-	})
-	test("sw_restart_post_prove → 'Browser restart'", () => {
-		expect(humanizeErrorKind("sw_restart_post_prove")).toBe("Browser restart")
-	})
-	test("stale_on_resume → 'Stale on resume'", () => {
-		expect(humanizeErrorKind("stale_on_resume")).toBe("Stale on resume")
-	})
-	test("stuck_proving → 'Stuck proving'", () => {
-		expect(humanizeErrorKind("stuck_proving")).toBe("Stuck proving")
-	})
-	test("(REGRESSION PIN) stuck_queued → 'Stuck queued'", () => {
-		// reaper emits this on queued-record time-out (reaper.ts `classifyReapKind`,
-		// reaper.test.ts:102 + :136). Unmapped, the raw kind would reach
-		// the UI.
-		expect(humanizeErrorKind("stuck_queued")).toBe("Stuck queued")
-	})
-	test("user_rejected → 'User rejected'", () => {
-		expect(humanizeErrorKind("user_rejected")).toBe("User rejected")
-	})
-	test("unknown → 'Unknown'", () => {
-		expect(humanizeErrorKind("unknown")).toBe("Unknown")
-	})
-	test("any unrecognized kind → 'Error'", () => {
-		expect(humanizeErrorKind("metadata_fetch")).toBe("Error")
-		expect(humanizeErrorKind("totally_new_kind")).toBe("Error")
-		expect(humanizeErrorKind("")).toBe("Error")
-	})
-})
-
 /**
  * A dApp send refused before any window or proof, as the ingress files it: wire-shaped account, the
  * record failed from `queued` and retitled "Transaction".
@@ -981,19 +927,12 @@ describe("categoricalLabel — B2 failure category + context for journal/[id].vu
 })
 
 describe("KNOWN_JOB_ERROR_KINDS taxonomy coverage", () => {
-	// Every known kind must drive a non-empty, non-throwing UI label through both
-	// chokepoint helpers — adding a kind without a UX path surfaces here, not as a
+	// Every known kind must drive a non-empty, non-throwing UI label through the
+	// chokepoint helper — adding a kind without a UX path surfaces here, not as a
 	// blank card in production. Token-import kinds intentionally hit the generic
 	// default; the assertion is non-empty, not bespoke.
 	const failedWith = (kind: string): OperationRecord =>
 		recordWith({ progress: { stage: "failed" }, error: { kind, message: "x", normalizedRaw: null } })
-
-	test("every known kind humanizes to a non-empty string, never throws", () => {
-		for (const kind of KNOWN_JOB_ERROR_KINDS) {
-			expect(() => humanizeErrorKind(kind)).not.toThrow()
-			expect(humanizeErrorKind(kind).length).toBeGreaterThan(0)
-		}
-	})
 
 	test("every known kind drives a non-empty categoricalLabel, never throws", () => {
 		for (const kind of KNOWN_JOB_ERROR_KINDS) {

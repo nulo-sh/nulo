@@ -27,7 +27,7 @@ import {
  *
  * 1. a rendered call to `trimAddress`, `shortAddress` or `formatAddress`, or to anything reaching
  *    `trimAddress`: a script-module export outside `src/wallet/` named for an address or hash or
- *    calling one (`addressChangeText`, `maskAddress`), or a same-file `computed` or function that
+ *    calling one (`addressChangeText`), or a same-file `computed` or function that
  *    does; and a member such a same-file function sets from such a call, rendered by member
  *    (`addressText`, `contractTrim`). An export declared to return a boolean is a predicate, not a
  *    formatter, and reaches nothing;

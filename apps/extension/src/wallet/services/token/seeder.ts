@@ -218,11 +218,11 @@ export class TokenSeeder {
 	private disposed = false
 
 	/** `markers` is the sealed marker root, one row per profile at the profile's id. */
-	public constructor(deps: TokenSeederDeps, markers: SealedEntityStorage<unknown>, logger: ILogger, getVersion?: () => string) {
+	public constructor(deps: TokenSeederDeps, markers: SealedEntityStorage<unknown>, logger: ILogger, getVersion: () => string) {
 		this.deps = deps
 		this.markers = markers
 		this.logger = logger
-		this.getVersion = getVersion ?? (() => chrome.runtime.getManifest().version)
+		this.getVersion = getVersion
 	}
 
 	/** Coalesce concurrent triggers (unlock + network-ready can race). */

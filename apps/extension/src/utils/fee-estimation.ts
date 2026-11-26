@@ -24,9 +24,7 @@ export function formatGasBalance(raw: string | null | undefined, maxDecimals: nu
 }
 
 type AssetPricing = {
-	address: string
 	usdRate: number
-	symbol: string
 	decimals: number
 }
 
@@ -38,12 +36,7 @@ type AssetPricing = {
  */
 function feeJuicePricingFromUsd(usd: number | undefined): AssetPricing | undefined {
 	if (usd === undefined || !Number.isFinite(usd) || usd <= 0) return undefined
-	return {
-		address: "0x0000000000000000000000000000000000000000000000000000000000000005",
-		usdRate: usd,
-		symbol: "FJ",
-		decimals: FEE_JUICE_DECIMALS,
-	}
+	return { usdRate: usd, decimals: FEE_JUICE_DECIMALS }
 }
 
 /**

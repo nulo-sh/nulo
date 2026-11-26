@@ -291,7 +291,6 @@ declare global {
   const heroRoom: typeof import('../utils/hero-ruler').heroRoom
   const holdHeroFit: typeof import('../utils/hero-fit').holdHeroFit
   const hubValues: typeof import('../utils/settings-labels').hubValues
-  const humanizeErrorKind: typeof import('../utils/journal-state').humanizeErrorKind
   const humanizeMethodName: typeof import('../utils/tx-enrichment').humanizeMethodName
   const incomingInScope: typeof import('../utils/activity-rows').incomingInScope
   const incomingRow: typeof import('../utils/activity-rows').incomingRow
@@ -471,7 +470,6 @@ declare global {
   const readProtocolContract: typeof import('../utils/contract-level').readProtocolContract
   const readRestoreOutcome: typeof import('../utils/restore-outcome').readRestoreOutcome
   const readSendPicks: typeof import('../utils/fee-picks').readSendPicks
-  const readSendSlots: typeof import('../utils/fee-picks').readSendSlots
   const readonly: typeof import('vue').readonly
   const receivedDirection: typeof import('../utils/received-display').receivedDirection
   const receivedLabel: typeof import('../utils/received-display').receivedLabel
@@ -482,7 +480,6 @@ declare global {
   const releaseCore: typeof import('../utils/whats-new').releaseCore
   const releaseOwnWindow: typeof import('../utils/own-window').releaseOwnWindow
   const relinkRestoredTokenBalances: typeof import('../composables/full-backup-restore').relinkRestoredTokenBalances
-  const remapByMap: typeof import('../utils/full-backup-helpers').remapByMap
   const remapNetworkIdByChain: typeof import('../utils/full-backup-helpers').remapNetworkIdByChain
   const removeHandbackIfUnchanged: typeof import('../utils/panel-handback').removeHandbackIfUnchanged
   const replaceAccountClient: typeof import('../utils/core').replaceAccountClient
@@ -1330,7 +1327,6 @@ declare module 'vue' {
     readonly heroRoom: UnwrapRef<typeof import('../utils/hero-ruler')['heroRoom']>
     readonly holdHeroFit: UnwrapRef<typeof import('../utils/hero-fit')['holdHeroFit']>
     readonly hubValues: UnwrapRef<typeof import('../utils/settings-labels')['hubValues']>
-    readonly humanizeErrorKind: UnwrapRef<typeof import('../utils/journal-state')['humanizeErrorKind']>
     readonly humanizeMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['humanizeMethodName']>
     readonly incomingInScope: UnwrapRef<typeof import('../utils/activity-rows')['incomingInScope']>
     readonly incomingRow: UnwrapRef<typeof import('../utils/activity-rows')['incomingRow']>
@@ -1510,7 +1506,6 @@ declare module 'vue' {
     readonly readProtocolContract: UnwrapRef<typeof import('../utils/contract-level')['readProtocolContract']>
     readonly readRestoreOutcome: UnwrapRef<typeof import('../utils/restore-outcome')['readRestoreOutcome']>
     readonly readSendPicks: UnwrapRef<typeof import('../utils/fee-picks')['readSendPicks']>
-    readonly readSendSlots: UnwrapRef<typeof import('../utils/fee-picks')['readSendSlots']>
     readonly readonly: UnwrapRef<typeof import('vue')['readonly']>
     readonly receivedDirection: UnwrapRef<typeof import('../utils/received-display')['receivedDirection']>
     readonly receivedLabel: UnwrapRef<typeof import('../utils/received-display')['receivedLabel']>
@@ -1521,7 +1516,6 @@ declare module 'vue' {
     readonly releaseCore: UnwrapRef<typeof import('../utils/whats-new')['releaseCore']>
     readonly releaseOwnWindow: UnwrapRef<typeof import('../utils/own-window')['releaseOwnWindow']>
     readonly relinkRestoredTokenBalances: UnwrapRef<typeof import('../composables/full-backup-restore')['relinkRestoredTokenBalances']>
-    readonly remapByMap: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapByMap']>
     readonly remapNetworkIdByChain: UnwrapRef<typeof import('../utils/full-backup-helpers')['remapNetworkIdByChain']>
     readonly removeHandbackIfUnchanged: UnwrapRef<typeof import('../utils/panel-handback')['removeHandbackIfUnchanged']>
     readonly replaceAccountClient: UnwrapRef<typeof import('../utils/core')['replaceAccountClient']>

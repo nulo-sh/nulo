@@ -666,14 +666,14 @@ export async function refreshRestoredTokensStage(fence: RunFence, deadlineAt: nu
 	}
 }
 
-/** One service's restore surface in the six-client loop. */
+/** One service's restore surface in the slice-client loop. */
 export interface SliceRestoreClient {
 	restore: (rows: unknown[], profileId: string) => Promise<unknown>
 	disconnect: () => void
 }
 
 /**
- * The six-service loop. Whole-loop try/finally: every client is constructed up-front, so a
+ * The slice-client loop. Whole-loop try/finally: every client is constructed up-front, so a
  * mid-loop throw (or a non-array slice that skips a client's body) must still disconnect
  * ALL of them — a per-iteration finally would only clean the client that threw, leaking
  * the ones after it (P7). The created-profile id rides along on every restore: authwits

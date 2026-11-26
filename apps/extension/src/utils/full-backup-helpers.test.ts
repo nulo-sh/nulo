@@ -19,7 +19,6 @@ import {
 	openSelection,
 	parseEncryptedBackup,
 	readBackupFile,
-	remapByMap,
 	sealFullBackupText,
 	resolveRestoredActiveNetworkIdByChain,
 	remapNetworkIdByChain,
@@ -281,13 +280,13 @@ describe("openSelection", () => {
 
 describe("collectRestoreErrors", () => {
 	it("returns null for empty/non-array input", () => {
-		expect(collectRestoreErrors("network", null as unknown as unknown[])).toBeNull()
-		expect(collectRestoreErrors("network", [])).toBeNull()
+		expect(collectRestoreErrors("token", null as unknown as unknown[])).toBeNull()
+		expect(collectRestoreErrors("token", [])).toBeNull()
 		expect(collectRestoreErrors("", [{ restoreError: "x" }])).toBeNull()
 	})
 
 	it("filters generic services to only failed entries", () => {
-		const result = collectRestoreErrors("network", [{ id: "a", restoreError: "boom" }, { id: "b" }, { id: "c", restoreError: "kaput" }])
+		const result = collectRestoreErrors("token", [{ id: "a", restoreError: "boom" }, { id: "b" }, { id: "c", restoreError: "kaput" }])
 		// `row` is the SOURCE position: "c" is index 2 of the input, not index 1 of the errors.
 		expect(result).toEqual([
 			{ row: 0, id: "a", restoreError: "boom" },
@@ -296,7 +295,7 @@ describe("collectRestoreErrors", () => {
 	})
 
 	it("returns null when no generic entries failed", () => {
-		const result = collectRestoreErrors("network", [{ id: "a" }, { id: "b" }])
+		const result = collectRestoreErrors("token", [{ id: "a" }, { id: "b" }])
 		expect(result).toBeNull()
 	})
 
@@ -338,15 +337,6 @@ describe("collectRestoreErrors", () => {
 
 			expect(JSON.stringify(result)).not.toContain("SEALED-BLOB")
 			expect(result).toEqual([{ row: 0, profileId: "p1", chainId: 1, restoreError: "boom" }])
-		})
-
-		it("drops an endpoint URL, which routinely carries a provider API key", () => {
-			const result = collectRestoreErrors("network", [
-				{ id: "n1", endpoints: [{ id: "e1", rpcUrl: "https://mainnet.example.com/v2/SECRET-KEY" }], restoreError: "boom" },
-			])
-
-			expect(JSON.stringify(result)).not.toContain("SECRET-KEY")
-			expect(result).toEqual([{ row: 0, id: "n1", restoreError: "boom" }])
 		})
 
 		it("drops contact PII", () => {
@@ -397,7 +387,7 @@ describe("collectRestoreErrors", () => {
 		it("numbers rows by SOURCE position, not by position in the error array", () => {
 			// Numbering after the filter would just re-derive the error array's own index —
 			// information the array already carries, and useless for locating the failed row.
-			const result = collectRestoreErrors("network", [
+			const result = collectRestoreErrors("token", [
 				{ id: "a" },
 				{ id: "b" },
 				{ id: "c", restoreError: "boom" },
@@ -515,7 +505,7 @@ describe("collectRestoreErrors", () => {
 		})
 
 		it("scrubs and bounds restoreError — a fetch failure interpolates the whole endpoint", () => {
-			const result = collectRestoreErrors("network", [
+			const result = collectRestoreErrors("token", [
 				{ id: "n1", restoreError: "fetch failed: https://rpc.example.com/v2/SECRET-KEY?apiKey=abc" },
 			]) as Array<Record<string, unknown>>
 
@@ -524,7 +514,7 @@ describe("collectRestoreErrors", () => {
 		})
 
 		it("caps a very long restoreError", () => {
-			const result = collectRestoreErrors("network", [{ id: "n1", restoreError: "x".repeat(9000) }]) as Array<Record<string, unknown>>
+			const result = collectRestoreErrors("token", [{ id: "n1", restoreError: "x".repeat(9000) }]) as Array<Record<string, unknown>>
 
 			expect((result[0].restoreError as string).length).toBeLessThanOrEqual(200)
 		})
@@ -539,7 +529,7 @@ describe("collectRestoreErrors", () => {
 	})
 })
 
-describe("normalizeAllIds + remapByMap", () => {
+describe("normalizeAllIds", () => {
 	it("rewrites the given key in every array entry that has it", () => {
 		const data: Record<string, unknown> = {
 			account: [
@@ -566,52 +556,6 @@ describe("normalizeAllIds + remapByMap", () => {
 		}
 		normalizeAllIds(data, "profileId", "new")
 		expect(data.account).toEqual([{ id: "a1" }, { profileId: "new", id: "a2" }])
-	})
-
-	it("SCOPED form (oldId given): rewrites only rows matching oldId — no cross-graft across networks (P2)", () => {
-		// Two networks N1→M1, N2→M2. Each remap must touch ONLY its own rows.
-		const data: Record<string, unknown> = {
-			"account-state": [
-				{ networkId: "N1", x: 1 },
-				{ networkId: "N2", x: 2 },
-			],
-			fpc: [{ networkId: "N2", y: 1 }],
-		}
-		remapByMap(
-			data,
-			"networkId",
-			new Map([
-				["N1", "M1"],
-				["N2", "M2"],
-			]),
-		)
-		expect(data["account-state"]).toEqual([
-			{ networkId: "M1", x: 1 },
-			{ networkId: "M2", x: 2 },
-		])
-		expect(data.fpc).toEqual([{ networkId: "M2", y: 1 }])
-	})
-
-	it("SCOPED form: an unrelated networkId is left alone (no over-write)", () => {
-		const data: Record<string, unknown> = { fpc: [{ networkId: "N1" }, { networkId: "N9" }] }
-		remapByMap(data, "networkId", new Map([["N1", "M1"]]))
-		expect(data.fpc).toEqual([{ networkId: "M1" }, { networkId: "N9" }])
-	})
-
-	it("(E) single-pass: a new id equal to a LATER source id does NOT cascade-rewrite", () => {
-		// N1→R, and a second network's OLD id is also "R" (R→S). A sequential per-id
-		// remap would rewrite N1's already-remapped "R" rows again on the R→S pass →
-		// both alias to S. The single-pass map looks up each row's ORIGINAL value once.
-		const data: Record<string, unknown> = { fpc: [{ networkId: "N1" }, { networkId: "R" }] }
-		remapByMap(
-			data,
-			"networkId",
-			new Map([
-				["N1", "R"],
-				["R", "S"],
-			]),
-		)
-		expect(data.fpc).toEqual([{ networkId: "R" }, { networkId: "S" }])
 	})
 
 	it("ALL-ROWS form (oldId omitted): still normalizes a hostile row whose profileId differs (P2 guard)", () => {
