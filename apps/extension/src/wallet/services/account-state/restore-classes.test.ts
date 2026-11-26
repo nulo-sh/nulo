@@ -1,6 +1,7 @@
 /**
  * The hashing and the instance schema are faked at the stdlib boundary (a fake artifact names the
- * class id it hashes to); the decoder, the memo and the class-id comparison run for real.
+ * class id it hashes to), and the artifact schema refuses a value already parsed; the decoder, the
+ * memo and the class-id comparison run for real.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
@@ -15,9 +16,19 @@ const stdlib = vi.hoisted(() => {
 			originalContractClassId: classId(x.originalContractClassId),
 		}
 	}
+	/** As the real schema does, a value already parsed (a `Buffer`, an `Fr`) is refused. */
+	const isWire = (v: unknown): boolean =>
+		v === null ||
+		typeof v !== "object" ||
+		((Array.isArray(v) || Object.getPrototypeOf(v) === Object.prototype) && Object.values(v).every(isWire))
+	const parseArtifact = (x: unknown) => {
+		if (!isWire(x)) throw new Error("expected wire form")
+		return x
+	}
 	return {
 		classId,
 		parseInstance,
+		parseArtifact,
 		hash: vi.fn(async (artifact: { hashesTo?: string }) => {
 			if (typeof artifact?.hashesTo !== "string") throw new Error("not an artifact")
 			return { id: classId(artifact.hashesTo) }
@@ -41,7 +52,7 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => ({
 }))
 vi.mock("@aztec-labs/stdlib/abi", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
-	ContractArtifactSchema: { parseAsync: async (x: unknown) => x },
+	ContractArtifactSchema: { parseAsync: async (x: unknown) => stdlib.parseArtifact(x) },
 }))
 
 import { ServiceCollection } from "@/wallet/base"
@@ -209,7 +220,7 @@ describe("AccountStateService.restore, contract code", () => {
 
 	test("an entry with no code takes the wallet's own copy, looked up once per class; with none it fails alone", async () => {
 		pxe.getContractArtifact.mockImplementation(async (_info: unknown, id: { toString(): string }) =>
-			id.toString() === CLASS_A ? artifactOf(CLASS_A, "own A") : undefined,
+			id.toString() === CLASS_A ? { ...artifactOf(CLASS_A, "own A"), bytecode: Buffer.from([1, 2, 3]) } : undefined,
 		)
 		const result = await service.restore(
 			{

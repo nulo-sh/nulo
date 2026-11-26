@@ -569,7 +569,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 
 	/** The wallet's own copy of the class of an entry the file left without code: the compiled-in
 	 *  catalog, else a copy the PXE store already holds, each class-id checked by the lookup. Looked up
-	 *  once per class per network, so its instances share one object. */
+	 *  once per class per network, so its instances share one object, and written in the wire form a
+	 *  file's artifacts have: the registration's class-id check parses its artifact, and a parsed
+	 *  artifact does not parse again. */
 	private async ownClassArtifact(
 		target: RegistrationTarget,
 		instance: unknown,
@@ -580,7 +582,9 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		const classId = parsed.data.originalContractClassId
 		let lookup = reg.resolved.get(classId.toString())
 		if (!lookup) {
-			lookup = this.pxeService.getContractArtifact(target.info(), classId)
+			lookup = this.pxeService
+				.getContractArtifact(target.info(), classId)
+				.then((artifact) => artifact && (JSON.parse(jsonStringify(artifact)) as ContractArtifact))
 			reg.resolved.set(classId.toString(), lookup)
 		}
 		const artifact = await lookup

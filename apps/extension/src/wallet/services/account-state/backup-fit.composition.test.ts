@@ -23,9 +23,19 @@ const stdlib = vi.hoisted(() => {
 			originalContractClassId: classId(x.originalContractClassId),
 		}
 	}
+	/** As the real schema does, a value already parsed (a `Buffer`, an `Fr`) is refused. */
+	const isWire = (v: unknown): boolean =>
+		v === null ||
+		typeof v !== "object" ||
+		((Array.isArray(v) || Object.getPrototypeOf(v) === Object.prototype) && Object.values(v).every(isWire))
+	const parseArtifact = (x: unknown) => {
+		if (!isWire(x)) throw new Error("expected wire form")
+		return x
+	}
 	return {
 		classId,
 		parseInstance,
+		parseArtifact,
 		hash: async (artifact: { hashesTo?: string }) => {
 			if (typeof artifact?.hashesTo !== "string") throw new Error("not an artifact")
 			return { id: classId(artifact.hashesTo) }
@@ -49,7 +59,7 @@ vi.mock("@aztec-labs/stdlib/contract", async (importOriginal) => ({
 }))
 vi.mock("@aztec-labs/stdlib/abi", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
-	ContractArtifactSchema: { parseAsync: async (x: unknown) => x },
+	ContractArtifactSchema: { parseAsync: async (x: unknown) => stdlib.parseArtifact(x) },
 }))
 
 import { runImportChainSync } from "@/composables/importChainSync"
@@ -160,7 +170,7 @@ async function freshService() {
 			registered.push({ address: c.instance.address, ...(c.artifact ? { artifact: c.artifact.name } : {}) })
 		},
 		getContractArtifact: async (_info: unknown, classId: { toString(): string }) =>
-			classId.toString() === WALLET ? { ...artifactOf(WALLET, "Token (catalog)", 10) } : undefined,
+			classId.toString() === WALLET ? { ...artifactOf(WALLET, "Token (catalog)", 10), bytecode: Buffer.from([1, 2, 3]) } : undefined,
 	}
 	return { service, registered, senders }
 }
