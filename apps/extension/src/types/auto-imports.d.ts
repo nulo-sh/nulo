@@ -78,6 +78,7 @@ declare global {
   const MAX_CONTACT_IMPORT_ROWS: typeof import('../utils/contacts-export-format').MAX_CONTACT_IMPORT_ROWS
   const MAX_DECIMALS: typeof import('../utils/token-amount').MAX_DECIMALS
   const MAX_PASSWORD_LENGTH: typeof import('../utils/password').MAX_PASSWORD_LENGTH
+  const MAX_SEALABLE_TEXT_BYTES: typeof import('../utils/full-backup-helpers').MAX_SEALABLE_TEXT_BYTES
   const MINT_SIGNATURES: typeof import('../utils/token-transfer-vocabulary').MINT_SIGNATURES
   const MIN_NEW_PASSWORD_LENGTH: typeof import('../utils/password').MIN_NEW_PASSWORD_LENGTH
   const MORE_FOOTPRINT_PX: typeof import('../composables/useMoreBelow').MORE_FOOTPRINT_PX
@@ -110,6 +111,7 @@ declare global {
   const SEND_FEE_PICKS_ROOT: typeof import('../utils/profile-ui-keys').SEND_FEE_PICKS_ROOT
   const SETTINGS_ROWS: typeof import('../utils/settings-search').SETTINGS_ROWS
   const SETTING_UPDATE_FAILED: typeof import('../composables/useSettingUpdate').SETTING_UPDATE_FAILED
+  const SLICE_PRETTY_INDENT: typeof import('../utils/full-backup-helpers').SLICE_PRETTY_INDENT
   const SNACK_GAP: typeof import('../composables/snackInset').SNACK_GAP
   const SNAPSHOT_MAX_AGE_MS: typeof import('../utils/send-fiat-gate').SNAPSHOT_MAX_AGE_MS
   const STALE_NETWORK_KEY: typeof import('../composables/useStaleNetwork').STALE_NETWORK_KEY
@@ -461,6 +463,7 @@ declare global {
   const readAmountText: typeof import('../utils/amount').readAmountText
   const readAppPicks: typeof import('../utils/fee-picks').readAppPicks
   const readBackupFile: typeof import('../utils/full-backup-helpers').readBackupFile
+  const readBackupFileRest: typeof import('../utils/full-backup-helpers').readBackupFileRest
   const readContract: typeof import('../utils/contract-level').readContract
   const readGetStarted: typeof import('../utils/get-started').readGetStarted
   const readHandback: typeof import('../utils/panel-handback').readHandback
@@ -691,6 +694,7 @@ declare global {
   const useTokenFlags: typeof import('../composables/usePrices').useTokenFlags
   const useTokenImport: typeof import('../composables/useTokenImport').useTokenImport
   const useWalletTxEstimates: typeof import('../composables/useWalletTxEstimates').useWalletTxEstimates
+  const utf8Length: typeof import('../utils/full-backup-helpers').utf8Length
   const vSnackAside: typeof import('../composables/snackInset').vSnackAside
   const vSnackFooter: typeof import('../composables/snackInset').vSnackFooter
   const vSnackSheet: typeof import('../composables/snackInset').vSnackSheet
@@ -939,7 +943,7 @@ declare global {
   export type { FullBackupCtaSource } from '../utils/full-backup-ctas'
   import('../utils/full-backup-ctas')
   // @ts-ignore
-  export type { AccountFileNotBackupError, AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, AssembledBackup } from '../utils/full-backup-helpers'
+  export type { AccountFileNotBackupError, AssemblyAbortedError, BackupFileType, BackupSelection, ProcessBackupResult, BackupSource, BackupFileRest, AssembledBackup } from '../utils/full-backup-helpers'
   import('../utils/full-backup-helpers')
   // @ts-ignore
   export type { GetStartedFlag, MarkableGetStartedFlag, GetStartedFlags, Holdings, GetStartedItem, GetStartedInput, GetStartedStep, GetStartedView } from '../utils/get-started'
@@ -1114,6 +1118,7 @@ declare module 'vue' {
     readonly MAX_CONTACT_IMPORT_ROWS: UnwrapRef<typeof import('../utils/contacts-export-format')['MAX_CONTACT_IMPORT_ROWS']>
     readonly MAX_DECIMALS: UnwrapRef<typeof import('../utils/token-amount')['MAX_DECIMALS']>
     readonly MAX_PASSWORD_LENGTH: UnwrapRef<typeof import('../utils/password')['MAX_PASSWORD_LENGTH']>
+    readonly MAX_SEALABLE_TEXT_BYTES: UnwrapRef<typeof import('../utils/full-backup-helpers')['MAX_SEALABLE_TEXT_BYTES']>
     readonly MINT_SIGNATURES: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['MINT_SIGNATURES']>
     readonly MIN_NEW_PASSWORD_LENGTH: UnwrapRef<typeof import('../utils/password')['MIN_NEW_PASSWORD_LENGTH']>
     readonly MORE_FOOTPRINT_PX: UnwrapRef<typeof import('../composables/useMoreBelow')['MORE_FOOTPRINT_PX']>
@@ -1146,6 +1151,7 @@ declare module 'vue' {
     readonly SEND_FEE_PICKS_ROOT: UnwrapRef<typeof import('../utils/profile-ui-keys')['SEND_FEE_PICKS_ROOT']>
     readonly SETTINGS_ROWS: UnwrapRef<typeof import('../utils/settings-search')['SETTINGS_ROWS']>
     readonly SETTING_UPDATE_FAILED: UnwrapRef<typeof import('../composables/useSettingUpdate')['SETTING_UPDATE_FAILED']>
+    readonly SLICE_PRETTY_INDENT: UnwrapRef<typeof import('../utils/full-backup-helpers')['SLICE_PRETTY_INDENT']>
     readonly SNACK_GAP: UnwrapRef<typeof import('../composables/snackInset')['SNACK_GAP']>
     readonly SNAPSHOT_MAX_AGE_MS: UnwrapRef<typeof import('../utils/send-fiat-gate')['SNAPSHOT_MAX_AGE_MS']>
     readonly STALE_NETWORK_KEY: UnwrapRef<typeof import('../composables/useStaleNetwork')['STALE_NETWORK_KEY']>
@@ -1497,6 +1503,7 @@ declare module 'vue' {
     readonly readAmountText: UnwrapRef<typeof import('../utils/amount')['readAmountText']>
     readonly readAppPicks: UnwrapRef<typeof import('../utils/fee-picks')['readAppPicks']>
     readonly readBackupFile: UnwrapRef<typeof import('../utils/full-backup-helpers')['readBackupFile']>
+    readonly readBackupFileRest: UnwrapRef<typeof import('../utils/full-backup-helpers')['readBackupFileRest']>
     readonly readContract: UnwrapRef<typeof import('../utils/contract-level')['readContract']>
     readonly readGetStarted: UnwrapRef<typeof import('../utils/get-started')['readGetStarted']>
     readonly readHandback: UnwrapRef<typeof import('../utils/panel-handback')['readHandback']>
@@ -1727,6 +1734,7 @@ declare module 'vue' {
     readonly useTokenFlags: UnwrapRef<typeof import('../composables/usePrices')['useTokenFlags']>
     readonly useTokenImport: UnwrapRef<typeof import('../composables/useTokenImport')['useTokenImport']>
     readonly useWalletTxEstimates: UnwrapRef<typeof import('../composables/useWalletTxEstimates')['useWalletTxEstimates']>
+    readonly utf8Length: UnwrapRef<typeof import('../utils/full-backup-helpers')['utf8Length']>
     readonly vSnackAside: UnwrapRef<typeof import('../composables/snackInset')['vSnackAside']>
     readonly vSnackFooter: UnwrapRef<typeof import('../composables/snackInset')['vSnackFooter']>
     readonly vSnackSheet: UnwrapRef<typeof import('../composables/snackInset')['vSnackSheet']>

@@ -21,7 +21,7 @@ import { type UseFullBackupExportOptions, useFullBackupExport } from "./useFullB
 
 const h = vi.hoisted(() => {
 	const state = {
-		built: [] as Array<{ kind: string; disconnect: ReturnType<typeof vi.fn> }>,
+		built: [] as Array<{ kind: string; disconnect: ReturnType<typeof vi.fn>; backup: ReturnType<typeof vi.fn> }>,
 		contactSlice: undefined as (() => Promise<unknown>) | undefined,
 		exportFullBackupKeys: vi.fn<(fence: unknown, password?: string, credentialData?: unknown) => Promise<unknown>>(),
 	}
@@ -31,7 +31,7 @@ const h = vi.hoisted(() => {
 			disconnect: vi.fn(),
 			...extra,
 		}
-		state.built.push({ kind, disconnect: client.disconnect })
+		state.built.push({ kind, disconnect: client.disconnect, backup: client.backup })
 		return client
 	}
 	return { state, make }
@@ -589,6 +589,19 @@ describe("useFullBackupExport — a current run", () => {
 			expect.objectContaining({ data: "SEALED-UNDER-PW", filename: expect.stringMatching(/^nulo-backup-\d{4}-\d{2}-\d{2}\.txt$/) }),
 		)
 		expect(m.seal.mock.invocationCallOrder[0]).toBeLessThan(m.downloadFile.mock.invocationCallOrder[0])
+	})
+
+	it("passes the account-state client what the rest of the file takes, and the other clients nothing", async () => {
+		const { api } = setup("password")
+		await api.handleBackup()
+		for (const { kind, backup } of h.state.built) {
+			if (kind === "account-state") {
+				expect(backup).toHaveBeenCalledExactlyOnceWith({ compactBytes: expect.any(Number), prettyBytes: expect.any(Number) })
+				const [rest] = backup.mock.calls[0] as [{ compactBytes: number; prettyBytes: number }]
+				expect(rest.compactBytes).toBeGreaterThan(0)
+				expect(rest.prettyBytes).toBeGreaterThan(rest.compactBytes)
+			} else expect(backup, kind).not.toHaveBeenCalledWith(expect.anything())
+		}
 	})
 
 	// The file holds the recovery phrase, so a passkey profile's leaves only under a password typed

@@ -29,7 +29,7 @@ import { useToast } from "@/composables/toast.js"
 import { useAppStore } from "@/stores/app.store"
 
 type BackupStatus = "" | "progress" | "finished" | "encrypting" | "encrypted" | "downloaded"
-type BackupClient = { backup(): Promise<unknown>; disconnect(): void }
+type BackupClient = { backup(...args: unknown[]): Promise<unknown>; disconnect(): void }
 type NamedClient = { name: string; client: BackupClient }
 type HeldSlices = Record<string, unknown>
 type AddedNetworkImports = { accounts: number; networks: number }
@@ -280,7 +280,7 @@ function reportAssemblyFailure(ctx: ExportCtx, isCurrent: () => boolean, err: un
 function backupSources(runClients: NamedClient[], heldSlices: HeldSlices = {}) {
 	return runClients.map(({ name, client }) => ({
 		name,
-		backup: name in heldSlices ? async () => heldSlices[name] : () => client.backup(),
+		backup: name in heldSlices ? async () => heldSlices[name] : (...args: unknown[]) => client.backup(...args),
 	}))
 }
 

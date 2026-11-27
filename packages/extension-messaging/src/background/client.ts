@@ -239,8 +239,8 @@ export abstract class ServiceClient<
 
 	// ── Convenience RPCs ────────────────────────────────────────────────
 
-	public async backup(): Promise<unknown> {
-		return this.request("backup" as keyof TRequests, ...([] as unknown as Parameters<TRequests[keyof TRequests]>))
+	public async backup(..._args: unknown[]): Promise<unknown> {
+		return this.request("backup" as keyof TRequests, ...(_args as unknown as Parameters<TRequests[keyof TRequests]>))
 	}
 
 	public async restore(..._args: unknown[]): Promise<unknown> {

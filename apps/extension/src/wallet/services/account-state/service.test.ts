@@ -21,6 +21,7 @@ import { NetworkService } from "@/wallet/services/network/service"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { MAX_SEALABLE_TEXT_BYTES } from "@/utils/full-backup-helpers"
 import { ACCOUNT_STATE_CAPS, normalizeAccountStateSlice } from "./normalize"
 import { AccountStateService, SENDER_PROBE_TIMEOUT_MS } from "./service"
 import { FakeFenceProfileService, LIVE_FENCE } from "./fence.fixtures"
@@ -258,6 +259,9 @@ describe("AccountStateService.backup over the network service's own status check
 	})
 })
 
+/** A network id as the allocator writes it, so the import's remap cannot lengthen the part. */
+const SEEDED_ID = "0a1b2c3d"
+
 /** A backup whose slice serializes to exactly `units` code units: one Active network, one padded sender. */
 async function backupSizedTo(units: number) {
 	const networkService = new FakeNetworkService()
@@ -267,12 +271,12 @@ async function backupSizedTo(units: number) {
 	const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
 	services.add(accountStateService)
 	await services.start()
-	networkService.networks = [{ ...makeNetwork("net-a", 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] } as Network]
-	networkService.statuses.set("net-a", NodeStatus.Active)
+	networkService.networks = [{ ...makeNetwork(SEEDED_ID, 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] } as Network]
+	networkService.statuses.set(SEEDED_ID, NodeStatus.Active)
 	const frame = JSON.stringify({
 		format: 2,
 		classes: [],
-		items: [{ networkId: "net-a", chainId: 7, senders: [{ address: "" }], contracts: [] }],
+		items: [{ networkId: SEEDED_ID, chainId: 7, senders: [{ address: "" }], contracts: [] }],
 	}).length
 	vi.spyOn(accountStateService, "getSenders").mockResolvedValue(["a".repeat(units - frame)])
 	vi.spyOn(accountStateService, "getContracts").mockResolvedValue([])
@@ -290,7 +294,7 @@ describe("AccountStateService.backup against the import's slice cap", () => {
 		expect(warn).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^backup: account-state slice is ${CAP} code units of ${CAP} `)))
 		const imported = normalizeAccountStateSlice(JSON.parse(JSON.stringify(items)))
 		// The padding is no valid address, so the import drops that one sender; the slice itself is kept.
-		expect(imported.items.map((i) => i.networkId)).toEqual(["net-a"])
+		expect(imported.items.map((i) => i.networkId)).toEqual([SEEDED_ID])
 		expect(imported.violations.map((v) => v.restoreError)).toEqual(["1 malformed sender/contract entries dropped"])
 	})
 
@@ -304,6 +308,48 @@ describe("AccountStateService.backup against the import's slice cap", () => {
 				{ networkId: "(slice)", senders: [], contracts: [], restoreError: `account-state slice too large (${CAP + 1} code units)` },
 			],
 		})
+	})
+})
+
+describe("AccountStateService.backup, contract code left out", () => {
+	test("logs one line with the count, the sizes and each class's name, and no name that is not a short identifier", async () => {
+		const networkService = new FakeNetworkService()
+		const services = new ServiceCollection()
+		services.add(networkService)
+		services.add(new FakeFenceProfileService())
+		const service = new AccountStateService(new LoggerStore(new ConfigStore()), undefined, async () => new Set<string>())
+		services.add(service)
+		await services.start()
+		networkService.networks = [
+			{ ...makeNetwork(SEEDED_ID, 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] } as Network,
+		]
+		networkService.statuses.set(SEEDED_ID, NodeStatus.Active)
+		const names = ["BigApp", `0x${"ab".repeat(32)}`, "two\nlines"]
+		const classIds = names.map((_, i) => `0x${(i + 1).toString(16).padStart(64, "0")}`)
+		const addresses = names.map((_, i) => `0x${(i + 0x200).toString(16).padStart(64, "0")}`)
+		const field = (hex: string) => ({ toString: () => hex, toJSON: () => hex })
+		vi.spyOn(service, "getSenders").mockResolvedValue([])
+		vi.spyOn(service, "getContracts").mockResolvedValue(addresses)
+		;(service as unknown as { pxeService: unknown }).pxeService = {
+			getContractInstance: async (_info: unknown, a: { toString(): string }) => ({
+				address: a.toString(),
+				currentContractClassId: field(classIds[addresses.indexOf(a.toString())]),
+			}),
+			getContractArtifact: async (_info: unknown, id: { toString(): string }) => {
+				const i = classIds.indexOf(id.toString())
+				return { name: names[i], functions: [], pad: "p".repeat(3000 - 1000 * i) }
+			},
+		}
+		const warn = vi.spyOn(service as unknown as { logWarn: (...a: unknown[]) => void }, "logWarn")
+
+		const part = await service.backup({ compactBytes: MAX_SEALABLE_TEXT_BYTES, prettyBytes: 0 })
+		expect((part as { classes: unknown[] }).classes).toEqual([])
+		expect(warn).toHaveBeenCalledTimes(1)
+		const line = warn.mock.calls[0][0] as string
+		expect(line).toMatch(
+			/^backup: contract code of 3 class\(es\), \d+ code units, left out of the account-state part \(\d+ of 41943040, 3 contract\(s\)\): BigApp=\d+, \(unnamed\)=\d+, \(unnamed\)=\d+$/,
+		)
+		expect(line).not.toContain("0x")
 	})
 })
 

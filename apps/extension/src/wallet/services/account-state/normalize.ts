@@ -17,11 +17,22 @@ import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { isHex32 } from "@nulo/wallet-core/field"
 import { isObjectLike, isRecord } from "@nulo/wallet-core/guards"
+import { jsonStringify } from "@nulo/wallet-core/utils"
+import {
+	type BackupFileRest,
+	MAX_BACKUP_FILE_BYTES,
+	MAX_SEALABLE_TEXT_BYTES,
+	SLICE_PRETTY_INDENT,
+	utf8Length,
+} from "@/utils/full-backup-helpers"
+import { RANDOM_ID_LENGTH } from "@/wallet/services/id-allocators"
 import { isPxeProvidedContract } from "./pxe-provided"
 import {
 	type AccountStateRestoreRecord,
+	type AccountStateSlice,
 	type AccountStateSliceV2,
 	type BackupContract,
+	type BackupContractClass,
 	type BackupSender,
 	isAccountStateV2,
 	type RestoredContract,
@@ -118,6 +129,12 @@ function instanceClassId(instance: unknown): string | undefined {
 	return typeof id === "string" && isHex32(id) && id === id.toLowerCase() ? id : undefined
 }
 
+/** The part's size as the import's cap reads it: code units of its JSON, taken of the part as the file
+ *  carries it (an export's wire form, or the part an import parsed). */
+export function accountStatePartCodeUnits(part: unknown): number {
+	return JSON.stringify(part).length
+}
+
 export function truncateErrorMessage(message: string): string {
 	return message.length <= ACCOUNT_STATE_CAPS.maxErrorMessageLength
 		? message
@@ -137,7 +154,7 @@ export function normalizeAccountStateSlice(raw: unknown): NormalizedAccountState
 
 	let sliceCodeUnits: number
 	try {
-		sliceCodeUnits = JSON.stringify(raw).length
+		sliceCodeUnits = accountStatePartCodeUnits(raw)
 	} catch {
 		return { items: [], violations: [violation("(slice)", "malformed account-state slice (not serializable)")] }
 	}
@@ -216,6 +233,155 @@ export function encodeAccountState<T extends EncodableItem>(items: readonly T[])
 			contracts: contracts.map(({ address, instance }) => ({ address, instance })),
 		})),
 	}
+}
+
+/** A size in the three measures a written part must pass: the import's code units, and UTF-8 bytes
+ *  of its compact and its pretty text where the file holds it. */
+type PartSize = { codeUnits: number; bytes: number; pretty: number }
+
+/** One class-table entry: its wire form, kept to build the measured part, and what it adds. */
+type SizedClass = { index: number; classId: string; name: unknown; wire: unknown; size: PartSize }
+
+/** A class entry is printed two levels into the part, and a non-empty pretty table adds its own
+ *  line breaks and the indent of its closing bracket. */
+const ENTRY_PRETTY_INDENT = SLICE_PRETTY_INDENT + 4
+const TABLE_PRETTY_BYTES = SLICE_PRETTY_INDENT + 2
+
+/** What the export left out, in the order it went, and the part's size as the import measures it. */
+export interface FittedAccountState {
+	part: AccountStateSlice
+	codeUnits: number
+	left: { name: unknown; codeUnits: number }[]
+}
+
+function lineBreaks(text: string): number {
+	let count = 0
+	for (let at = text.indexOf("\n"); at !== -1; at = text.indexOf("\n", at + 1)) count++
+	return count
+}
+
+/** The size of a wire value printed at the part's place in the file. */
+function wireSize(compact: string, wire: unknown): PartSize {
+	const pretty = JSON.stringify(wire, null, 2)
+	return {
+		codeUnits: compact.length,
+		bytes: utf8Length(compact),
+		pretty: utf8Length(pretty) + SLICE_PRETTY_INDENT * lineBreaks(pretty),
+	}
+}
+
+/** What a written part may take: the import's cap less what its remap of each item's `networkId` to
+ *  a seeded network's id can add, and what the `rest` of the file leaves under both file checks. */
+function partBudget(items: unknown, rest: BackupFileRest): PartSize {
+	const seededId = RANDOM_ID_LENGTH + 2
+	const remapGrowth = (Array.isArray(items) ? items : []).reduce(
+		(n: number, item) => n + Math.max(0, seededId - (JSON.stringify((item as { networkId?: unknown })?.networkId)?.length ?? 0)),
+		0,
+	)
+	return {
+		codeUnits: ACCOUNT_STATE_CAPS.maxSliceCodeUnits - remapGrowth,
+		bytes: MAX_SEALABLE_TEXT_BYTES - rest.compactBytes,
+		pretty: MAX_BACKUP_FILE_BYTES - rest.prettyBytes,
+	}
+}
+
+const fits = (size: PartSize, budget: PartSize) =>
+	size.codeUnits <= budget.codeUnits && size.bytes <= budget.bytes && size.pretty <= budget.pretty
+
+function sizeClass(entry: BackupContractClass, index: number): SizedClass {
+	const compact = jsonStringify(entry)
+	const wire = JSON.parse(compact) as unknown
+	const pretty = JSON.stringify(wire, null, 2)
+	return {
+		index,
+		classId: entry.classId,
+		name: entry.artifact?.name,
+		wire,
+		size: {
+			codeUnits: compact.length + 1,
+			bytes: utf8Length(compact) + 1,
+			pretty: utf8Length(pretty) + ENTRY_PRETTY_INDENT * (lineBreaks(pretty) + 1) + 2,
+		},
+	}
+}
+
+/** The part with `count` classes whose sizes sum to `kept`: each entry's size counts one comma, which
+ *  the last one does not write, and a non-empty table's pretty brackets take their own lines. */
+function withClasses(base: PartSize, kept: PartSize, count: number): PartSize {
+	if (count === 0) return base
+	return {
+		codeUnits: base.codeUnits + kept.codeUnits - 1,
+		bytes: base.bytes + kept.bytes - 1,
+		pretty: base.pretty + kept.pretty + TABLE_PRETTY_BYTES,
+	}
+}
+
+/** App classes before the wallet's own, then largest in the file first, then by class id. */
+function removalOrder(classes: readonly SizedClass[], own: ReadonlySet<string>): SizedClass[] {
+	return [...classes].sort(
+		(a, b) =>
+			Number(own.has(a.classId)) - Number(own.has(b.classId)) ||
+			b.size.pretty - a.size.pretty ||
+			(a.classId < b.classId ? -1 : a.classId > b.classId ? 1 : 0),
+	)
+}
+
+/**
+ * The part as the export writes it: every item, entry and sender, and the class table less whole
+ * entries until the part fits the import's cap and its file passes the export's checks on the sealed
+ * and the pretty text, given the `rest` of the file. A part that already fits comes back as the same
+ * object. Classes go in {@link removalOrder}; the kept ones keep their order. `walletClassIds` is
+ * read only when a class must go. Throws when the items alone are over the import's cap, or when the
+ * measured part disagrees with its sizes; a part whose file fails a file check even with no classes
+ * comes back with none, for the export's own check to refuse.
+ */
+export async function fitAccountStatePart(
+	part: AccountStateSlice,
+	rest: BackupFileRest,
+	walletClassIds: () => Promise<ReadonlySet<string>>,
+): Promise<FittedAccountState> {
+	if (!isAccountStateV2(part)) return { part, codeUnits: assertFormat1Fits(part, rest), left: [] }
+	const classes = part.classes.map(sizeClass)
+	const baseCompact = jsonStringify({ ...part, classes: [] })
+	const wireBase = JSON.parse(baseCompact) as AccountStateSliceV2
+	const base = wireSize(baseCompact, wireBase)
+	const budget = partBudget(wireBase.items, rest)
+	const kept = { codeUnits: 0, bytes: 0, pretty: 0 }
+	const add = (c: SizedClass, sign: 1 | -1) => {
+		kept.codeUnits += sign * c.size.codeUnits
+		kept.bytes += sign * c.size.bytes
+		kept.pretty += sign * c.size.pretty
+	}
+	for (const c of classes) add(c, 1)
+	const left = new Set<SizedClass>()
+	if (classes.length > 0 && !fits(withClasses(base, kept, classes.length), budget)) {
+		for (const c of removalOrder(classes, await walletClassIds())) {
+			if (fits(withClasses(base, kept, classes.length - left.size), budget)) break
+			left.add(c)
+			add(c, -1)
+		}
+	}
+	const keptClasses = classes.filter((c) => !left.has(c))
+	const codeUnits = accountStatePartCodeUnits({ ...wireBase, classes: keptClasses.map((c) => c.wire) })
+	if (codeUnits !== withClasses(base, kept, keptClasses.length).codeUnits) {
+		throw new Error("The contract part's size does not match its measure")
+	}
+	if (codeUnits > budget.codeUnits) throw new Error("The contract part is too large without contract code")
+	if (left.size === 0) return { part, codeUnits, left: [] }
+	return {
+		part: { ...part, classes: keptClasses.map((c) => part.classes[c.index]) },
+		codeUnits,
+		left: [...left].map((c) => ({ name: c.name, codeUnits: c.size.codeUnits - 1 })),
+	}
+}
+
+/** A format-1 part carries its code in its entries, so nothing can leave it: it is written only
+ *  when it already fits. The export writes format 2 whenever each class has one artifact. */
+function assertFormat1Fits(part: readonly unknown[], rest: BackupFileRest): number {
+	const compact = jsonStringify(part)
+	const size = wireSize(compact, JSON.parse(compact))
+	if (!fits(size, partBudget(part, rest))) throw new Error("The contract part is too large to write")
+	return size.codeUnits
 }
 
 /**
